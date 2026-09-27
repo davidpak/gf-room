@@ -1,31 +1,29 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { invalidate, useFrame, type ThreeEvent } from '@react-three/fiber'
 import { ConvexHullCollider, CuboidCollider, CylinderCollider, useBeforePhysicsStep, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
-import { Box3, CatmullRomCurve3, ExtrudeGeometry, InstancedMesh, LatheGeometry, Matrix4, MeshStandardMaterial, Quaternion, SRGBColorSpace, Shape, ShapeGeometry, TextureLoader, Vector2, Vector3, type BufferGeometry, type Group } from 'three'
+import { Box3, CatmullRomCurve3, ExtrudeGeometry, InstancedMesh, LatheGeometry, Matrix4, MeshStandardMaterial, Path, Quaternion, SRGBColorSpace, Shape, ShapeGeometry, TextureLoader, Vector2, Vector3, type BufferGeometry, type Group } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
 import { grabbable } from '../../lib/physics/Hand'
 import { GROUP, groups } from '../../lib/physics/rope'
 import { Flight, planRoute } from '../../lib/physics/route'
 import { poseOf, usePerch, type Pose } from '../../lib/physics/usePerch'
-import { thump } from '../../lib/sound/thump'
 import { Prompts, useItemHover, withHover, type PromptItem } from '../prompt/Prompts'
-import { CAVITY, HOLE_R, LABEL_R, LABEL_Y, MINTS, TAB_TOP, inCavity, mintSpots } from './spec'
+import { BAND_Y, CAVITY, HOLE_R, LABEL_R, LABEL_Y, MINTS, TAB_TOP, inCavity, mintSpots } from './spec'
 import { speckTexture } from './label'
 
 /**
- * Rina's Ice Breakers spearmint mints (./spec): the white puck with the maker's own lid and base
- * printed on it (their product shots, laid on flat), two flip tabs, and the 53 mints in it, every one
- * its own little thing.
+ * Rina's Ice Breakers spearmint mints (./spec): the green cup with its white rim, the maker's own lid
+ * and base printed on it (their product shots, laid on flat), two flip tabs, and the 53 mints in it.
  *
- *   the puck      carried and turned like everything else (the shared hand). It lives on the desk;
- *                 let go near its spot and it settles back; "Return Ice Breakers" flies it home
- *                 (tabs shut first, so nothing spills on the way)
+ *   the puck      an object like any other: carried, turned, put down anywhere (the shared hand).
+ *                 "Return Ice Breakers" once it's well away from its spot or knocked over
  *   the tabs      click one to flip it open (or shut): "one" over a slot a mint slips out of on its
- *                 edge, one at a time; "many" lifts a slice of the lid off a wide opening. Tip the puck
- *                 with one open and the mints pour out, really: they're loose inside
- *   the mints     each one can be picked up. Spilled ones: "Tidy mints" flies them back in, one after
- *                 another, in through the "many" opening, each to a free spot inside (flying, they
- *                 touch nothing, so they never knock the others out)
+ *                 edge, one at a time; "many" lifts a big slice of the lid off a wide opening
+ *   the mints     while both tabs are shut they're packed: they ride in the puck as they lie, no
+ *                 physics, so nothing jostles or slips through. Open a tab and they come alive where
+ *                 they lie: tip the puck and they pour, pick one up. Shut it again and those inside
+ *                 settle back into the pack. Spilled ones: "Tidy mints" flies them back in through the
+ *                 "many" opening to free spots inside (flying, they touch nothing)
  */
 const C = MINTS.color
 const P = MINTS.puck
@@ -34,32 +32,38 @@ const ITEM = groups(GROUP.item, 0xffff)
 const LOOSE = groups(GROUP.item, 0) // (touches nothing)
 const LID_BOTTOM = CAVITY.y1
 const PRINT = 0.4 // the printed layer over the deck
-const TAB_T = 1.3
-/** the "one" notch in the top of the wall: its half angle round the puck (from +z) and its bottom */
-const NOTCH = { half: Math.asin(MINTS.one.hole.w / 2 / MINTS.puck.r), y: CAVITY.y1 - MINTS.one.hole.notch }
+const TAB_T = 0.9
+const RING_R = CAVITY.r + 0.8 // the lid's colliders reach out over the wall to here
 const _v = new Vector3()
+const _v2 = new Vector3()
 const _q = new Quaternion()
+const _q2 = new Quaternion()
 const _m = new Matrix4()
+const _m2 = new Matrix4()
 const ONE = new Vector3(1, 1, 1)
 
 type Door = 'one' | 'many'
 type DoorState = { open: boolean; v: number }
+/** each divot in the rim's inner edge: its half width and which side (+1 "one", -1 "many") */
+const DIVOTS = [
+  { half: MINTS.one.tab.w / 2 + 0.3, side: 1, depth: MINTS.one.divot },
+  { half: MINTS.many.tab.w / 2 + 0.3, side: -1, depth: MINTS.many.divot },
+] as const
 
-/** points round a rounded corner (for the puck's profile) */
+/** points round a rounded corner (for the puck's profiles) */
 function corner(cx: number, cy: number, r: number, a0: number, a1: number, n = 6) {
   return Array.from({ length: n + 1 }, (_, i) => {
     const a = a0 + ((a1 - a0) * i) / n
     return new Vector2(cx + Math.cos(a) * r, cy + Math.sin(a) * r)
   })
 }
-
 /**
  * A region of the lid, in shape coordinates (x, y = the puck's z): the strip |x| < half from z0 out
  * to a circle of radius R, on the "one" side (+1) or the "many" side (-1), its inner corners rounded
  * by rc. (half = the whole chord and rc = 0: everything past the chord.)
  */
-function capShape(half: number, z0: number, R: number, rc: number, side: 1 | -1) {
-  const edge = Math.sqrt(Math.max(0, R * R - half * half)) // where the strip's sides meet the circle
+function capPoints(half: number, z0: number, R: number, rc: number, side: 1 | -1) {
+  const edge = Math.sqrt(Math.max(0, R * R - half * half))
   const a = Math.atan2(edge, half)
   const pts: [number, number][] = []
   const add = (x: number, y: number) => {
@@ -80,49 +84,49 @@ function capShape(half: number, z0: number, R: number, rc: number, side: 1 | -1)
     const t = (k / 5) * (Math.PI / 2)
     add(-half + rc - Math.cos(t) * rc, z0 + rc - Math.sin(t) * rc)
   }
-  const s = new Shape()
   const q = pts.map(([x, y]) => [x, side * y] as [number, number])
   if (side < 0) q.reverse()
-  s.moveTo(...q[0])
-  for (const p of q.slice(1)) s.lineTo(...p)
-  s.closePath()
-  return s
+  return q
 }
+const toShape = (pts: [number, number][], into: Shape | Path = new Shape()) => {
+  into.moveTo(...pts[0])
+  for (const p of pts.slice(1)) into.lineTo(...p)
+  into.closePath()
+  return into
+}
+const capShape = (half: number, z0: number, R: number, rc: number, side: 1 | -1) => toShape(capPoints(half, z0, R, rc, side)) as Shape
 const chord = (R: number, z0: number) => Math.sqrt(R * R - z0 * z0)
-/** the white rim's two halves: a ring from the label out to the edge, parted by the tabs */
-function rimPiece(side: 1 | -1) {
-  const Ro = P.r
-  const Ri = LABEL_R
-  const wo = MINTS.one.tab.w / 2
-  const wm = MINTS.many.tab.w / 2
-  const pts: [number, number][] = []
-  const arc = (r: number, a0: number, a1: number) => {
-    for (let k = 0; k <= 40; k++) {
-      const t = a0 + ((a1 - a0) * k) / 40
-      pts.push([Math.cos(t) * r, Math.sin(t) * r])
-    }
+/** the rim's inner edge, round from +x (angle t toward +z): pushed out at the divots */
+const rimIn = (t: number) => {
+  const x = Math.cos(t) * LABEL_R
+  const z = Math.sin(t) * LABEL_R
+  for (const d of DIVOTS) if (Math.sign(z) === d.side && Math.abs(x) < d.half) return LABEL_R + d.depth
+  return LABEL_R
+}
+/** the white rim over the lid: a ring from its inner edge (with the divots) out to the puck's edge */
+function rimShape() {
+  const s = new Shape().absarc(0, 0, P.r, 0, Math.PI * 2, false)
+  const hole: [number, number][] = []
+  const n = 360
+  for (let k = 0; k < n; k++) {
+    const t = (k / n) * Math.PI * 2
+    const r = rimIn(t)
+    hole.push([Math.cos(t) * r, Math.sin(t) * r])
   }
-  arc(Ro, -Math.acos(wm / Ro), Math.acos(wo / Ro)) // round the outside, from the "many" tab to the "one" tab
-  arc(Ri, Math.acos(wo / Ri), -Math.acos(wm / Ri)) // and back round the inside
-  const s = new Shape()
-  const q = pts.map(([x, y]) => [side * x, y] as [number, number])
-  if (side < 0) q.reverse()
-  s.moveTo(...q[0])
-  for (const p of q.slice(1)) s.lineTo(...p)
-  s.closePath()
+  s.holes.push(toShape(hole, new Path()) as Path)
   return s
 }
 /** a flat part: a shape `thick` thick, its top at `top`, lying level (shape y = the puck's z); the
  *  shape's UVs are its coordinates in mm (the photos are laid on by them) */
 function flat(shape: Shape, thick: number, top: number, bevel = 0) {
   const g = new ExtrudeGeometry(shape, {
-    depth: thick - 2 * bevel,
+    depth: Math.max(0.01, thick - 2 * bevel),
     bevelEnabled: bevel > 0,
     bevelThickness: bevel,
     bevelSize: bevel,
     bevelOffset: -bevel,
-    bevelSegments: 2,
-    curveSegments: 48,
+    bevelSegments: 3,
+    curveSegments: 64,
   })
   g.rotateX(Math.PI / 2) // (shape y -> the puck's z; its thickness goes down from `top`)
   g.translate(0, top - bevel, 0)
@@ -142,7 +146,7 @@ function printedTop(g: BufferGeometry) {
 /** a product shot laid flat over shape coordinates, seen from above ("top": x runs right to left) or below */
 function photo(which: 'top' | 'bottom') {
   const ph = MINTS.photo[which]
-  const t = new TextureLoader().load(ph.src)
+  const t = new TextureLoader().load(ph.src, () => invalidate()) // (pages drawn on demand redraw once it's in)
   t.colorSpace = SRGBColorSpace
   t.anisotropy = 8
   const s = ph.k / ph.size
@@ -159,30 +163,30 @@ export function PuckModel({ doors, onTab }: { doors: { current: Record<Door, Doo
     return {
       white,
       inside: new MeshStandardMaterial({ color: C.inside, roughness: 0.6 }),
-      base: new MeshStandardMaterial({ color: C.base, roughness: 0.6 }),
+      green: new MeshStandardMaterial({ color: C.body, roughness: 0.5 }),
       baseprint: new MeshStandardMaterial({ color: '#ffffff', map: photo('bottom'), roughness: 0.6 }),
       printed: [lid, white, white],
     }
   }, [])
   const geo = useMemo(() => {
     const e = P.edge
-    const rimY = P.h / 2 - P.rimT
-    // the side, round all but the "one" notch; under the notch, the side up to its bottom; the skirt
-    // over the notch goes with the tab
-    const side = (top: number) => [...corner(P.r - e, -P.h / 2 + e, e, -Math.PI / 4, 0, 3), new Vector2(P.r, top), new Vector2(CAVITY.r, top), new Vector2(CAVITY.r, CAVITY.y0), new Vector2(0, CAVITY.y0)]
-    const sides = new LatheGeometry(side(rimY), 96, NOTCH.half, Math.PI * 2 - 2 * NOTCH.half)
-    const underNotch = new LatheGeometry(side(NOTCH.y), 8, -NOTCH.half, 2 * NOTCH.half)
-    const skirt = new LatheGeometry([new Vector2(CAVITY.r + 0.15, NOTCH.y + 0.1), new Vector2(P.r, NOTCH.y + 0.1), new Vector2(P.r, rimY + 0.05), new Vector2(CAVITY.r + 0.15, rimY + 0.05), new Vector2(CAVITY.r + 0.15, NOTCH.y + 0.1)], 8, -NOTCH.half + 0.004, 2 * NOTCH.half - 0.008)
-    skirt.translate(0, -LABEL_Y, -MINTS.one.tab.z0)
-    const under = new LatheGeometry([new Vector2(0, -P.h / 2), new Vector2(P.r - e, -P.h / 2), ...corner(P.r - e, -P.h / 2 + e, e, -Math.PI / 2, -Math.PI / 4, 3)], 96)
-    const baseDisc = new ShapeGeometry(new Shape().absarc(0, 0, P.r - e, 0, Math.PI * 2, false), 72)
+    const seam = 0.35 // the little groove where the white band sits on the green cup
+    // the green cup: its rounded bottom edge, up the side to the band, and its inside
+    const cup = new LatheGeometry(
+      [new Vector2(0, -P.h / 2), ...corner(P.r - e, -P.h / 2 + e, e, -Math.PI / 2, 0, 5), new Vector2(P.r, BAND_Y - seam), new Vector2(P.r - seam, BAND_Y), new Vector2(CAVITY.r, BAND_Y), new Vector2(CAVITY.r, CAVITY.y0), new Vector2(0, CAVITY.y0)],
+      128,
+    )
+    const baseDisc = new ShapeGeometry(new Shape().absarc(0, 0, P.r - e, 0, Math.PI * 2, false), 96)
     baseDisc.rotateX(Math.PI / 2) // facing down, shape y -> the puck's z
     baseDisc.translate(0, -P.h / 2 - 0.03, 0)
-    const rim = [flat(rimPiece(1), P.rimT, P.h / 2, 0.45), flat(rimPiece(-1), P.rimT, P.h / 2, 0.45)]
+    // the white band up the side, under the rim
+    const band = new LatheGeometry([new Vector2(CAVITY.r, BAND_Y + 0.01), new Vector2(P.r - seam, BAND_Y + 0.01), new Vector2(P.r, BAND_Y + seam), new Vector2(P.r, LID_BOTTOM + 0.5), new Vector2(CAVITY.r, LID_BOTTOM + 0.5), new Vector2(CAVITY.r, BAND_Y + 0.01)], 128)
+    // the rim over the lid, its edges softly rounded, the divots in its inner edge
+    const rim = flat(rimShape(), P.h / 2 - LID_BOTTOM, P.h / 2, Math.min(P.round, (P.h / 2 - LID_BOTTOM) / 2 - 0.05))
     // the deck under the print, both openings through it
-    const deckShape = new Shape().absarc(0, 0, LABEL_R, 0, Math.PI * 2, false)
-    const oneSlot = () => capShape(MINTS.one.hole.w / 2, MINTS.one.hole.z0, HOLE_R, 3, 1)
-    deckShape.holes.push(oneSlot(), capShape(chord(HOLE_R, MINTS.many.hole.z0) - 0.01, MINTS.many.hole.z0, HOLE_R, 0, -1))
+    const deckShape = new Shape().absarc(0, 0, LABEL_R + 0.2, 0, Math.PI * 2, false)
+    const oneSlot = () => toShape(capPoints(MINTS.one.hole.w / 2, MINTS.one.hole.z0, HOLE_R, 2.5, 1), new Path()) as Path
+    deckShape.holes.push(oneSlot(), toShape(capPoints(chord(HOLE_R, MINTS.many.hole.z0) - 0.01, MINTS.many.hole.z0, HOLE_R, 0, -1), new Path()) as Path)
     const deck = flat(deckShape, P.lid - PRINT, LABEL_Y - PRINT)
     // the printed lid: all but the flap (the "one" slot through it), and the flap
     const fz = MINTS.many.flap.z0
@@ -191,11 +195,11 @@ export function PuckModel({ doors, onTab }: { doors: { current: Record<Door, Doo
     const label = printedTop(flat(mainShape, PRINT, LABEL_Y))
     const flap = printedTop(flat(capShape(chord(LABEL_R, fz) - 0.01, fz, LABEL_R, 0, -1), PRINT, LABEL_Y))
     flap.translate(0, -LABEL_Y, fz) // (its hinge line at the origin)
-    // the tabs, where they lie, then shifted to their hinges
-    const tab = (d: Door) => printedTop(flat(capShape(MINTS[d].tab.w / 2, MINTS[d].tab.z0, P.r - 0.25, 4, d === 'one' ? 1 : -1), TAB_T, TAB_TOP, 0.35))
+    // the tabs, where they lie (reaching into their divots), then shifted to their hinges
+    const tab = (d: Door) => printedTop(flat(capShape(MINTS[d].tab.w / 2, MINTS[d].tab.z0, LABEL_R + MINTS[d].divot - 0.3, 3, d === 'one' ? 1 : -1), TAB_T, TAB_TOP, 0.3))
     const one = tab('one').translate(0, -LABEL_Y, -MINTS.one.tab.z0)
     const many = tab('many').translate(0, -LABEL_Y, fz)
-    return { sides, underNotch, skirt, under, baseDisc, rim, deck, label, flap, one, many }
+    return { cup, baseDisc, band, rim, deck, label, flap, one, many }
   }, [])
   const doorsAt = useRef<Record<Door, Group | null>>({ one: null, many: null })
   useFrame(() => {
@@ -210,21 +214,17 @@ export function PuckModel({ doors, onTab }: { doors: { current: Record<Door, Doo
   }
   return (
     <group>
-      <mesh geometry={geo.sides} material={mat.white} castShadow receiveShadow />
-      <mesh geometry={geo.underNotch} material={mat.white} castShadow receiveShadow />
-      <mesh geometry={geo.under} material={mat.base} castShadow receiveShadow />
+      <mesh geometry={geo.cup} material={mat.green} castShadow receiveShadow />
       <mesh geometry={geo.baseDisc} material={mat.baseprint} />
-      {geo.rim.map((g, i) => (
-        <mesh key={i} geometry={g} material={mat.white} castShadow receiveShadow />
-      ))}
+      <mesh geometry={geo.band} material={mat.white} castShadow receiveShadow />
+      <mesh geometry={geo.rim} material={mat.white} castShadow receiveShadow />
       <mesh geometry={geo.deck} material={mat.inside} receiveShadow />
       <mesh geometry={geo.label} material={mat.printed} receiveShadow />
-      {/* "one": the white tab over its slot, hinged on its inner edge */}
+      {/* "one": the small tab over its slot, hinged on its inner edge, its tip in the rim's divot */}
       <group ref={(r) => void (doorsAt.current.one = r)} position={[0, LABEL_Y, MINTS.one.tab.z0]} onClick={click('one')}>
         <mesh geometry={geo.one} material={mat.printed} castShadow receiveShadow />
-        <mesh geometry={geo.skirt} material={mat.white} castShadow receiveShadow />
       </group>
-      {/* "many": a slice of the lid, hinged across it, its white tab at the edge */}
+      {/* "many": a big slice of the lid, hinged near the middle, its tab tucked in the other divot */}
       <group ref={(r) => void (doorsAt.current.many = r)} position={[0, LABEL_Y, -MINTS.many.flap.z0]} onClick={click('many')}>
         <mesh geometry={geo.flap} material={mat.printed} castShadow receiveShadow />
         <mesh geometry={geo.many} material={mat.printed} castShadow receiveShadow />
@@ -233,9 +233,11 @@ export function PuckModel({ doors, onTab }: { doors: { current: Record<Door, Doo
   )
 }
 
-/** points of a region of the lid (a box in x, z clipped to the disc), top and bottom: a hull */
-function lidPiece(x0: number, x1: number, z0: number, z1: number, R = CAVITY.r + 0.8) {
-  const flatPts: [number, number][] = []
+/** a hull: a region in x, z (points) from y0 to y1 */
+const slab = (pts: [number, number][], y0: number, y1: number) => new Float32Array(pts.flatMap(([x, z]) => [x, y0, z, x, y1, z]))
+/** the points of a box in x, z clipped to a disc of radius R */
+function boxInDisc(x0: number, x1: number, z0: number, z1: number, R: number) {
+  const out: [number, number][] = []
   const inBox = (x: number, z: number) => x >= x0 - 1e-6 && x <= x1 + 1e-6 && z >= z0 - 1e-6 && z <= z1 + 1e-6
   for (const [x, z] of [
     [x0, z0],
@@ -243,45 +245,59 @@ function lidPiece(x0: number, x1: number, z0: number, z1: number, R = CAVITY.r +
     [x1, z1],
     [x0, z1],
   ])
-    if (Math.hypot(x, z) <= R) flatPts.push([x, z])
-  for (let k = 0; k < 96; k++) {
-    const a = (k / 96) * Math.PI * 2
-    const x = Math.cos(a) * R
-    const z = Math.sin(a) * R
-    if (inBox(x, z)) flatPts.push([x, z])
+    if (Math.hypot(x, z) <= R) out.push([x, z])
+  for (let k = 0; k < 128; k++) {
+    const a = (k / 128) * Math.PI * 2
+    if (inBox(Math.cos(a) * R, Math.sin(a) * R)) out.push([Math.cos(a) * R, Math.sin(a) * R])
   }
-  for (const x of [x0, x1]) if (Math.abs(x) < R) for (const z of [Math.sqrt(R * R - x * x), -Math.sqrt(R * R - x * x)]) if (inBox(x, z)) flatPts.push([x, z])
-  for (const z of [z0, z1]) if (Math.abs(z) < R) for (const x of [Math.sqrt(R * R - z * z), -Math.sqrt(R * R - z * z)]) if (inBox(x, z)) flatPts.push([x, z])
-  return new Float32Array(flatPts.flatMap(([x, z]) => [x, LID_BOTTOM, z, x, P.h / 2, z]))
+  for (const x of [x0, x1]) if (Math.abs(x) < R) for (const z of [Math.sqrt(R * R - x * x), -Math.sqrt(R * R - x * x)]) if (inBox(x, z)) out.push([x, z])
+  for (const z of [z0, z1]) if (Math.abs(z) < R) for (const x of [Math.sqrt(R * R - z * z), -Math.sqrt(R * R - z * z)]) if (inBox(x, z)) out.push([x, z])
+  return out
 }
 
-/** the puck's colliders: floor, walls, the lid in pieces (the pieces over the openings come and go) */
-function PuckColliders({ plugs }: { plugs: { current: Record<Door | 'notch', RapierCollider | null> } }) {
+/**
+ * The puck's colliders: floor, walls, the lid at the label (the pieces over the openings come and go)
+ * and the rim round it, up to its top, in short arcs (thinner at the divots).
+ */
+function PuckColliders({ plugs }: { plugs: { current: Record<Door, RapierCollider | null> } }) {
   const pieces = useMemo(() => {
     const o = MINTS.one.hole
     const m = MINTS.many.hole
-    const R = CAVITY.r + 1
-    return {
-      fixed: [
-        lidPiece(-R, R, -m.z0, o.z0), // the middle
-        lidPiece(-R, -o.w / 2, o.z0, R), // either side of "one"
-        lidPiece(o.w / 2, R, o.z0, R),
-      ],
-      one: lidPiece(-o.w / 2, o.w / 2, o.z0, P.r + 1, P.r), // (out over the wall too: the notch's)
-      many: lidPiece(-R, R, -R, -m.z0),
+    const R = LABEL_R + 0.1
+    const Rd = LABEL_R + MINTS.one.divot
+    const label = [
+      boxInDisc(-R, R, -m.z0, o.z0, R), // the middle
+      boxInDisc(-R, -o.w / 2, o.z0, R, R), // either side of "one"
+      boxInDisc(o.w / 2, R, o.z0, R, R),
+    ].map((p) => slab(p, LID_BOTTOM, LABEL_Y))
+    const one = slab(boxInDisc(-o.w / 2, o.w / 2, o.z0, Rd, Rd), LID_BOTTOM, LABEL_Y)
+    const manyPts = boxInDisc(-R, R, -R, -m.z0, R)
+    const dm = DIVOTS[1]
+    manyPts.push([-dm.half, -(LABEL_R + dm.depth)], [dm.half, -(LABEL_R + dm.depth)])
+    const many = slab(manyPts, LID_BOTTOM, LABEL_Y)
+    // the rim: arcs of the ring from its inner edge out over the wall, rim-high
+    const ring: Float32Array[] = []
+    const n = 36
+    for (let k = 0; k < n; k++) {
+      const a0 = (k / n) * Math.PI * 2
+      const a1 = ((k + 1) / n) * Math.PI * 2
+      const pts: [number, number][] = []
+      for (let j = 0; j <= 3; j++) {
+        const t = a0 + ((a1 - a0) * j) / 3
+        const ri = rimIn(t)
+        pts.push([Math.cos(t) * ri, Math.sin(t) * ri], [Math.cos(t) * RING_R, Math.sin(t) * RING_R])
+      }
+      ring.push(slab(pts, LID_BOTTOM, P.h / 2))
     }
+    return { label, one, many, ring }
   }, [])
   const walls = useMemo(() => {
     const n = 44
     const r = CAVITY.r + P.wall / 2
     const seg = ((2 * Math.PI * r) / n) * 1.1
-    const y0 = -P.h / 2 + 0.4
     return Array.from({ length: n }, (_, i) => {
       const a = (i / n) * Math.PI * 2
-      // under the "one" tab the wall stops short of the lid: the notch a flat mint slides out of
-      const low = Math.sin(a) > 0 && Math.abs(Math.cos(a) * r) < MINTS.one.hole.w / 2
-      const y1 = low ? NOTCH.y : P.h / 2 - 0.4
-      return { key: i, position: [Math.cos(a) * r, (y0 + y1) / 2, Math.sin(a) * r] as [number, number, number], rotation: [0, -a, 0] as [number, number, number], args: [P.wall / 2, (y1 - y0) / 2, seg / 2] as [number, number, number] }
+      return { key: i, position: [Math.cos(a) * r, 0, Math.sin(a) * r] as [number, number, number], rotation: [0, -a, 0] as [number, number, number], args: [P.wall / 2, P.h / 2 - 0.4, seg / 2] as [number, number, number] }
     })
   }, [])
   const mass = MINTS.mass
@@ -291,20 +307,12 @@ function PuckColliders({ plugs }: { plugs: { current: Record<Door | 'notch', Rap
       {walls.map(({ key, ...w }) => (
         <CuboidCollider key={key} {...w} mass={(mass * 0.35) / walls.length} friction={0.5} collisionGroups={ITEM} />
       ))}
-      {pieces.fixed.map((pts, i) => (
-        <ConvexHullCollider key={i} args={[pts]} mass={(mass * 0.25) / pieces.fixed.length} friction={0.6} collisionGroups={ITEM} />
+      {[...pieces.label, ...pieces.ring].map((pts, i) => (
+        <ConvexHullCollider key={i} args={[pts]} mass={(mass * 0.25) / (pieces.label.length + pieces.ring.length)} friction={0.6} collisionGroups={ITEM} />
       ))}
       {(['one', 'many'] as const).map((d) => (
         <ConvexHullCollider key={d} ref={(r) => void (plugs.current[d] = r)} args={[pieces[d]]} mass={mass * 0.025} friction={0.6} collisionGroups={ITEM} />
       ))}
-      <CuboidCollider
-        ref={(r) => void (plugs.current.notch = r)}
-        args={[MINTS.one.hole.w / 2, (P.h / 2 - NOTCH.y) / 2, P.wall / 2]}
-        position={[0, (P.h / 2 + NOTCH.y) / 2, CAVITY.r + P.wall / 2]}
-        mass={mass * 0.01}
-        friction={0.5}
-        collisionGroups={ITEM}
-      />
     </>
   )
 }
@@ -317,29 +325,34 @@ function openingAt(doors: Record<Door, DoorState>, p: Vector3) {
   if (doors.many.v > 0.4 && p.z < -(MINTS.many.hole.z0 - 3)) return true
   return false
 }
-type Mint = { body: RapierRigidBody; fly: { fl: Flight; pose: Pose; delay: number } | null; inside: Vector3 | null } // inside: where it last was in the puck (its frame), while it's in
+/**
+ * One mint. `packed`: riding in the shut puck as it lay (its pose in the puck's frame), its body put
+ * aside (kinematic, touching nothing); otherwise live. `inside`: where a live one last was in the puck.
+ */
+type Mint = { body: RapierRigidBody; packed: { p: Vector3; q: Quaternion } | null; fly: { fl: Flight; pose: Pose; delay: number } | null; inside: Vector3 | null }
 const TIDY_GAP = 0.09 // s between one mint's flight home and the next
 const TIDY_PASSES = 3 // tries for any that end up out again
 
 export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spawn: [number, number, number] }) {
   const doors = useRef<Record<Door, DoorState>>({ one: { open: false, v: 0 }, many: { open: false, v: 0 } })
-  const plugs = useRef<Record<Door | 'notch', RapierCollider | null>>({ one: null, many: null, notch: null })
+  const plugs = useRef<Record<Door, RapierCollider | null>>({ one: null, many: null })
   const mints = useRef<Mint[]>([])
   const mintHandles = useMemo(() => new Set<number>(), []) // (the mints ride inside it: not what it rests on)
   const tidy = useRef<{ t: number; reopen: boolean; pass: number; since: number } | null>(null)
+  const drawn = useRef<Group>(null) // the puck as drawn (its pose blended between physics steps)
   const perch = usePerch({
     key: 'mints-tin',
     label: 'Return Ice Breakers',
     perchAt: homeAt,
     approach: new Vector3(0, 1, 0), // it settles straight down onto its spot
     distance: 50,
-    snap: 60,
+    snap: 0, // (put down anywhere, it stays: it's just a thing on the desk)
+    away: 150,
     lift: 40,
     onFly: () => {
       doors.current.one.open = false // (shut, so nothing spills on the way)
       doors.current.many.open = false
     },
-    onLand: () => thump(0.25, 'hard'),
   })
   const { world, rapier } = perch
   const mintHover = useItemHover()
@@ -347,8 +360,6 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
   const toggle = (d: Door) => {
     const s = doors.current[d]
     s.open = !s.open
-    thump(0.1, 'hard') // a little snap
-    for (const m of mints.current) m.body.wakeUp()
   }
 
   // the tabs swing; the lid's piece over an opening is there only while its tab is (nearly) shut (it
@@ -357,44 +368,76 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
     for (const d of ['one', 'many'] as const) {
       const s = doors.current[d]
       s.v += ((s.open ? 1 : 0) - s.v) * (1 - Math.exp(-Math.min(dt, 0.05) * (s.open ? 12 : 16)))
+      if (!s.open && s.v < 0.005) s.v = 0
+      const plug = plugs.current[d]
       const shut = s.v < 0.25
-      for (const plug of d === 'one' ? [plugs.current.one, plugs.current.notch] : [plugs.current.many])
-        if (plug && (plug.collisionGroups() === ITEM) !== shut) plug.setCollisionGroups(shut ? ITEM : LOOSE)
+      if (plug && (plug.collisionGroups() === ITEM) !== shut) plug.setCollisionGroups(shut ? ITEM : LOOSE)
     }
   })
 
-  // ---- the mints: made once the puck is home, in their layers inside it
   const puckPose = () => {
     const b = perch.body.current
     return b ? poseOf(b) : null
   }
   const toPuck = (p: Vector3, pose: Pose) => _v.copy(p).sub(pose.p).applyQuaternion(_q.copy(pose.q).invert())
   const throughOpening = (p: Vector3) => openingAt(doors.current, p)
+  /** a packed mint to life, where it lies in the puck, moving with it */
+  const unpack = (m: Mint, pose: Pose, b: RapierRigidBody) => {
+    const pk = m.packed!
+    const p = pk.p.clone().applyQuaternion(pose.q).add(pose.p)
+    const q = pose.q.clone().multiply(pk.q)
+    m.body.setTranslation(p, false)
+    m.body.setRotation(q, false)
+    m.body.setBodyType(rapier.RigidBodyType.Dynamic, true)
+    m.body.collider(0).setCollisionGroups(ITEM)
+    const v = b.linvel()
+    const w = b.angvel()
+    const r = _v2.copy(p).sub(pose.p)
+    m.body.setLinvel({ x: v.x + w.y * r.z - w.z * r.y, y: v.y + w.z * r.x - w.x * r.z, z: v.z + w.x * r.y - w.y * r.x }, true)
+    m.inside = pk.p.clone()
+    m.packed = null
+  }
+  /** a live mint inside the shut puck into the pack, as it lies */
+  const pack = (m: Mint, pose: Pose) => {
+    const r = m.body.rotation()
+    m.packed = { p: toPuck(m.body.translation() as Vector3, pose).clone(), q: pose.q.clone().invert().multiply(_q2.set(r.x, r.y, r.z, r.w)) }
+    m.body.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
+    m.body.collider(0).setCollisionGroups(LOOSE)
+    m.inside = null
+  }
+
   useBeforePhysicsStep(() => {
     const b = perch.body.current
     if (!b) return
-    if (!mints.current.length && perch.st.current.perched) {
-      const pose = poseOf(b)
+    const pose = poseOf(b)
+    // made once, packed in their layers
+    if (!mints.current.length) {
+      if (!perch.st.current.perched) return
       mints.current = mintSpots().map((s, i) => {
+        const lq = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), i * 2.4)
         const p = s.clone().applyQuaternion(pose.q).add(pose.p)
-        const q = pose.q.clone().multiply(new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), i * 2.4))
+        const q = pose.q.clone().multiply(lq)
         const body = world.createRigidBody(
-          rapier.RigidBodyDesc.dynamic()
+          rapier.RigidBodyDesc.kinematicPositionBased()
             .setTranslation(p.x, p.y, p.z)
             .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
             .setLinearDamping(0.3)
             .setAngularDamping(2.2) // (so a mint landing on its edge doesn't roll away across the desk like a coin)
-            .setCcdEnabled(true), // (small, and the puck swings round fast when it's turned: soft CCD let them through its 1.6 mm lid)
+            .setCcdEnabled(true), // (small, and the puck can swing round fast)
         )
-        world.createCollider(
-          rapier.ColliderDesc.roundCylinder(M.t / 2 - M.bevel, M.d / 2 - M.bevel, M.bevel).setMass(M.mass).setFriction(0.45).setRestitution(0.05).setCollisionGroups(ITEM),
-          body,
-        )
-        body.sleep()
+        world.createCollider(rapier.ColliderDesc.roundCylinder(M.t / 2 - M.bevel, M.d / 2 - M.bevel, M.bevel).setMass(M.mass).setFriction(0.45).setRestitution(0.05).setCollisionGroups(LOOSE), body)
         mintHandles.add(body.handle)
-        return { body, fly: null, inside: s.clone() }
+        return { body, packed: { p: s.clone(), q: lq }, fly: null, inside: null }
       })
       return
+    }
+    // a tab opening: they all come alive where they lie; both shut again: those inside are packed
+    const d = doors.current
+    const open = d.one.open || d.many.open || d.one.v > 0 || d.many.v > 0
+    for (const m of mints.current) {
+      if (m.fly) continue
+      if (m.packed && open) unpack(m, pose, b)
+      else if (!m.packed && !open && !tidy.current && inCavity(toPuck(m.body.translation() as Vector3, pose), 0)) pack(m, pose)
     }
     // tidying: each loose mint flies up over the "many" opening and down in through it
     const td = tidy.current
@@ -426,33 +469,34 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
       if (!busy) {
         td.since += world.timestep
         const calm = mints.current.every((m) => {
+          if (m.packed) return true
           const v = m.body.linvel()
           return Math.hypot(v.x, v.y, v.z) < 40
         })
         if ((calm && td.since > 0.5) || td.since > 2.5) {
           tidy.current = null
           if (loose().length && td.pass < TIDY_PASSES) startTidy(td.pass + 1, td.reopen)
-          else if (!td.reopen) doors.current.many.open = false
+          else if (!td.reopen) d.many.open = false
         }
       }
     }
-    // safety: nothing flies off like a bullet; lost out of the world, it's back in the puck
-    const pose = poseOf(b)
+    // live ones: nothing flies off like a bullet; lost out of the world, it's back in the pack; and
+    // out only through an open tab (squeezed through the lid or a wall as the puck swung round, it's
+    // put straight back where it last was inside)
     mints.current.forEach((m, i) => {
-      if (m.fly) return
+      if (m.fly || m.packed) return
       const v = m.body.linvel()
       const sp = Math.hypot(v.x, v.y, v.z)
       if (sp > 2500) m.body.setLinvel({ x: (v.x / sp) * 2500, y: (v.y / sp) * 2500, z: (v.z / sp) * 2500 }, true)
       if (m.body.translation().y < -1500) {
         const s = mintSpots()[i % 19].clone()
         s.y = CAVITY.y1 - M.t
-        s.applyQuaternion(pose.q).add(pose.p)
-        m.body.setTranslation(s, true)
-        m.body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        m.packed = { p: s, q: new Quaternion() }
+        m.body.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
+        m.body.collider(0).setCollisionGroups(LOOSE)
+        if (open) unpack(m, pose, b)
         return
       }
-      // out only through an open tab: if it left the cavity any other way (squeezed through the lid
-      // or a wall as the puck swung round), it's put straight back where it last was inside
       const local = toPuck(m.body.translation() as Vector3, pose)
       if (inCavity(local, 0)) {
         m.inside = local.clone()
@@ -464,10 +508,8 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
         m.inside = null
         return
       }
-      const back = was.clone().applyQuaternion(pose.q).add(pose.p)
-      m.body.setTranslation(back, true)
-      const bv = b.linvel()
-      m.body.setLinvel(bv, true) // (moving with the puck)
+      m.body.setTranslation(was.clone().applyQuaternion(pose.q).add(pose.p), true)
+      m.body.setLinvel(b.linvel(), true) // (moving with the puck)
     })
   })
   useEffect(
@@ -481,11 +523,13 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
   const loose = () => {
     const pose = puckPose()
     if (!pose) return []
-    return mints.current.filter((m) => !inCavity(toPuck(m.body.translation() as Vector3, pose)))
+    return mints.current.filter((m) => !m.packed && !inCavity(toPuck(m.body.translation() as Vector3, pose)))
   }
+  /** where a mint is, in the puck's frame */
+  const inPuck = (m: Mint, pose: Pose) => (m.packed ? m.packed.p.clone() : toPuck(m.body.translation() as Vector3, pose).clone())
   /** free spots inside, lying flat, from the top down: where no mint (or spot already given) is near */
   const freeSpots = (pose: Pose, n: number) => {
-    const taken = mints.current.filter((m) => !m.fly).map((m) => toPuck(m.body.translation() as Vector3, pose).clone())
+    const taken = mints.current.filter((m) => !m.fly).map((m) => inPuck(m, pose))
     const out: Vector3[] = []
     const step = M.d * 0.5
     for (let y = CAVITY.y1 - M.t / 2 - 0.3; y > CAVITY.y0 + M.t / 2 && out.length < n; y -= M.t * 0.5)
@@ -498,9 +542,10 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
         }
     return out
   }
+  const upright = (pose: Pose) => _v.set(0, 1, 0).applyQuaternion(pose.q).y > 0.9
   const startTidy = (pass = 1, reopenIn?: boolean) => {
     const pose = puckPose()
-    if (!pose || tidy.current) return
+    if (!pose || tidy.current || !upright(pose)) return // (in through the top: it has to be the right way up)
     const out = loose()
     if (!out.length) return
     const reopen = reopenIn ?? doors.current.many.open
@@ -523,7 +568,7 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
     tidy.current = { t: 0, reopen, pass, since: 0 }
   }
 
-  // ---- drawing the mints: one instanced mesh, from their bodies each frame
+  // ---- drawing the mints: one instanced mesh; packed ones with the puck as drawn, live ones from their bodies
   const inst = useMemo(() => {
     const disc = new Shape()
     disc.absarc(0, 0, M.d / 2 - M.bevel, 0, Math.PI * 2, false)
@@ -539,8 +584,14 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
   }, [])
   useFrame(() => {
     const list = mints.current
+    const g = drawn.current
+    g?.updateWorldMatrix(true, false)
     inst.count = list.length
     list.forEach((m, i) => {
+      if (m.packed && g) {
+        inst.setMatrixAt(i, _m.multiplyMatrices(g.matrixWorld, _m2.compose(m.packed.p, m.packed.q, ONE)))
+        return
+      }
       const t = m.body.translation()
       const r = m.body.rotation()
       inst.setMatrixAt(i, _m.compose(_v.set(t.x, t.y, t.z), _q.set(r.x, r.y, r.z, r.w), ONE))
@@ -556,6 +607,7 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
           let best: RapierRigidBody | null = null
           let bd = 14
           for (const m of mints.current) {
+            if (m.packed || m.fly) continue // (packed: shut in; open a tab first)
             const d = _v.copy(m.body.translation() as Vector3).distanceTo(point)
             if (d < bd) {
               bd = d
@@ -582,7 +634,11 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
       return out.divideScalar(Math.max(1, l.length)).add(_v.set(0, 35, 0))
     },
     when: () => {
-      if (tidy.current || !perch.st.current.perched) return false
+      const b = perch.body.current
+      const pose = puckPose()
+      if (tidy.current || !b || !pose || perch.st.current.held || perch.fly.current || !upright(pose)) return false
+      const bv = b.linvel()
+      if (Math.hypot(bv.x, bv.y, bv.z) > 15) return false
       const l = loose()
       if (!l.length) return false
       return l.every((m) => {
@@ -599,13 +655,15 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
   return (
     <>
       <Holdable bodyRef={perch.body} position={spawn} colliders={false} sound="hard" hold={{ lift: 30, ...perch.hold, ignore: (c) => mintHandles.has(c.parent()?.handle ?? -1) }}>
-        <group {...perch.hover.bind}>
+        <group ref={drawn} {...perch.hover.bind}>
           <PuckModel doors={doors} onTab={toggle} />
         </group>
         <PuckColliders plugs={plugs} />
       </Holdable>
       <primitive object={inst} {...withHover(mintGrab, mintHover)} />
-      <Prompts items={[perch.prompt, tidyItem]} />
+      <Prompts items={[perch.prompt]} />
+      {/* (its own, so it can show while the puck is away too) */}
+      <Prompts items={[tidyItem]} />
     </>
   )
 }

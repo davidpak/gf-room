@@ -4,8 +4,15 @@ import { Vector3 } from 'three'
  * Rina's Ice Breakers spearmint mints: the 1.5 oz (42 g) puck and the mints in it, millimetres.
  * References (public/reference/): icebreakers-top.webp and icebreakers-bottom.webp (the maker's
  * product shots, straight down on the lid and the base: used as the printed label and base, and
- * measured), icebreakers-angle.png (a three-quarter view: its thickness); hersheyland.com and the
- * base's print: "Servings: about 53, Serv. size: 1 mint (0.8g)".
+ * measured), icebreakers-angle.png (a three-quarter view: its thickness), icebreakers-open.webp (open
+ * pucks, other flavours: how it opens, its build); hersheyland.com and the base's print: "Servings:
+ * about 53, Serv. size: 1 mint (0.8g)".
+ *
+ * The open pucks: a coloured cup (green for spearmint) with a white rim band round its top ~40% and
+ * a wide white rim over the lid, slightly rounded everywhere; the label sits a little down inside the
+ * rim. The big flap is a printed slice of the lid hinged near the middle: open, it stands up off a
+ * wide opening, the rim whole all round it, just a small divot in the rim's inner edge where the
+ * flap's tab tucks in (another at the "one" tab: a mint stands in it on its edge, ready to go).
  *
  * Measured in the top shot (the puck's 70 is 801 px, 11.44 px/mm): the green label is 689 px across
  * (60.2: a 4.9 white rim round it); the white tabs, part of the rim, flip up out of it: "one" 13.5
@@ -15,23 +22,21 @@ import { Vector3 } from 'three'
  *
  *   mint   0.8 g of pressed sorbitol (~1.55 g/cm³) is ~0.5 cm³: a bevelled disc 13 across, 3.9 thick,
  *          so the 53 lie in three layers of up to 19, with a little room over them to rattle
- *   puck   70 across, 16 tall: 2.2 of floor and lid, 0.5 of label over the lid, the cavity 13.3 tall
- *   "one"  under its tab, a slot through the lid and a notch in the top of the wall under it, one
- *          flat mint high (the tab has a skirt down the side over it): tipped, the mints slide out
- *          through it one at a time (two together are too thick)
- *          (wider than a mint, shallower than one): they come out one at a time
- *   "many" under its flap, everything past a chord, out to the wall: several pour at once
- *   base   printed green all over (the nutrition facts, the barcode)
+ *   puck   70 across, 16 tall: 2.2 of floor and lid, the label 1 down inside the rim, the cavity 12.8 tall
+ *   "one"  under its tab, a slot through the lid and on into the rim's divot: a mint fits through
+ *          only standing on its edge, so they come out one at a time
+ *   "many" under the big flap, everything past a chord near the middle: they pour
+ *   body   green below the white rim band; the base printed green all over (nutrition facts, barcode)
  *
  * Frame: origin at the puck's middle, +Y out of the label, "one" toward +Z, "many" toward -Z.
  */
 export const MINTS = {
-  puck: { r: 35, h: 16, wall: 1.4, floor: 1.1, lid: 1.1, rim: 4.9, rimT: 1.4, edge: 2.5 }, // rimT: the white rim's thickness at the top
+  puck: { r: 35, h: 16, wall: 1.4, floor: 1.1, lid: 1.1, rim: 4.9, drop: 1, band: 0.4, edge: 1.2, round: 1.4 }, // drop: the label below the rim's top; band: the white share of the side; edge / round: the bottom and top edges' rounding
   mint: { d: 13, t: 3.9, bevel: 1, mass: 0.00078 },
   count: 53,
   // the openings through the lid (out to the wall), and the tab / flap over each
-  one: { hole: { w: 13.3, z0: 25.2, notch: 5.8 }, tab: { w: 13.5, z0: 23.9 } }, // notch: down the wall under the lid, one flat mint high
-  many: { hole: { z0: 17.5 }, tab: { w: 10.5, z0: 25.3 }, flap: { z0: 15 } }, // flap: its hinge, across the puck
+  one: { hole: { w: 13.3, z0: 25.2 }, tab: { w: 13.5, z0: 23.9 }, divot: 2.5 }, // divot: into the rim's inner edge
+  many: { hole: { z0: 5.5 }, tab: { w: 10.5, z0: 25.3 }, flap: { z0: 3 }, divot: 2.5 }, // flap: its hinge, across the puck near the middle
   open: (112 * Math.PI) / 180, // how far a tab (or the flap) flips up
   mass: 0.012, // the empty puck (kg)
   // the product shots: size (px), the puck's middle in it, px per mm
@@ -42,20 +47,22 @@ export const MINTS = {
   color: {
     white: '#f5f4f0',
     inside: '#e4e2dc',
-    base: '#3f8a3a', // the base's green round its edge
+    body: '#4fa855', // the cup's green (spearmint; the base shot's edge is #367630, its middle #5fa459)
   },
 }
 const P = MINTS.puck
-/** the label's surface (a hair below the rim's top) */
-export const LABEL_Y = P.h / 2 - 0.5
+/** the label's surface (a little down inside the rim) */
+export const LABEL_Y = P.h / 2 - P.drop
 /** the label disc's radius (inside the rim) */
 export const LABEL_R = P.r - P.rim
 /** the openings stop this far inside the label's edge (the rim covers the sliver) */
 export const HOLE_R = LABEL_R - 0.3
 /** the cavity: inner radius, and its floor and ceiling (the lid's underside) */
 export const CAVITY = { r: P.r - P.wall, y0: -P.h / 2 + P.floor, y1: LABEL_Y - P.lid }
-/** the tabs' tops stand a touch proud of the rim */
-export const TAB_TOP = P.h / 2 + 0.25
+/** the tabs' tops stand a touch proud of the label */
+export const TAB_TOP = LABEL_Y + 0.35
+/** where the green cup meets the white rim band, up the side */
+export const BAND_Y = P.h / 2 - P.band * P.h
 
 /** where the mints start, in the puck's frame: three layers of up to 19, hex packed */
 export function mintSpots() {
@@ -92,10 +99,12 @@ export function checkMints() {
   add('label 60.2 across (photo)', Math.abs(2 * LABEL_R - 60.2) < 0.5, `${(2 * LABEL_R).toFixed(1)}`)
   add('thickness ~15.5 (angled photo)', Math.abs(P.h - 15.5) < 1, `${P.h} mm`)
   const one = MINTS.one.hole
-  add('"one": one flat mint at a time through its notch', one.w > m.d + 0.2 && one.w < 2 * m.d && one.notch > m.t + 0.5 && one.notch < 2 * m.t - 0.5, `${one.w} wide, ${one.notch} high`)
+  const oneDeep = LABEL_R + MINTS.one.divot - one.z0
+  add('"one": a mint gets out only on its edge (one at a time)', one.w > m.d + 0.2 && one.w < 2 * m.d && oneDeep > m.t + 1 && oneDeep < m.d, `${one.w} × ${oneDeep.toFixed(1)}`)
   const many = MINTS.many.hole
   const chord = 2 * Math.sqrt(HOLE_R ** 2 - many.z0 ** 2)
-  add('"many": several pour at once, lying flat', chord > 3 * m.d && CAVITY.r - many.z0 > m.d + 1, `${chord.toFixed(0)} across, ${(CAVITY.r - many.z0).toFixed(1)} deep`)
+  add('"many": they pour (a wide opening past a chord near the middle)', chord > 4 * m.d && HOLE_R - many.z0 > 1.5 * m.d, `${chord.toFixed(0)} across, ${(HOLE_R - many.z0).toFixed(1)} deep`)
+  add('the divots stay inside the wall', LABEL_R + Math.max(MINTS.one.divot, MINTS.many.divot) < CAVITY.r - 0.5, `to r ${(LABEL_R + MINTS.one.divot).toFixed(1)} of ${CAVITY.r}`)
   add('"one" tab covers its slot; the flap covers "many"', MINTS.one.tab.w >= one.w && MINTS.one.tab.z0 < one.z0 - 1 && MINTS.many.flap.z0 < many.z0 - 2, `tab ${MINTS.one.tab.w} over ${one.w}`)
   add('tabs as in the photo (13.5 / 10.5 wide, in to 23.9 / 25.3)', MINTS.one.tab.w === 13.5 && MINTS.many.tab.w === 10.5, `${MINTS.one.tab.z0} / ${MINTS.many.tab.z0}`)
   return results

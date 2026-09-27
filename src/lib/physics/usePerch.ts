@@ -11,8 +11,10 @@ import { useItemHover, type PromptItem } from '../../components/prompt/Prompts'
  *   at home      held fast there (fixed), riding along as its home moves (the lamp on the rising desk:
  *                kinematic while it moves, fixed again once it's still)
  *   picked up    it's loose (dynamic) for the hand
- *   let go near  within `snap` of home: it goes back in by itself
- *   put back     a fix-it prompt (`label`), once it's at rest somewhere else: it flies home round
+ *   let go near  within `snap` of home: it goes back in by itself (0: never; a thing that just sits
+ *                on the desk stays where it's put)
+ *   put back     a fix-it prompt (`label`), once it's at rest somewhere else (further than `away`, or
+ *                tipped over): it flies home round
  *                what's in the way (planRoute + Flight) and backs in along `approach`, its own axis
  *   no home      `perchAt` null (what it sits on has been taken away): if it was there, it drops
  *
@@ -35,6 +37,8 @@ export function usePerch(o: {
   approach: Vector3
   distance?: number
   snap?: number
+  /** the prompt waits till it's further than this from home (mm), or not the right way up */
+  away?: number
   /** the prompt floats this far over it */
   lift?: number
   onLand?: () => void
@@ -133,7 +137,8 @@ export function usePerch(o: {
     onRelease: (b: RapierRigidBody) => {
       st.current.held = false
       const h = home()
-      if (h && poseOf(b).p.distanceTo(h.p) < (opts.current.snap ?? 80)) flyHome()
+      const snap = opts.current.snap ?? 80
+      if (h && snap > 0 && poseOf(b).p.distanceTo(h.p) < snap) flyHome()
     },
   }
 
@@ -149,9 +154,15 @@ export function usePerch(o: {
     when: () => {
       const b = body.current
       const s = st.current
-      if (!b || s.perched || s.held || fly.current || !home()) return false
+      const h = home()
+      if (!b || s.perched || s.held || fly.current || !h) return false
       const v = b.linvel()
-      return Math.hypot(v.x, v.y, v.z) < 20
+      if (Math.hypot(v.x, v.y, v.z) > 20) return false
+      const away = opts.current.away ?? 0
+      if (away <= 0) return true
+      const now = poseOf(b)
+      const upright = _s.set(0, 1, 0).applyQuaternion(now.q).dot(_up.set(0, 1, 0).applyQuaternion(h.q)) > 0.9
+      return now.p.distanceTo(h.p) > away || !upright
     },
     run: flyHome,
     hover: hover.hovered,
