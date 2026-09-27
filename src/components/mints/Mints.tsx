@@ -299,8 +299,8 @@ function PuckColliders({ plugs }: { plugs: { current: Record<Door, RapierCollide
     return { label, one, many, ring }
   }, [])
   const walls = useMemo(() => {
-    const n = 44
-    const thick = P.wall + 3 // (the wall's inside where it is; 3 more outward, where it can't be seen, so a mint can't be shoved through)
+    const n = 72 // (fine enough that on its edge it rolls round, not over flats)
+    const thick = P.wall // (exactly the wall: any thicker and it knocks into things before it touches them, and rocks on the flats' corners)
     const r = CAVITY.r + thick / 2
     const seg = ((2 * Math.PI * r) / n) * 1.1
     return Array.from({ length: n }, (_, i) => {
@@ -327,17 +327,18 @@ function PuckColliders({ plugs }: { plugs: { current: Record<Door, RapierCollide
 
 /** a mint leaving from here (the puck's frame) went out through an open tab's opening */
 function openingAt(doors: Record<Door, DoorState>, p: Vector3) {
-  if (p.y < CAVITY.y1 - M.d) return false // (out by the lid only)
+  if (p.y < CAVITY.y1 - M.d / 2 - 1) return false // (out by the lid only)
   const one = MINTS.one.hole
-  if (doors.one.v > 0.4 && Math.abs(p.x) < one.w / 2 + 2 && p.z > one.z0 - 3) return true
-  if (doors.many.v > 0.4 && p.z < -(MINTS.many.hole.z0 - 3)) return true
+  const reach = M.d / 2 + 1 // (its middle can be this far from the opening while its edge goes through)
+  if (doors.one.v > 0.3 && Math.abs(p.x) < one.w / 2 + reach && p.z > one.z0 - reach) return true
+  if (doors.many.v > 0.3 && p.z < -MINTS.many.hole.z0 + reach) return true
   return false
 }
 /**
  * One mint. `packed`: riding in the shut puck as it lay (its pose in the puck's frame), its body put
  * aside (kinematic, touching nothing); otherwise live. `inside`: where a live one last was in the puck.
  */
-type Mint = { body: RapierRigidBody; packed: { p: Vector3; q: Quaternion } | null; fly: { fl: Flight; pose: Pose; delay: number } | null; inside: Vector3 | null; prev: Pose } // prev: its pose before the last step (drawn blended toward now)
+type Mint = { body: RapierRigidBody; packed: { p: Vector3; q: Quaternion; tucked?: boolean } | null; fly: { fl: Flight; pose: Pose; delay: number } | null; inside: Vector3 | null; prev: Pose } // prev: its pose before the last step (drawn blended toward now)
 const TIDY_GAP = 0.09 // s between one mint's flight home and the next
 const RATTLE = 450 // mm/s: the fastest a mint moves inside the puck, relative to it
 const TIDY_PASSES = 3 // tries for any that end up out again
@@ -348,6 +349,7 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
   const mints = useRef<Mint[]>([])
   const mintHandles = useMemo(() => new Set<number>(), []) // (the mints ride inside it: not what it rests on)
   const tidy = useRef<{ t: number; reopen: boolean; pass: number; since: number } | null>(null)
+  const snapBacks = useRef(0) // (how often the out-only-through-a-tab rule has had to act: for checking)
   const drawn = useRef<Group>(null) // the puck as drawn (its pose blended between physics steps)
   const perch = usePerch({
     key: 'mints-tin',
@@ -393,6 +395,14 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
   /** a packed mint to life, where it lies in the puck, moving with it */
   const unpack = (m: Mint, pose: Pose, b: RapierRigidBody) => {
     const pk = m.packed!
+    if (pk.tucked) {
+      // (a tucked one comes back in a free spot, not on top of whatever moved where it was)
+      const spot = freeSpots(pose, 1)[0]
+      if (spot) {
+        pk.p.copy(spot)
+        pk.q.identity()
+      }
+    }
     const p = pk.p.clone().applyQuaternion(pose.q).add(pose.p)
     const q = pose.q.clone().multiply(pk.q)
     m.body.setTranslation(p, false)
@@ -451,9 +461,14 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
     // a tab opening: they all come alive where they lie; both shut again: those inside are packed
     const d = doors.current
     const open = d.one.open || d.many.open || d.one.v > 0 || d.many.v > 0
+    // (the puck's still: a tucked mint can come back to life)
+    const bv0 = b.linvel()
+    const bw0 = b.angvel()
+    const calm = !perch.st.current.held && Math.hypot(bv0.x, bv0.y, bv0.z) < 20 && Math.hypot(bw0.x, bw0.y, bw0.z) < 0.4
     for (const m of mints.current) {
       if (m.fly) continue
-      if (m.packed && open) unpack(m, pose, b)
+      if (m.packed && !open) m.packed.tucked = false // (shut: just packed)
+      if (m.packed && open && (!m.packed.tucked || calm)) unpack(m, pose, b)
       else if (!m.packed && !open && !tidy.current && inCavity(toPuck(m.body.translation() as Vector3, pose), 0)) pack(m, pose)
     }
     // tidying: each loose mint flies up over the "many" opening and down in through it
@@ -540,14 +555,18 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
         if (m.body.linearDamping() !== 1.2) m.body.setLinearDamping(1.2)
         return
       }
-      if (throughOpening(was)) {
+      if (throughOpening(was) || throughOpening(local)) {
         m.inside = null
         return
       }
-      const back = was.clone().applyQuaternion(pose.q).add(pose.p)
-      m.body.setTranslation(back, true)
-      m.prev.p.copy(back)
-      m.body.setLinvel(b.linvel(), true) // (moving with the puck)
+      // out some wrong way: tucked back into the pack where it last was inside (drawn there, touching
+      // nothing: never teleported onto the others, whose shove would launch the puck), till it's still
+      snapBacks.current++
+      const r = m.body.rotation()
+      m.packed = { p: was.clone(), q: pose.q.clone().invert().multiply(_q2.set(r.x, r.y, r.z, r.w)), tucked: true }
+      m.body.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
+      m.body.collider(0).setCollisionGroups(LOOSE)
+      m.inside = null
     })
   })
   useEffect(
@@ -694,7 +713,7 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
     hover: mintHover.hovered,
   }
 
-  if (import.meta.env.DEV) Object.assign(window, { __mints: { ...perch, doors, mints, loose, startTidy, toggle } }) // for inspecting from the console
+  if (import.meta.env.DEV) Object.assign(window, { __mints: { ...perch, doors, mints, loose, startTidy, toggle, snapBacks } }) // for inspecting from the console
 
   return (
     <>
