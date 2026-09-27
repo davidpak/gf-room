@@ -45,6 +45,20 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 .fix-out .fix-btn, .fix-fix .fix-btn { pointer-events: none; }
+/* dismiss: a little x tucked on the plate's top-left corner, quiet until pointed at */
+.fix-x {
+  all: unset; pointer-events: auto; cursor: pointer;
+  position: absolute; left: -9px; top: -9px; z-index: 2;
+  width: 20px; height: 20px; display: grid; place-items: center;
+  background: #2b2538; border: 2px solid #fff4e6; border-radius: 50%;
+  opacity: 0.72; filter: drop-shadow(0 2px 0 rgba(27, 22, 38, 0.35));
+  transition: transform 0.22s cubic-bezier(0.34, 1.8, 0.5, 1), opacity 0.2s, background 0.2s;
+}
+.fix-x svg { width: 10px; height: 10px; fill: none; stroke: #fff4e6; stroke-width: 2.2; stroke-linecap: round; }
+.fix-x:hover, .fix-x:focus-visible { opacity: 1; transform: scale(1.18); background: #3a3150; }
+.fix-out .fix-x, .fix-fix .fix-x { pointer-events: none; }
+.fix-in .fix-x { animation: fix-pop 0.5s cubic-bezier(0.34, 1.8, 0.5, 1) 0.5s both; }
+.fix-out .fix-x, .fix-fix .fix-x { animation: fix-pop-out 0.24s ease-in both; }
 .fix-label {
   background: rgba(43, 37, 56, 0.94); color: #fff4e6;
   font-weight: 700; font-size: 25px; line-height: 1; letter-spacing: 0.2px;

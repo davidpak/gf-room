@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type CSSProperties, type SyntheticEvent } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import { Vector3, type Group } from 'three'
 import { isHolding } from '../../lib/physics/Hand'
@@ -16,6 +16,10 @@ import { blip } from '../../lib/sound/thump'
  *   waiting    a slow bob
  *   hover      the diamond grows a touch
  *   click      a soft pop: the diamond pulses and bursts into sparkles as the fix plays out
+ *   dismiss    the little x on the plate: it snaps shut and stays away, except while the pointer is
+ *              over the item itself (`hover`, see useItemHover), when it pops straight back (never
+ *              while carrying anything); once the item's back in place it's forgotten, and asks again
+ *              the next time
  *   gone       it winds up and snaps shut
  *
  * Drawn as page elements floating over the world (crisp text in Gaegu, CSS animation), a constant
@@ -32,9 +36,50 @@ export type PromptItem = {
   when: () => boolean
   /** put it right */
   run: () => void
+  /** the pointer's over the item (useItemHover): a dismissed prompt shows again while it is */
+  hover?: () => boolean
+}
+
+/**
+ * Whether the pointer's over an item: spread `bind` on a group round its meshes (inside its grab
+ * group, so it hears first). A short grace, so passing from one of its meshes to the next doesn't
+ * flicker.
+ */
+export function useItemHover(grace = 0.25) {
+  return useMemo(() => {
+    let over = false
+    let until = 0
+    return {
+      bind: {
+        onPointerOver: () => {
+          over = true
+        },
+        onPointerOut: () => {
+          over = false
+          until = performance.now() + grace * 1000
+        },
+      },
+      hovered: () => over || performance.now() < until,
+    }
+  }, [grace])
+}
+/** a grab's pointer handlers (../../lib/physics/Hand grabbable) with a hover's added, for the same mesh */
+export function withHover<G extends { onPointerOver: (e: ThreeEvent<PointerEvent>) => void; onPointerOut: () => void }>(grab: G, hover: ReturnType<typeof useItemHover>) {
+  return {
+    ...grab,
+    onPointerOver: (e: ThreeEvent<PointerEvent>) => {
+      hover.bind.onPointerOver()
+      grab.onPointerOver(e)
+    },
+    onPointerOut: () => {
+      hover.bind.onPointerOut()
+      grab.onPointerOut()
+    },
+  }
 }
 
 const DELAY = 1 // s it must be out of place and at rest before the prompt shows
+const HOVER_DELAY = 0.12 // s: a dismissed one, pointed at
 const FAR = 3200 // mm: from further away the prompt keeps out of the way
 const OUT_MS = 480 // the snap shut
 const FIX_MS = 760 // the pulse and sparkles
@@ -52,6 +97,7 @@ export function Prompts({ items }: { items: PromptItem[] }) {
   const cand = useRef<{ key: string | null; t: number }>({ key: null, t: 0 })
   const token = useRef(0)
   const at = useMemo(() => new Vector3(), [])
+  const dismissed = useRef(new Set<string>())
 
   const set = (s: { key: string; phase: Phase } | null) => {
     shownRef.current = s
@@ -64,7 +110,9 @@ export function Prompts({ items }: { items: PromptItem[] }) {
 
   useFrame((_, dt) => {
     const list = itemsRef.current
-    const c = isHolding() ? null : (list.find((i) => i.when()) ?? null)
+    // back in place: a dismissed one asks again the next time
+    for (const i of list) if (dismissed.current.has(i.key) && !i.when()) dismissed.current.delete(i.key)
+    const c = isHolding() ? null : (list.find((i) => i.when() && (!dismissed.current.has(i.key) || !!i.hover?.())) ?? null)
     const k = c?.key ?? null
     if (cand.current.key !== k) cand.current = { key: k, t: 0 }
     else cand.current.t += Math.min(dt, 0.1)
@@ -73,7 +121,8 @@ export function Prompts({ items }: { items: PromptItem[] }) {
     const item = list.find((i) => i.key === (cur?.key ?? k))
     if (item && group.current) group.current.position.copy(item.at(at))
     if (cur && cur.phase !== 'in') return // snapping shut or fixing: its timers finish it
-    let want = k && (cand.current.t >= DELAY || cur?.key === k) ? k : null
+    const wait = k !== null && dismissed.current.has(k) ? HOVER_DELAY : DELAY
+    let want = k && (cand.current.t >= wait || cur?.key === k) ? k : null
     if (want && c && camera.position.distanceTo(c.at(at)) > FAR) want = null
     if (cur && want !== cur.key) {
       set({ key: cur.key, phase: 'out' })
@@ -97,6 +146,14 @@ export function Prompts({ items }: { items: PromptItem[] }) {
       set(null)
     })
   }
+  const dismiss = (e: SyntheticEvent) => {
+    e.stopPropagation()
+    const cur = shownRef.current
+    if (!cur || cur.phase !== 'in') return
+    dismissed.current.add(cur.key)
+    set({ key: cur.key, phase: 'out' })
+    later(OUT_MS, () => set(null))
+  }
   const stop = (e: SyntheticEvent) => e.stopPropagation() // presses here are the prompt's, not the hand's or the camera's
   const item = shown && items.find((i) => i.key === shown.key)
 
@@ -114,6 +171,13 @@ export function Prompts({ items }: { items: PromptItem[] }) {
                   </span>
                 </span>
               </button>
+              {!dismissed.current.has(shown.key) && (
+                <button className="fix-x" onClick={dismiss} onPointerDown={stop} onMouseDown={stop} aria-label="Dismiss" title="Dismiss" tabIndex={shown.phase === 'in' ? 0 : -1}>
+                  <svg viewBox="0 0 12 12" aria-hidden>
+                    <path d="M3 3l6 6M9 3l-6 6" />
+                  </svg>
+                </button>
+              )}
               {shown.phase === 'fix' && (
                 <span className="fix-spark" aria-hidden>
                   {Array.from({ length: 8 }, (_, i) => (

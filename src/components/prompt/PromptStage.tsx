@@ -10,7 +10,7 @@ import { Stylize } from '../../lib/stylize'
 import { createMapleMaterial } from '../../lib/mapleMaterial'
 import { World } from '../../lib/physics/World'
 import { Holdable } from '../../lib/physics/Holdable'
-import { Prompts, type PromptIcon, type PromptItem } from './Prompts'
+import { Prompts, useItemHover, type PromptIcon, type PromptItem } from './Prompts'
 
 /**
  * The fix-it prompt on its own (gallery first): three toy blocks on a patch of the desk, each with
@@ -34,6 +34,7 @@ function Block({ b }: { b: (typeof BLOCKS)[number] }) {
   const anim = useRef<{ t: number; from: Vector3; q: Quaternion } | null>(null)
   const home = useMemo(() => new Vector3(b.x, S / 2, 0), [b.x])
   const mat = useMemo(() => new MeshStandardMaterial({ color: b.color, roughness: 1 }), [b.color])
+  const hover = useItemHover()
   const pos = (out: Vector3) => {
     const t = body.current?.translation()
     return t ? out.set(t.x, t.y, t.z) : out.copy(home)
@@ -71,11 +72,14 @@ function Block({ b }: { b: (typeof BLOCKS)[number] }) {
       anim.current = { t: 0, from: pos(new Vector3()), q: new Quaternion(q.x, q.y, q.z, q.w) }
       r.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
     },
+    hover: hover.hovered,
   }
   return (
     <>
       <Holdable bodyRef={body} position={home.toArray()} colliders="cuboid" hold={{ lift: 40 }}>
-        <RoundedBox args={[S, S, S]} radius={10} smoothness={4} material={mat} castShadow receiveShadow />
+        <group {...hover.bind}>
+          <RoundedBox args={[S, S, S]} radius={10} smoothness={4} material={mat} castShadow receiveShadow />
+        </group>
       </Holdable>
       <Prompts items={[item]} />
     </>

@@ -8,7 +8,7 @@ import { Flight, GLIDE, Path, planRoute, smoother } from '../../lib/physics/rout
 import { stepAlpha } from '../../lib/physics/World'
 import { ContactShadow } from '../../lib/render/contactShadow'
 import { thump } from '../../lib/sound/thump'
-import { Prompts, type PromptItem } from '../prompt/Prompts'
+import { Prompts, useItemHover, withHover, type PromptItem } from '../prompt/Prompts'
 import { CORD, PLUGS, PlugHead, layCord, plugBack, type Prongs } from './PowerCord'
 
 /**
@@ -72,6 +72,7 @@ type Fly = { fl: Flight; socket: number; socketId: string; pose: Pose; landing: 
 
 export function LiveCord({ setup }: { setup: CordSetup }) {
   const { world, rapier } = useRapier()
+  const hover = useItemHover() // pointing at the cord or its plug (a dismissed prompt shows again while you do)
   const setupRef = useRef(setup)
   setupRef.current = setup
   const P = PLUGS[setup.prongs]
@@ -553,14 +554,15 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
       },
       when: () => !!sys.current && sys.current.socket === null && !held.current && !snap.current && !reel.current && !fly.current,
       run: flyIn,
+      hover: hover.hovered,
     },
   ]
 
   return (
     <>
-      <mesh geometry={tube.geometry} material={CORD} castShadow receiveShadow {...cordGrab} />
+      <mesh geometry={tube.geometry} material={CORD} castShadow receiveShadow {...withHover(cordGrab, hover)} />
       <primitive object={shade.mesh} />
-      <group ref={plugMesh} {...plugGrab}>
+      <group ref={plugMesh} {...withHover(plugGrab, hover)}>
         <PlugHead prongs={setup.prongs} />
       </group>
       <Prompts items={prompts} />

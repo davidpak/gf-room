@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
-import { PCFShadowMap, Quaternion, Vector3, type Group } from 'three'
+import { PCFShadowMap, Vector3, type Group } from 'three'
 import { ToyControls } from '../stage/ToyControls'
 import { CheckSheet } from '../check/CheckSheet'
 import { Effects } from '../stage/StageLights'
@@ -11,27 +11,21 @@ import { Stylize } from '../../lib/stylize'
 import { World } from '../../lib/physics/World'
 import { createMapleMaterial } from '../../lib/mapleMaterial'
 import { Lamp } from '../room/Lamp'
-import { LiveWumpus, WumpusModel } from './Wumpus'
-import { ClawClip } from '../clip/ClawClip'
-import { CLIP, checkClip } from '../clip/spec'
+import { WumpusModel } from './Wumpus'
+import { LampTrinkets, StillTrinkets } from '../clip/LiveClip'
+import { CLIPS, checkClips } from '../clip/spec'
 import { WUMPUS, checkWumpus, perch } from './spec'
 
 /**
- * The Wumpus on its own (gallery first): on its perch in the lamp's arm, over a patch of maple desk
- * to drop it on, and its verification sheet (&check): the photo beside fixed views of the model and
- * of the perch, the spec and its check.
+ * The Wumpus on its own (gallery first): on its claw clip on the lamp, over
+ * a patch of maple desk to drop it on, and its verification sheet (&check): the photo beside fixed
+ * views of the model and of the perch, the spec and its check.
  */
 const maple = createMapleMaterial('#efbe8b', 0.6)
 const PERCH = perch()
 
 function Scene() {
   const lamp = useRef<Group>(null)
-  const perchAt = () => {
-    const l = lamp.current
-    if (!l) return null
-    l.updateWorldMatrix(true, false)
-    return l.matrixWorld.clone().multiply(PERCH)
-  }
   return (
     <>
       <ToyLights extent={500} />
@@ -47,9 +41,8 @@ function Scene() {
         </RigidBody>
         <group ref={lamp}>
           <Lamp />
-          <ClawClip />
         </group>
-        <LiveWumpus perchAt={perchAt} spawn={[200, 60, 100]} />
+        <LampTrinkets lamp={lamp} />
       </World>
     </>
   )
@@ -71,11 +64,8 @@ function ModelScene() {
 }
 const HEAD_B = WUMPUS.head.h / 2
 
-/** the lamp with the model on its perch, still (the sheet's views don't run physics) */
+/** the lamp with the clips and the Wumpus, still (the sheet's views don't run physics) */
 function PerchScene() {
-  const p = new Vector3()
-  const q = new Quaternion()
-  PERCH.decompose(p, q, new Vector3())
   return (
     <>
       <ToyLights extent={500} />
@@ -86,10 +76,7 @@ function PerchScene() {
       </mesh>
       <RoundedBox args={[1100, 25, 700]} radius={8} smoothness={3} position={[150, -12.5, 0]} material={maple} receiveShadow />
       <Lamp solid={false} />
-      <ClawClip solid={false} />
-      <group position={p} quaternion={q}>
-        <WumpusModel />
-      </group>
+      <StillTrinkets />
     </>
   )
 }
@@ -108,7 +95,7 @@ export function WumpusStage() {
 }
 
 export function WumpusCheck() {
-  const results = [...checkWumpus(), ...checkClip().map((r) => ({ ...r, what: `clip: ${r.what}` }))]
+  const results = [...checkWumpus(), ...checkClips()]
   const W = WUMPUS
   const o = new Vector3(0, 4, 0)
   const at = new Vector3().setFromMatrixPosition(PERCH)
@@ -134,7 +121,7 @@ eyes     ⌀${W.eye.d}, ${W.eye.apart} apart, ${W.eye.y} up
 nostrils ${W.nostril.w} × ${W.nostril.h}, ${W.nostril.apart} apart
 ears     ${W.ear.h} tall, ${W.ear.out} out
 perch    on the clip, back to the pole, ${at.y.toFixed(0)} up
-clip     ${CLIP.length} × ${CLIP.depth}, on the pole at ${CLIP.y - CLIP.length / 2}–${CLIP.y + CLIP.length / 2}
+clip     ${CLIPS.amber.length} × ${CLIPS.amber.depth} (amber), on the pole at ${CLIPS.amber.y - CLIPS.amber.length / 2}–${CLIPS.amber.y + CLIPS.amber.length / 2}
 
 ${results.map((r) => `${r.ok ? '✓' : '✗'} ${r.what}: ${r.value}`).join('\n')}`,
         },

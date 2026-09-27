@@ -1,12 +1,12 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { BallCollider, ConvexHullCollider, useBeforePhysicsStep, useRapier, type RapierRigidBody } from '@react-three/rapier'
+import { BallCollider, ConvexHullCollider, useBeforePhysicsStep } from '@react-three/rapier'
 import { CapsuleGeometry, CylinderGeometry, ExtrudeGeometry, Matrix4, MeshStandardMaterial, Quaternion, Shape, SphereGeometry, Vector3, type BufferGeometry, type Group } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
-import { Flight, planRoute } from '../../lib/physics/route'
+import { usePerch } from '../../lib/physics/usePerch'
 import { GROUP, groups } from '../../lib/physics/rope'
 import { thump } from '../../lib/sound/thump'
-import { Prompts, type PromptItem } from '../prompt/Prompts'
+import { Prompts } from '../prompt/Prompts'
 import { EAR, EAR_AT, HEAD, MUZZLE, MUZZLE_AT, WUMPUS, eyeAt, leafFrame, nostrilAt, radial, shapePoints, type Blob } from './spec'
 
 /**
@@ -24,7 +24,6 @@ import { EAR, EAR_AT, HEAD, MUZZLE, MUZZLE_AT, WUMPUS, eyeAt, leafFrame, nostril
  */
 const C = WUMPUS.color
 const _q = new Quaternion()
-const _n = new Vector3()
 const _up = new Vector3()
 const Z = new Vector3(0, 0, 1)
 
@@ -137,96 +136,35 @@ export function WumpusModel() {
   )
 }
 
-type Pose = { p: Vector3; q: Quaternion }
-const poseOf = (b: RapierRigidBody): Pose => {
-  const t = b.translation()
-  const r = b.rotation()
-  return { p: new Vector3(t.x, t.y, t.z), q: new Quaternion(r.x, r.y, r.z, r.w) }
-}
 const ITEM = groups(GROUP.item, 0xffff)
-const SNAP = 80 // mm: let go this near its perch and it hops back in
 const SQUASH = { k: 260, c: 11, held: 0.05, grab: 1.7, land: 3.2 } // the squish's spring (1/s², 1/s) and kicks
 
 export function LiveWumpus({ perchAt, spawn }: { perchAt: () => Matrix4 | null; spawn: [number, number, number] }) {
-  const { world, rapier } = useRapier()
-  const body = useRef<RapierRigidBody>(null)
   const squish = useRef<Group>(null)
-  const st = useRef({ first: true, perched: false, held: false, still: 0 })
-  const fly = useRef<{ fl: Flight; pose: Pose } | null>(null)
   const spring = useRef({ s: 0, v: 0 })
   const speed = useRef(0) // how fast it went last step: a hit is a sudden loss of it (a reported hit comes after the contact has slowed it)
   const hull = useMemo(() => new Float32Array(shapePoints(10).flatMap((p) => [p.x, p.y, p.z])), [])
   const sprout = useMemo(() => leafFrame().top.toArray() as [number, number, number], [])
-
-  const perchPose = (): Pose | null => {
-    const m = perchAt()
-    if (!m) return null
-    const p = new Vector3()
-    const q = new Quaternion()
-    m.decompose(p, q, _n)
-    return { p, q }
-  }
-
-  /** home to its perch: round what's in the way, then backing into its spot */
-  const flyHome = () => {
-    const b = body.current
-    const home = perchPose()
-    if (!b || !home || fly.current) return
-    const from = poseOf(b)
-    const out = new Vector3(0, 0, 1).applyQuaternion(home.q) // the way it faces, out from the pole
-    const approach = home.p.clone().addScaledVector(out, 60).add(new Vector3(0, 12, 0))
-    const curve = planRoute(world, rapier, from.p, home.p, { approach, clearance: 50, radius: 30 })
-    fly.current = { fl: new Flight(curve, from.q, home.q, { speed: 280, min: 0.7, max: 2.4, turn: [0.05, 0.75] }), pose: from }
-    st.current.perched = false
-    b.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
-  }
+  // home on the claw clip, backing in along the way it faces
+  const perch = usePerch({
+    key: 'wumpus',
+    label: 'Return Wumpus',
+    perchAt,
+    approach: new Vector3(0, 0, 1),
+    onLand: () => {
+      thump(0.18, 'soft')
+      spring.current.v += SQUASH.land * 0.3 // a little settle
+    },
+  })
+  const { body, st } = perch
 
   useBeforePhysicsStep(() => {
     const b = body.current
-    const home = perchPose()
-    if (!b || !home) return
-    const s = st.current
+    if (!b) return
     const v = b.linvel()
     const sp = Math.hypot(v.x, v.y, v.z)
-    if (b.isDynamic() && !s.held && speed.current - sp > 120) spring.current.v += SQUASH.land * Math.min(1, (speed.current - sp) / 1000) // landed: squash by how hard
+    if (b.isDynamic() && !st.current.held && speed.current - sp > 120) spring.current.v += SQUASH.land * Math.min(1, (speed.current - sp) / 1000) // landed: squash by how hard
     speed.current = sp
-    if (s.first) {
-      // it starts on its perch
-      s.first = false
-      s.perched = true
-      b.setBodyType(rapier.RigidBodyType.Fixed, true)
-      b.setTranslation(home.p, true)
-      b.setRotation(home.q, true)
-      return
-    }
-    const f = fly.current
-    if (f) {
-      const done = f.fl.step(world.timestep)
-      f.fl.pose(f.pose.p, f.pose.q)
-      b.setNextKinematicTranslation(f.pose.p)
-      b.setNextKinematicRotation(f.pose.q)
-      if (done) {
-        fly.current = null
-        s.perched = true
-        s.still = 0
-        thump(0.18, 'soft')
-        spring.current.v += SQUASH.land * 0.3 // a little settle
-      }
-      return
-    }
-    // perched: it rides along with the lamp (on the rising desk). Moving it's kinematic; once the lamp
-    // has stopped it's fixed again
-    if (s.perched) {
-      const now = poseOf(b)
-      if (now.p.distanceToSquared(home.p) > 1e-4 || Math.abs(now.q.dot(home.q)) < 1 - 1e-7) { // (rapier keeps f32s: a still perch reads back a hair off)
-        if (b.bodyType() !== rapier.RigidBodyType.KinematicPositionBased) b.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
-        b.setNextKinematicTranslation(home.p)
-        b.setNextKinematicRotation(home.q)
-        s.still = 0
-      } else if (b.bodyType() === rapier.RigidBodyType.KinematicPositionBased && ++s.still > 8) {
-        b.setBodyType(rapier.RigidBodyType.Fixed, true)
-      }
-    }
   })
 
   // the squish: a springy squash along the way up, pinned at its bottom (drawn only)
@@ -263,25 +201,7 @@ export function LiveWumpus({ perchAt, spawn }: { perchAt: () => Matrix4 | null; 
     g.matrixWorldNeedsUpdate = true
   })
 
-  if (import.meta.env.DEV) Object.assign(window, { __wumpus: { body, st, fly, spring, flyHome, world, rapier, perchPose } }) // for inspecting from the console
-
-  const item: PromptItem = {
-    key: 'wumpus',
-    label: 'Return Wumpus',
-    icon: 'home',
-    at: (out) => {
-      const b = body.current
-      return b ? out.copy(b.translation() as Vector3).add(_up.set(0, 48, 0)) : out
-    },
-    when: () => {
-      const b = body.current
-      const s = st.current
-      if (!b || s.perched || s.held || fly.current) return false
-      const v = b.linvel()
-      return Math.hypot(v.x, v.y, v.z) < 20
-    },
-    run: flyHome,
-  }
+  if (import.meta.env.DEV) Object.assign(window, { __wumpus: { ...perch, spring } }) // for inspecting from the console
 
   return (
     <>
@@ -296,26 +216,19 @@ export function LiveWumpus({ perchAt, spawn }: { perchAt: () => Matrix4 | null; 
         hold={{
           lift: 30,
           onGrab: (b) => {
-            fly.current = null
-            st.current.perched = false
-            st.current.held = true
-            if (!b.isDynamic()) b.setBodyType(rapier.RigidBodyType.Dynamic, true)
+            perch.hold.onGrab(b)
             spring.current.v += SQUASH.grab // squeezed as it's picked up
           },
-          onRelease: (b) => {
-            st.current.held = false
-            const home = perchPose()
-            if (home && poseOf(b).p.distanceTo(home.p) < SNAP) flyHome()
-          },
+          onRelease: perch.hold.onRelease,
         }}
       >
-        <group ref={squish} matrixAutoUpdate={false}>
+        <group ref={squish} matrixAutoUpdate={false} {...perch.hover.bind}>
           <WumpusModel />
         </group>
         <ConvexHullCollider args={[hull]} mass={WUMPUS.mass * 0.95} friction={0.9} collisionGroups={ITEM} />
         <BallCollider args={[4]} position={sprout} mass={WUMPUS.mass * 0.05} friction={0.9} collisionGroups={ITEM} />
       </Holdable>
-      <Prompts items={[item]} />
+      <Prompts items={[perch.prompt]} />
     </>
   )
 }

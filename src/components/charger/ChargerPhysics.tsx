@@ -9,7 +9,7 @@ import { grabbable, isHolding } from '../../lib/physics/Hand'
 import { GROUP, Tube, createRope, groups, type Joint, type Rope } from '../../lib/physics/rope'
 import { CHARGER, SEAT, STAND, cablePoints, portLayout, prongLayout, standOutlet } from './spec'
 import { Charger, UsbCPlug, wovenMaterial } from './Charger'
-import { Prompts, type PromptItem } from '../prompt/Prompts'
+import { Prompts, useItemHover, withHover, type PromptItem } from '../prompt/Prompts'
 
 /**
  * The charger as a real object (Rapier): carry it, tip it, drop it off the desk. Its cable is a rope
@@ -136,6 +136,7 @@ const wantsFlip = (o: Outlet, charger: RapierRigidBody) =>
 export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: ChargerState; set: (s: Partial<ChargerState>) => void; setup?: ChargerSetup }) {
   const { world, rapier } = useRapier()
   const charger = useRef<RapierRigidBody>(null)
+  const hover = useItemHover() // pointing at any of it (a dismissed prompt shows again while you do)
   const nearMesh = useRef<Group>(null!)
   const farMesh = useRef<Group>(null!)
   const sys = useRef<{ rope: Rope; near: RapierRigidBody; far: RapierRigidBody; joint: Joint | null } | null>(null)
@@ -957,6 +958,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
       at: (out) => where(charger.current ?? undefined, 75, out),
       when: () => setupRef.current.start !== undefined && !actual.current.seated && idle() && !chargerHeld.current,
       run: flyHome,
+      hover: hover.hovered,
     },
     {
       key: 'port',
@@ -965,6 +967,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
       at: (out) => where(sys.current?.near, 38, out),
       when: () => !!sys.current && !actual.current.plugged && idle() && !nearHeld.current,
       run: flyPlugIn,
+      hover: hover.hovered,
     },
     {
       key: 'tidy',
@@ -979,6 +982,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
         return through.current || poseOf(s.far).p.distanceTo(rest.p) > 150
       },
       run: reelTidy,
+      hover: hover.hovered,
     },
   ]
 
@@ -1007,18 +1011,18 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
               collisionGroups={DEVICE}
             />
           ))}
-        <group {...chargerGrab}>
+        <group {...withHover(chargerGrab, hover)}>
           <Charger folded={state.folded} onToggleFold={() => !actual.current.seated && set({ folded: !state.folded })} />
         </group>
       </RigidBody>
-      <mesh geometry={tube.geometry} material={woven} castShadow receiveShadow {...cableGrab} />
+      <mesh geometry={tube.geometry} material={woven} castShadow receiveShadow {...withHover(cableGrab, hover)} />
       <primitive object={shade.mesh} />
-      <group ref={nearMesh} {...nearGrab}>
+      <group ref={nearMesh} {...withHover(nearGrab, hover)}>
         <group position={[-SLEEVE, 0, 0]}>
           <UsbCPlug onClick={clickNear} />
         </group>
       </group>
-      <group ref={farMesh} {...farGrab}>
+      <group ref={farMesh} {...withHover(farGrab, hover)}>
         <group position={[-SLEEVE, 0, 0]}>
           <UsbCPlug />
         </group>
