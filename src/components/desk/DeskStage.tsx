@@ -18,6 +18,8 @@ import { LAMP } from '../lamp/spec'
 import { PLUGS, WallOutlet, cordRoute, plugBack } from '../power/PowerCord'
 import { LiveCord, type CordSetup, type Socket } from '../power/LiveCord'
 import { power } from '../../lib/power'
+import { LiveWumpus } from '../wumpus/Wumpus'
+import { perch } from '../wumpus/spec'
 
 // Rina's lamp on the back-right corner, and David (crocheted) sitting against its base
 const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
@@ -33,6 +35,7 @@ const DOLL_R = 110 - SEATED.backZ - 4 // his back against the rim of the lamp's 
 const OUTLET_AT: [number, number, number] = [450, 300, -DESK.top.d / 2 - 80]
 const LAMP_OUTLETS = lampOutlets()
 const LAMP_M = new Matrix4().makeRotationY(LAMP_YAW).setPosition(...LAMP_AT) // lamp frame -> desktop frame
+const PERCH = perch() // Rina's Wumpus, tucked in the lamp's arm (lamp frame)
 const CORD_R = PLUGS[2].cord
 const MOTOR_X = DESK.legX - DESK.outer.w / 2 - DESK.motor.r - 2 // as Desk draws the motor
 const MOTOR_Y = STACK.bracketBottom - DESK.motor.len - (DESK.topUnder + DESK.top.t) // its bottom, below the desktop
@@ -85,6 +88,14 @@ function DeskWithMotor() {
       moving: () => motor.velocity !== 0,
     }
   }, [motor])
+
+  /** the Wumpus's perch in the world (it rides the lamp up and down) */
+  const perchAt = () => {
+    const l = lamp.current
+    if (!l) return null
+    l.updateWorldMatrix(true, false)
+    return l.matrixWorld.clone().multiply(PERCH)
+  }
 
   /** points in the desktop's frame, to the world */
   const onTop = (pts: [number, number, number][]) => {
@@ -185,6 +196,7 @@ function DeskWithMotor() {
         </group>
       </Desk>
       <LiveCharger state={charger} set={(p) => setCharger((s) => ({ ...s, ...p }))} setup={setup} />
+      <LiveWumpus perchAt={perchAt} spawn={[LAMP_AT[0], 1000, LAMP_AT[2] + 150]} />
       <WallOutlet position={OUTLET_AT} top={lampSocket} bottom={deskSocket} />
       <LiveCord setup={cords.lamp} />
       {/* under the desk it keeps inside the right foot, then round behind it to the wall */}

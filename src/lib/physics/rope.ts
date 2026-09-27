@@ -44,6 +44,7 @@ export const GROUP = {
   rope: 0x0002,
   plug: 0x0004,
   device: 0x0008, // something a plug goes into (a charger, a laptop)
+  item: 0x0010, // a loose thing you carry about (the Wumpus): put-back routes don't count it as in the way
 }
 /** Rapier collision groups: (membership << 16) | filter */
 export const groups = (member: number, filter: number) => ((member & 0xffff) << 16) | (filter & 0xffff)

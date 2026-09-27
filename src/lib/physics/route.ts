@@ -13,9 +13,9 @@ import { GROUP, groups, type PhysLib, type PhysWorld } from './rope'
  *   Flight      along a route over a time that suits its length, easing in and out (no jolts at
  *               either end), turning to its final angle on the way so it arrives square
  *
- * Millimetres. Cables, plugs and devices (a charger) don't count as in the way.
+ * Millimetres. Cables, plugs, devices (a charger) and loose items (the Wumpus) don't count as in the way.
  */
-const SOLID = groups(0xffff, 0xffff & ~GROUP.rope & ~GROUP.plug & ~GROUP.device)
+const SOLID = groups(0xffff, 0xffff & ~GROUP.rope & ~GROUP.plug & ~GROUP.device & ~GROUP.item)
 const UP = new Vector3(0, 1, 0)
 
 /** eased 0..1: starts and ends at rest, with no kick in its acceleration either */

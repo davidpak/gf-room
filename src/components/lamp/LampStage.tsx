@@ -18,7 +18,7 @@ import { LAMP, checkSpec } from './spec'
  */
 const maple = createMapleMaterial('#efbe8b', 0.6)
 
-function Scene() {
+function Scene({ still = false }: { still?: boolean }) {
   return (
     <>
       <ToyLights extent={500} />
@@ -29,9 +29,13 @@ function Scene() {
       </mesh>
       {/* a slab of the desk's maple top */}
       <RoundedBox args={[1500, 25, 700]} radius={8} smoothness={3} position={[-250, -12.5, 0]} material={maple} receiveShadow />
-      <World>
-        <Lamp />
-      </World>
+      {still ? (
+        <Lamp solid={false} />
+      ) : (
+        <World>
+          <Lamp />
+        </World>
+      )}
     </>
   )
 }
@@ -55,7 +59,7 @@ export function LampCheck() {
   const L = LAMP
   return (
     <CheckSheet
-      scene={() => <Scene />}
+      scene={() => <Scene still />}
       views={[
         { kind: 'image', label: 'reference: the arm and cap', src: '/reference/lamp-arm.webp' },
         { kind: 'ortho', label: 'side (+X): the S, the tilt', from: new Vector3(3000, 300, 60), at: c, zoom: 0.44 },
