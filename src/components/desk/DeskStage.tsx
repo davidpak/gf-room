@@ -21,6 +21,8 @@ import { power } from '../../lib/power'
 import { LampTrinkets } from '../clip/LiveClip'
 import { LiveMints } from '../mints/Mints'
 import { MINTS } from '../mints/spec'
+import { LiveTissues } from '../tissues/Tissues'
+import { TISSUES } from '../tissues/spec'
 
 // Rina's lamp on the back-right corner, and David (crocheted) sitting against its base
 const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
@@ -36,6 +38,8 @@ const DOLL_R = 110 - SEATED.backZ - 4 // his back against the rim of the lamp's 
 const OUTLET_AT: [number, number, number] = [450, 300, -DESK.top.d / 2 - 80]
 /** Rina's Ice Breakers: front right of the desk, turned a little toward the room (desktop frame) */
 const MINTS_HOME = new Matrix4().makeRotationY(-0.4).setPosition(300, MINTS.puck.h / 2, 150)
+// the Kleenex on the right, in front of the lamp
+const TISSUES_HOME = new Matrix4().makeRotationY(-0.25).setPosition(505, TISSUES.box.h / 2, 70)
 const LAMP_OUTLETS = lampOutlets()
 const LAMP_M = new Matrix4().makeRotationY(LAMP_YAW).setPosition(...LAMP_AT) // lamp frame -> desktop frame
 const CORD_R = PLUGS[2].cord
@@ -97,6 +101,13 @@ function DeskWithMotor() {
     if (!t) return null
     t.updateWorldMatrix(true, false)
     return t.matrixWorld.clone().multiply(MINTS_HOME)
+  }
+
+  const tissuesAt = () => {
+    const t = top.current
+    if (!t) return null
+    t.updateWorldMatrix(true, false)
+    return t.matrixWorld.clone().multiply(TISSUES_HOME)
   }
 
   /** points in the desktop's frame, to the world */
@@ -201,6 +212,7 @@ function DeskWithMotor() {
       {/* Rina's claw clips up the pole, the Wumpus on the amber one */}
       <LampTrinkets lamp={lamp} />
       <LiveMints homeAt={mintsAt} spawn={[300, 800, 150]} />
+      <LiveTissues homeAt={tissuesAt} spawn={[505, 900, 70]} />
       <WallOutlet position={OUTLET_AT} top={lampSocket} bottom={deskSocket} />
       <LiveCord setup={cords.lamp} />
       {/* under the desk it keeps inside the right foot, then round behind it to the wall */}
