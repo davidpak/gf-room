@@ -435,7 +435,6 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     lift: 30,
     pull: 0.06,
     grip: 0.04,
-    mark: 18,
     keep: () => !snap.current && !reel.current && !fly.current,
     leash: () => tether(setupRef.current.length + back),
     onGrab: () => {
@@ -456,7 +455,6 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     lift: 25,
     free: true,
     box: LINK_BOX,
-    mark: 14,
     pull: 0.15,
     grip: 0.01,
     onGrab: () => wakeAll(),

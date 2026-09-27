@@ -475,7 +475,6 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
   const nearGrab = grabbable({
     body: () => (restore.current ? null : sys.current?.near),
     lift: 25,
-    mark: 16,
     pull: 0.05,
     grip: 0.03,
     keep: () => !anims.current.plug && !actual.current.plugged,
@@ -508,7 +507,6 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     body: () => (restore.current ? null : sys.current?.far),
     lift: 25,
     pull: 0.05,
-    mark: 16,
     grip: 0.03,
     onGrab: () => wakeAll(),
     leash: () => tether(CHARGER.cable.length + 2 * HALF.x),
@@ -518,7 +516,6 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     lift: 25,
     free: true, // loose: it hangs and bends from where you grab it
     box: LINK_BOX, // the one link you hold, not the whole cable
-    mark: 14,
     pull: 0.12, // a link hauls the rest of the cable
     grip: 0.01, // (its neighbours weigh 2 g: a heavy one among them would stretch the chain)
     onGrab: () => wakeAll(),

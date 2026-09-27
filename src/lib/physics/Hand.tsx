@@ -1,19 +1,19 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { useRapier, type RapierRigidBody } from '@react-three/rapier'
-import { Box3, CanvasTexture, Matrix4, Mesh, MeshBasicMaterial, Plane, PlaneGeometry, Quaternion, Ray, Vector3, type Object3D } from 'three'
+import { useRapier, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
+import { Box3, Matrix4, Plane, Quaternion, Ray, Vector3, type Mesh, type Object3D } from 'three'
 import { GROUP, groups } from './rope'
 import { thump } from '../sound/thump'
 import '../render/fastHits' // every stage with a hand hit-tests through bounds trees where they exist
 
-/** what can catch a dropped thing (the landing marker, turning clearance): everything but cables and plugs */
+/** what a thing being turned rests on (its clearance): everything but cables and plugs */
 const SUPPORT = groups(0xffff, 0xffff & ~GROUP.rope & ~GROUP.plug)
 
 /**
  * The hand: one way to pick things up for the whole world, the way the pillows carry (Grabbable):
  * what you hold moves over a flat plane a little above where you picked it up, drifting after the
  * cursor on a soft spring. It is simply in your hand: it keeps the way up it had when you picked it
- * up (its rotation is locked while carried, no swinging). A soft marker on the surface below shows
+ * up (its rotation is locked while carried, no swinging). Its own shadow shows
  * where it will land, and when you let go it floats down gently (light gravity and air until it
  * settles).
  *
@@ -38,7 +38,7 @@ const SUPPORT = groups(0xffff, 0xffff & ~GROUP.rope & ~GROUP.plug)
  *   it's held         toward you, Z / C tilt it left / right. Every key clicks into each quarter turn
  *                     round its own axis (four stops a turn, whatever way up the thing is) and holds
  *                     there a moment, so it's easy to let go of it exactly square
- *   let go            it floats down onto the marker; `onRelease` can snap it somewhere
+ *   let go            it floats down; `onRelease` can snap it somewhere
  */
 export type GrabSpec = {
   body: (point: Vector3) => RapierRigidBody | null | undefined
@@ -54,8 +54,8 @@ export type GrabSpec = {
   free?: boolean
   /** its own box (in its body's frame) when the grabbed meshes don't describe the body (one link of a cable) */
   box?: Box3
-  /** the landing marker's size (mm), when the object's own size would mislead (a whole cable) */
-  mark?: number
+  /** things riding inside it (the mints in their tin): not what it rests on, when it's turned */
+  ignore?: (collider: RapierCollider) => boolean
   /** kg the hand lends it while held (GRIP unless given): light for cable pieces, whose neighbours
    *  weigh grams (a heavy link among light ones stretches the chain) */
   grip?: number
@@ -204,24 +204,9 @@ type Held = {
   pause: number // holding at a square angle (s left)
   at: Partial<Record<Axis, number | null>> // per key axis: the stop it last clicked into (null once it has moved on; missing until that axis is turned)
   rise: number // carrying: how far above the carry plane it's held (the lift, then the wheel)
-  size: number // the marker's size
   rest: Rest
 }
 type Landing = { body: RapierRigidBody; t: number; rest: Rest }
-
-/** the soft landing marker: a blurred dot (white alpha, tinted plum by the material) */
-function markerTexture() {
-  const c = document.createElement('canvas')
-  c.width = c.height = 64
-  const g = c.getContext('2d')!
-  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32)
-  grad.addColorStop(0, 'rgba(255,255,255,0.9)')
-  grad.addColorStop(0.55, 'rgba(255,255,255,0.45)')
-  grad.addColorStop(1, 'rgba(255,255,255,0)')
-  g.fillStyle = grad
-  g.fillRect(0, 0, 64, 64)
-  return new CanvasTexture(c)
-}
 
 export function Hand({ children }: { children: ReactNode }) {
   const { camera, raycaster, controls, gl } = useThree()
@@ -230,17 +215,6 @@ export function Hand({ children }: { children: ReactNode }) {
   const held = useRef<Held | null>(null)
   const keys = useRef(new Set<string>())
   const landing = useRef<Landing[]>([])
-  const marker = useMemo(() => {
-    const m = new Mesh(
-      new PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-      new MeshBasicMaterial({ color: '#2a1f38', alphaMap: markerTexture(), transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }),
-    )
-    m.visible = false
-    m.renderOrder = 2
-    m.userData.noSupport = true
-    return m
-  }, [])
-
   // turning locks the pointer (endless turning, the cursor comes back where it was); only from a real
   // button press, which the browser requires; without it turning still works, just screen-bound
   const locked = () => document.pointerLockElement === gl.domElement
@@ -269,7 +243,6 @@ export function Hand({ children }: { children: ReactNode }) {
     h.body.lockRotations(false, true)
     h.body.setAdditionalMass(0, true)
     holding = false
-    marker.visible = false
     hideCursor(false)
     document.body.style.cursor = 'auto'
     orbit(true)
@@ -285,9 +258,10 @@ export function Hand({ children }: { children: ReactNode }) {
   }
 
   /** the height of what's straight below, by the physics' own fast ray (not the meshes): not the
-   *  held thing, not cables or plugs */
-  const groundBelow = (t: { x: number; y: number; z: number }, b: RapierRigidBody) => {
-    const hit = world.castRay(new rapier.Ray({ x: t.x, y: t.y, z: t.z }, { x: 0, y: -1, z: 0 }), 5000, true, undefined, SUPPORT, undefined, b)
+   *  held thing, nor what rides inside it, not cables or plugs */
+  const groundBelow = (t: { x: number; y: number; z: number }, b: RapierRigidBody, spec?: GrabSpec) => {
+    const skip = spec?.ignore
+    const hit = world.castRay(new rapier.Ray({ x: t.x, y: t.y, z: t.z }, { x: 0, y: -1, z: 0 }), 5000, true, undefined, SUPPORT, undefined, b, skip ? (c) => !skip(c) : undefined)
     return hit ? t.y - hit.timeOfImpact : null
   }
 
@@ -422,8 +396,6 @@ export function Hand({ children }: { children: ReactNode }) {
       const local = new Vector3(p.point.x - t.x, p.point.y - t.y, p.point.z - t.z).applyQuaternion(_q.set(r.x, r.y, r.z, r.w).invert())
       p.root.updateWorldMatrix(true, true)
       const box = p.spec.box ?? localBox(p.root)
-      _box.setFromObject(p.root)
-      const size = _box.getSize(new Vector3())
       const h: Held = {
         spec: p.spec,
         body,
@@ -443,7 +415,6 @@ export function Hand({ children }: { children: ReactNode }) {
         pause: 0,
         at: {},
         rise: 0,
-        size: p.spec.mark ?? Math.min(90, Math.max(14, Math.max(size.x, size.z) * 0.7)),
         rest,
       }
       held.current = h
@@ -621,7 +592,7 @@ export function Hand({ children }: { children: ReactNode }) {
     if (h.turn) {
       // stay put and turn toward qT, both eased, under physics. It rises only as far as the angle
       // needs: its lowest corner (at the angle it's turning to) just clears what it rests on
-      const below = groundBelow(t, b)
+      const below = groundBelow(t, b, h.spec)
       let y = h.anchor.y
       if (below !== null) {
         let lowest = Infinity
@@ -692,16 +663,6 @@ export function Hand({ children }: { children: ReactNode }) {
       }
     }
 
-    // the landing marker: straight down from the body onto whatever will catch it
-    const land = groundBelow(t, b)
-    marker.visible = land !== null && !h.turn
-    if (land !== null) {
-      const f = Math.min(1, Math.max(0, t.y - land) / 200)
-      const s = h.size * (1 + f * 0.4) // a touch bigger and softer the higher it is
-      marker.position.set(t.x, land, t.z)
-      marker.scale.set(s, 1, s)
-      ;(marker.material as MeshBasicMaterial).opacity = 0.5 - f * 0.2
-    }
   })
 
   // presses come from the items themselves (grabbable), not a wrapper round the whole scene
@@ -721,7 +682,6 @@ export function Hand({ children }: { children: ReactNode }) {
   return (
     <>
       {children}
-      <primitive object={marker} />
     </>
   )
 }

@@ -4,6 +4,9 @@
  *   'soft'  fabric / pillows: a muffled low thump
  *   'hard'  wood / plastic: a short brighter knock
  */
+/** sound effects on or off (David, 2026-09-26: off for now) */
+export const SOUND = false
+
 let ctx: AudioContext | null = null
 let noise: AudioBuffer | null = null
 let last = 0
@@ -19,6 +22,7 @@ function audio() {
 }
 
 export function thump(strength: number, kind: 'soft' | 'hard' = 'soft') {
+  if (!SOUND) return
   const s = Math.min(1, Math.max(0, strength))
   if (s < 0.05) return
   const c = audio()
@@ -45,6 +49,7 @@ export function thump(strength: number, kind: 'soft' | 'hard' = 'soft') {
 
 /** a soft round pop (a fix-it prompt pressed): a quick sine chirp up, then a little overtone */
 export function blip() {
+  if (!SOUND) return
   const c = audio()
   if (c.state === 'suspended') void c.resume()
   const now = c.currentTime

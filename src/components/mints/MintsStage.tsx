@@ -37,11 +37,11 @@ function Scene() {
         <circleGeometry args={[2400, 64]} />
         <meshStandardMaterial color={TOY.floor} roughness={1} />
       </mesh>
-      <RoundedBox args={[700, 25, 450]} radius={8} smoothness={3} position={[0, -12.5, 0]} material={maple} receiveShadow />
+      <RoundedBox args={[1200, 25, 800]} radius={8} smoothness={3} position={[0, -12.5, 0]} material={maple} receiveShadow />
       <group ref={spot} />
       <World floorY={-26} timeStep={1 / 120}>
         <RigidBody type="fixed" colliders={false}>
-          <CuboidCollider args={[350, 12.5, 225]} position={[0, -12.5, 0]} friction={0.9} />
+          <CuboidCollider args={[600, 12.5, 400]} position={[0, -12.5, 0]} friction={0.9} />
         </RigidBody>
         <LiveMints homeAt={homeAt} spawn={[0, 40, 0]} />
       </World>

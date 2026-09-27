@@ -1,9 +1,12 @@
+import { SOUND } from './sound/thump'
+
 /** Synthesized linear-actuator hum. Web Audio only, no asset. */
 export class Hum {
   private ctx?: AudioContext
   private gain?: GainNode
 
   start() {
+    if (!SOUND) return
     if (!this.ctx) {
       this.ctx = new AudioContext()
       const osc = this.ctx.createOscillator()

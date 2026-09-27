@@ -13,16 +13,15 @@ import { fastHitsUnder } from '../render/fastHits'
  *
  * and it gets the shared hand (./Hand, inside every <World>): left-drag carries it, right-drag
  * turns it in place, both together switch, the wheel lifts / tilts, Q/E R/F Z/C turn it while
- * carried, the hand lends it grip weight, it floats down softly when let go, a marker shows where it
- * will land. Plus: a thump on impact scaled by how hard it hit (`sound`, `onImpact` for squash etc.),
+ * carried, the hand lends it grip weight, it floats down softly when let go * will land. Plus: a thump on impact scaled by how hard it hit (`sound`, `onImpact` for squash etc.),
  * and it respawns where it started if it ever falls out of the world.
  *
- * `hold` passes the rest of the hand's options (lift, spring, free, keep, mark, onGrab / onRelease
+ * `hold` passes the rest of the hand's options (lift, spring, free, keep, ignore, onGrab / onRelease
  * for magnets and such); `bodyRef` gets the Rapier body.
  */
 type Props = Omit<RigidBodyProps, 'children'> & {
   children: ReactNode
-  /** how it's held: lift, spring, free, keep, mark, turn, onGrab, onRelease... (see GrabSpec) */
+  /** how it's held: lift, spring, free, keep, ignore, turn, onGrab, onRelease... (see GrabSpec) */
   hold?: Omit<GrabSpec, 'body'>
   sound?: 'soft' | 'hard' | 'none'
   onImpact?: (strength: number) => void
@@ -53,9 +52,7 @@ export function Holdable({ children, hold, sound = 'hard', onImpact, bodyRef, po
         get turn() {
           return holdRef.current?.turn
         },
-        get mark() {
-          return holdRef.current?.mark
-        },
+        ignore: (c) => holdRef.current?.ignore?.(c) ?? false,
         get pull() {
           return holdRef.current?.pull
         },
