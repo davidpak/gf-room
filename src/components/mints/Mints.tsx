@@ -7,6 +7,7 @@ import { grabbable } from '../../lib/physics/Hand'
 import { GROUP, groups } from '../../lib/physics/rope'
 import { Flight, planRoute } from '../../lib/physics/route'
 import { poseOf, usePerch, type Pose } from '../../lib/physics/usePerch'
+import { stepAlpha } from '../../lib/physics/World'
 import { Prompts, useItemHover, withHover, type PromptItem } from '../prompt/Prompts'
 import { BAND_Y, CAVITY, HOLE_R, LABEL_R, LABEL_Y, MINTS, TAB_TOP, inCavity, mintSpots } from './spec'
 import { speckTexture } from './label'
@@ -275,12 +276,12 @@ function PuckColliders({ plugs }: { plugs: { current: Record<Door, RapierCollide
       boxInDisc(-R, R, -m.z0, o.z0, R), // the middle
       boxInDisc(-R, -o.w / 2, o.z0, R, R), // either side of "one"
       boxInDisc(o.w / 2, R, o.z0, R, R),
-    ].map((p) => slab(p, LID_BOTTOM, LABEL_Y))
-    const one = slab(boxInDisc(-o.w / 2, o.w / 2, o.z0, Rd, Rd), LID_BOTTOM, LABEL_Y)
+    ].map((p) => slab(p, LID_BOTTOM, P.h / 2)) // (up to the rim's top: thicker than the lid itself, nothing slips through)
+    const one = slab(boxInDisc(-o.w / 2, o.w / 2, o.z0, Rd, Rd), LID_BOTTOM, P.h / 2)
     const manyPts = boxInDisc(-R, R, -R, -m.z0, R)
     const dm = DIVOTS[1]
     manyPts.push([-dm.half, -(LABEL_R + dm.depth)], [dm.half, -(LABEL_R + dm.depth)])
-    const many = slab(manyPts, LID_BOTTOM, LABEL_Y)
+    const many = slab(manyPts, LID_BOTTOM, P.h / 2)
     // the rim: arcs of the ring from its inner edge out over the wall, rim-high
     const ring: Float32Array[] = []
     const n = 36
@@ -299,11 +300,12 @@ function PuckColliders({ plugs }: { plugs: { current: Record<Door, RapierCollide
   }, [])
   const walls = useMemo(() => {
     const n = 44
-    const r = CAVITY.r + P.wall / 2
+    const thick = P.wall + 3 // (the wall's inside where it is; 3 more outward, where it can't be seen, so a mint can't be shoved through)
+    const r = CAVITY.r + thick / 2
     const seg = ((2 * Math.PI * r) / n) * 1.1
     return Array.from({ length: n }, (_, i) => {
       const a = (i / n) * Math.PI * 2
-      return { key: i, position: [Math.cos(a) * r, 0, Math.sin(a) * r] as [number, number, number], rotation: [0, -a, 0] as [number, number, number], args: [P.wall / 2, P.h / 2 - 0.4, seg / 2] as [number, number, number] }
+      return { key: i, position: [Math.cos(a) * r, 0, Math.sin(a) * r] as [number, number, number], rotation: [0, -a, 0] as [number, number, number], args: [thick / 2, P.h / 2 - 0.4, seg / 2] as [number, number, number] }
     })
   }, [])
   const mass = MINTS.mass
@@ -335,7 +337,7 @@ function openingAt(doors: Record<Door, DoorState>, p: Vector3) {
  * One mint. `packed`: riding in the shut puck as it lay (its pose in the puck's frame), its body put
  * aside (kinematic, touching nothing); otherwise live. `inside`: where a live one last was in the puck.
  */
-type Mint = { body: RapierRigidBody; packed: { p: Vector3; q: Quaternion } | null; fly: { fl: Flight; pose: Pose; delay: number } | null; inside: Vector3 | null }
+type Mint = { body: RapierRigidBody; packed: { p: Vector3; q: Quaternion } | null; fly: { fl: Flight; pose: Pose; delay: number } | null; inside: Vector3 | null; prev: Pose } // prev: its pose before the last step (drawn blended toward now)
 const TIDY_GAP = 0.09 // s between one mint's flight home and the next
 const TIDY_PASSES = 3 // tries for any that end up out again
 
@@ -394,6 +396,7 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
     const q = pose.q.clone().multiply(pk.q)
     m.body.setTranslation(p, false)
     m.body.setRotation(q, false)
+    m.prev = { p: p.clone(), q: q.clone() }
     m.body.setBodyType(rapier.RigidBodyType.Dynamic, true)
     m.body.collider(0).setCollisionGroups(ITEM)
     const v = b.linvel()
@@ -433,9 +436,16 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
         )
         world.createCollider(rapier.ColliderDesc.roundCylinder(M.t / 2 - M.bevel, M.d / 2 - M.bevel, M.bevel).setMass(M.mass).setFriction(0.45).setRestitution(0.05).setCollisionGroups(LOOSE), body)
         mintHandles.add(body.handle)
-        return { body, packed: { p: s.clone(), q: lq }, fly: null, inside: null }
+        return { body, packed: { p: s.clone(), q: lq }, fly: null, inside: null, prev: { p, q } }
       })
       return
+    }
+    // where each is before this step (to draw it blended between this step and the next)
+    for (const m of mints.current) {
+      const t = m.body.translation()
+      const r = m.body.rotation()
+      m.prev.p.set(t.x, t.y, t.z)
+      m.prev.q.set(r.x, r.y, r.z, r.w)
     }
     // a tab opening: they all come alive where they lie; both shut again: those inside are packed
     const d = doors.current
@@ -514,7 +524,9 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
         m.inside = null
         return
       }
-      m.body.setTranslation(was.clone().applyQuaternion(pose.q).add(pose.p), true)
+      const back = was.clone().applyQuaternion(pose.q).add(pose.p)
+      m.body.setTranslation(back, true)
+      m.prev.p.copy(back)
       m.body.setLinvel(b.linvel(), true) // (moving with the puck)
     })
   })
@@ -593,14 +605,20 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
     const g = drawn.current
     g?.updateWorldMatrix(true, false)
     inst.count = list.length
+    const alpha = Math.min(1, Math.max(0, stepAlpha()))
     list.forEach((m, i) => {
       if (m.packed && g) {
         inst.setMatrixAt(i, _m.multiplyMatrices(g.matrixWorld, _m2.compose(m.packed.p, m.packed.q, ONE)))
         return
       }
+      // blended between its pose before the last step and now, as the puck is drawn
       const t = m.body.translation()
       const r = m.body.rotation()
-      inst.setMatrixAt(i, _m.compose(_v.set(t.x, t.y, t.z), _q.set(r.x, r.y, r.z, r.w), ONE))
+      _v.set(t.x, t.y, t.z)
+      _q.set(r.x, r.y, r.z, r.w)
+      _v.lerpVectors(m.prev.p, _v, alpha)
+      _q2.copy(m.prev.q).slerp(_q, alpha)
+      inst.setMatrixAt(i, _m.compose(_v, _q2, ONE))
     })
     inst.instanceMatrix.needsUpdate = true
   })
