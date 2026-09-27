@@ -121,3 +121,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .fix-in .fix-float { animation: none; }
 }
+
+/* hidden while the laptop's in use (the classes set display, so [hidden] has to say so) */
+.overlay[hidden],
+.parts[hidden] {
+  display: none;
+}

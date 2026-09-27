@@ -1,3 +1,4 @@
+import { typing, worldInput } from '../inputLock'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useRapier, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
@@ -496,7 +497,7 @@ export function Hand({ children }: { children: ReactNode }) {
     canvas.addEventListener('contextmenu', noMenu)
     const key = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase()
-      if (!(k in KEYS)) return
+      if (!(k in KEYS) || typing(e)) return
       if (e.type === 'keydown') keys.current.add(k)
       else keys.current.delete(k)
     }
@@ -673,6 +674,7 @@ export function Hand({ children }: { children: ReactNode }) {
   // presses come from the items themselves (grabbable), not a wrapper round the whole scene
   useEffect(() => {
     press = (e, spec) => {
+      if (worldInput.locked) return // (the laptop's screen has the pointer)
       // left carries, right turns; the middle button is the camera's
       const button = e.nativeEvent.button
       if (button !== 0 && button !== 2) return

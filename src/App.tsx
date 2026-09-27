@@ -11,8 +11,10 @@ import { WumpusCheck, WumpusStage } from './components/wumpus/WumpusStage'
 import { MintsCheck, MintsStage } from './components/mints/MintsStage'
 import { TissuesCheck, TissuesStage } from './components/tissues/TissuesStage'
 import { LaptopCheck, LaptopStage } from './components/laptop/LaptopStage'
+import { RinaOSStage } from './components/rinaos/RinaOSStage'
+import { useOsMode } from './components/rinaos/mode'
 
-// ?part=room|doll|closet|bed|desk|lamp|charger|keypad|wumpus|mints|tissues|laptop|prompt, add &check for the verification sheet
+// ?part=room|doll|closet|bed|desk|lamp|charger|keypad|wumpus|mints|tissues|laptop|rinaos|prompt, add &check for the verification sheet
 const params = new URLSearchParams(location.search)
 const part = params.get('part') ?? 'room'
 const check = params.has('check')
@@ -30,21 +32,23 @@ const PARTS = {
   mints: { stage: MintsStage, check: MintsCheck, title: 'Ice Breakers spearmint', hint: 'click a tab to flip it open (one / many) · left-drag to carry, right-drag or Q/E R/F Z/C to tip it and pour · pick up a mint · press the wheel and drag to look' },
   tissues: { stage: TissuesStage, check: TissuesCheck, title: 'Kleenex', hint: 'click the tissue to pull one · left-drag to carry, right-drag to turn · press the wheel and drag to look' },
   laptop: { stage: LaptopStage, check: LaptopCheck, title: 'MacBook Pro 13"', hint: 'click the lid to shut it or open it · left-drag to carry, right-drag to turn · press the wheel and drag to look' },
+  rinaos: { stage: RinaOSStage, check: RinaOSStage, title: 'RinaOS', hint: 'her laptop, flat: open OneNote from the dock · click anywhere on a page to type · the ribbon: Home, Insert, Draw, View' },
   prompt: { stage: PromptStage, check: PromptStage, title: 'Fix-it prompts', hint: 'click a prompt · carry a block away and its prompt comes back when it settles · press the wheel and drag to look' },
 } as const
 
 export default function App() {
   const p = PARTS[part as keyof typeof PARTS] ?? PARTS.room
+  const usingLaptop = useOsMode() // (the laptop's screen fills the view: the page's labels step aside)
   if (check) return <p.check />
   const Stage = p.stage
   return (
     <>
       <Stage />
-      <div className="overlay">
+      <div className="overlay" hidden={usingLaptop}>
         <h1>{p.title}</h1>
         <div>{p.hint}</div>
       </div>
-      <nav className="parts">
+      <nav className="parts" hidden={usingLaptop}>
         {Object.keys(PARTS).map((k) => (
           <a key={k} href={`?part=${k}`} className={k === part ? 'on' : ''}>
             {k}

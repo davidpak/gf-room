@@ -1,7 +1,11 @@
-import { useMemo, useRef } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import { CuboidCollider, useBeforePhysicsStep, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
-import { CircleGeometry, CylinderGeometry, ExtrudeGeometry, MeshBasicMaterial, MeshStandardMaterial, Quaternion, ShapeGeometry, Vector3, type BufferGeometry, type Group, type Matrix4 } from 'three'
+import { CircleGeometry, CylinderGeometry, ExtrudeGeometry, MeshBasicMaterial, MeshStandardMaterial, Quaternion, ShapeGeometry, Vector3, type BufferGeometry, type Group, type Matrix4, type PerspectiveCamera } from 'three'
+import { worldInput } from '../../lib/inputLock'
+import { osMode, useOsMode } from '../rinaos/mode'
+import { OS_H, OS_W, RinaOS } from '../rinaos/RinaOS'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { Holdable } from '../../lib/physics/Holdable'
 import { usePerch } from '../../lib/physics/usePerch'
@@ -20,6 +24,9 @@ import { KEY_AREA, deckTextures, faceTextures, heartsTexture, keysTexture } from
  *                once it's well away from its spot or knocked over
  *   the lid      click it to shut it or open it again; it swings on its hinge. Open, the screen's on
  *                (her notes, like the photos) and so is the Touch Bar; shut, they go dark
+ *   the screen   click it (open) to use the laptop: the camera comes round in front of it and RinaOS
+ *                (../rinaos) is on it for real, a web page laid exactly over the display; Esc, "Back
+ *                to the room" or a click off the screen, and the camera goes back where it was
  */
 const L = LAPTOP
 const C = L.color
@@ -93,7 +100,7 @@ const DECK_Y = T / 2 - 2 // the deck's aluminium, from here to the top; the case
 const PORT_Y = (DECK_Y + BOTTOM + L.case.feet) / 2 // the ports' middles, halfway up the case's side
 
 /** the laptop. `angle`: how far the lid's open (0 shut, LAPTOP.lid.open wide); `onLid`: the lid clicked */
-export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLid?: () => void }) {
+export function LaptopModel({ angle, onLid, onScreen, screen, screenRef }: { angle: { current: number }; onLid?: () => void; onScreen?: () => void; screen?: ReactNode; screenRef?: RefObject<Group | null> }) {
   const geo = useMemo(() => {
     const tb = touchBar()
     return {
@@ -146,7 +153,10 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
   })
   const click = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
-    onLid?.()
+    if (worldInput.locked) return
+    // the screen (the lid's inside, open): use it; anywhere else on the lid: shut it (or open it)
+    if (e.face?.materialIndex === 2 && onScreen && angle.current > 1.2) onScreen()
+    else onLid?.()
   }
   return (
     <group>
@@ -165,6 +175,10 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
       <group position={HINGE}>
         <group ref={lid} onClick={click}>
           <mesh geometry={geo.lid} material={[mat.hearts, mat.rim, mat.face]} position={[0, GAP, BACK]} castShadow receiveShadow />
+          {/* the display's middle, facing out of it (+Z), its top up (+Y): what's on the screen goes here */}
+          <group ref={screenRef} position={[0, GAP - 0.6, BACK + L.lid.len - L.display.top - L.display.h / 2]} rotation={[Math.PI / 2, 0, 0]}>
+            {screen}
+          </group>
         </group>
       </group>
     </group>
@@ -181,7 +195,57 @@ function lidPose(a: number) {
   return { p: _v, q: _q }
 }
 
-/** the laptop on the desk, to pick up and put back, its lid to open and shut */
+/** RinaOS's px to the display's mm (drei's Html: a px is distanceFactor / 400 world units) */
+const SCREEN_DF = (L.display.w / OS_W) * 400
+const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
+
+/** Using the laptop: the camera glides round to face the screen, square on, near enough that the
+ *  screen (and a little bezel) fills the view; the room's camera and hand stand still meanwhile;
+ *  leaving, it glides back to where it was */
+function UseCamera({ anchor }: { anchor: RefObject<Group | null> }) {
+  const active = useOsMode()
+  const camera = useThree((s) => s.camera) as PerspectiveCamera
+  const controls = useThree((s) => s.controls) as unknown as { enabled: boolean; target: Vector3; update: () => void } | null
+  const tween = useRef<{ from: { p: Vector3; t: Vector3 }; to: { p: Vector3; t: Vector3 }; k: number; back: boolean } | null>(null)
+  const saved = useRef<{ p: Vector3; t: Vector3 } | null>(null)
+  useEffect(() => {
+    const a = anchor.current
+    if (!a || !controls) return
+    const now = { p: camera.position.clone(), t: controls.target.clone() }
+    if (active) {
+      saved.current = now
+      const c = a.getWorldPosition(new Vector3())
+      const out = new Vector3(0, 0, 1).applyQuaternion(a.getWorldQuaternion(new Quaternion()))
+      const tan = Math.tan((camera.fov * Math.PI) / 360)
+      const d = Math.max((L.display.h * 1.1) / 2 / tan, (L.display.w * 1.08) / 2 / (tan * camera.aspect))
+      tween.current = { from: now, to: { p: c.clone().addScaledVector(out, d), t: c }, k: 0, back: false }
+      controls.enabled = false
+      worldInput.locked = true
+    } else if (saved.current) {
+      tween.current = { from: now, to: saved.current, k: 0, back: true }
+      saved.current = null
+    }
+  }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
+  useFrame((_, dt) => {
+    const w = tween.current
+    if (!w || !controls) return
+    w.k = Math.min(1, w.k + Math.min(dt, 1 / 30) / 0.95)
+    const k = ease(w.k)
+    camera.position.lerpVectors(w.from.p, w.to.p, k)
+    controls.target.lerpVectors(w.from.t, w.to.t, k)
+    camera.lookAt(controls.target)
+    if (w.k >= 1) {
+      tween.current = null
+      if (w.back) {
+        controls.enabled = true
+        worldInput.locked = false
+      }
+    }
+  })
+  return null
+}
+
+/** the laptop on the desk, to pick up and put back, its lid to open and shut, its screen to use */
 export function LiveLaptop({ homeAt, spawn, bodyOut }: { homeAt: () => Matrix4 | null; spawn: [number, number, number]; bodyOut?: { current: RapierRigidBody | null } }) {
   const angle = useRef(L.lid.open)
   const target = useRef(L.lid.open)
@@ -215,18 +279,40 @@ export function LiveLaptop({ homeAt, spawn, bodyOut }: { homeAt: () => Matrix4 |
     target.current = target.current > 0 ? 0 : L.lid.open
     perch.body.current?.wakeUp()
   }
-  if (import.meta.env.DEV) Object.assign(window, { __laptop: { ...perch, angle, target } })
+  // using it: RinaOS on the screen (booted the first time, kept after, so it's as she left it)
+  const using = useOsMode()
+  const [booted, setBooted] = useState(false)
+  const screenAt = useRef<Group>(null)
+  const onScreen = () => {
+    setBooted(true)
+    osMode.set(true)
+  }
+  useEffect(() => () => osMode.set(false), [])
+  if (import.meta.env.DEV) Object.assign(window, { __laptop: { ...perch, angle, target, onScreen, osMode } })
   const start = lidPose(L.lid.open)
   return (
     <>
       <Holdable bodyRef={perch.body} position={spawn} colliders={false} restitution={0.05} linearDamping={0.5} angularDamping={1} hold={{ ...perch.hold, lift: 40 }}>
         <group {...perch.hover.bind}>
-          <LaptopModel angle={angle} onLid={onLid} />
+          <LaptopModel
+            angle={angle}
+            onLid={onLid}
+            onScreen={onScreen}
+            screenRef={screenAt}
+            screen={
+              booted && (
+                <Html transform distanceFactor={SCREEN_DF} zIndexRange={[20, 10]} style={{ display: using ? 'block' : 'none' }}>
+                  <RinaOS embedded={{ onExit: () => osMode.set(false) }} />
+                </Html>
+              )
+            }
+          />
         </group>
         <CuboidCollider args={[SHELL_W / 2, (T / 2 - BOTTOM) / 2, SHELL_D / 2]} position={[0, (T / 2 + BOTTOM) / 2, 0]} mass={L.mass * 0.7 + L.case.mass * 0.6} friction={0.7} collisionGroups={ITEM} />
         <CuboidCollider ref={lidBox} args={[SHELL_W / 2, LID_T / 2, L.lid.len / 2]} position={start.p.toArray()} quaternion={start.q.toArray() as [number, number, number, number]} mass={L.mass * 0.3 + L.case.mass * 0.4} friction={0.7} collisionGroups={ITEM} />
       </Holdable>
       <Prompts items={[perch.prompt]} />
+      <UseCamera anchor={screenAt} />
     </>
   )
 }

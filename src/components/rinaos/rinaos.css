@@ -1,0 +1,1143 @@
+/* RinaOS (./RinaOS.tsx): macOS's chrome and OneNote's, at 1280 × 800. Everything is prefixed ros-. */
+.ros-root {
+  --ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --note: Calibri, Carlito, 'Segoe UI', Arial, sans-serif;
+  --purple: #7719aa;
+  --purple-d: #5c1386;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--ui);
+  font-size: 13px;
+  color: #1d1d1f;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  text-align: left;
+  line-height: 1.3;
+  cursor: default;
+}
+.ros-root *,
+.ros-root *::before,
+.ros-root *::after {
+  box-sizing: border-box;
+}
+.ros-root button {
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+.ros-wall {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 50% at 18% 78%, rgba(255, 228, 240, 0.9), transparent 70%),
+    radial-gradient(50% 45% at 85% 20%, rgba(233, 247, 255, 0.9), transparent 70%),
+    radial-gradient(40% 40% at 70% 85%, rgba(255, 238, 222, 0.8), transparent 70%),
+    linear-gradient(160deg, #f7c4d4 0%, #d5c4f0 50%, #a9dcd6 100%);
+}
+
+/* ---- the menu bar */
+.ros-menubar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 14px 0 8px;
+  background: rgba(246, 240, 250, 0.62);
+  backdrop-filter: blur(20px) saturate(1.4);
+  font-size: 13px;
+}
+.ros-menubar b {
+  font-weight: 700;
+}
+.ros-apple {
+  border: 0;
+  background: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: flex;
+}
+.ros-apple:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.ros-menubar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ros-dropdown {
+  position: absolute;
+  top: 24px;
+  left: 6px;
+  min-width: 200px;
+  padding: 5px;
+  border-radius: 8px;
+  background: rgba(250, 247, 252, 0.94);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+}
+.ros-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 4px 10px;
+  border-radius: 5px;
+}
+.ros-dropdown button:hover {
+  background: #7a5cff;
+  color: #fff;
+}
+.ros-dropdown hr {
+  border: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin: 4px 6px;
+}
+.ros-glyph {
+  display: block;
+  flex: none;
+}
+
+/* ---- windows */
+.ros-win {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(40, 10, 60, 0.28), 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+}
+.ros-win:not(.focused) {
+  box-shadow: 0 8px 26px rgba(40, 10, 60, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+}
+.ros-titlebar {
+  flex: none;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+}
+.ros-lights {
+  position: absolute;
+  left: 12px;
+  top: 9px;
+  display: flex;
+  gap: 8px;
+}
+.ros-lights button {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+}
+.ros-lights .c {
+  background: #ff5f57;
+}
+.ros-lights .m {
+  background: #febc2e;
+}
+.ros-lights .z {
+  background: #28c840;
+}
+.ros-win:not(.focused) .ros-lights button {
+  background: rgba(255, 255, 255, 0.45);
+}
+.ros-win-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* ---- the dock */
+.ros-dock {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.38);
+  backdrop-filter: blur(22px) saturate(1.5);
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.5) inset, 0 6px 20px rgba(60, 20, 80, 0.15);
+}
+.ros-dock-app {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border: 0;
+  padding: 0;
+  background: none;
+  transition: transform 0.15s ease-out;
+}
+.ros-dock-app:hover {
+  transform: translateY(-6px) scale(1.12);
+}
+.ros-dock-app.bounce {
+  animation: ros-bounce 0.8s ease-in-out 2;
+}
+@keyframes ros-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-18px);
+  }
+}
+.ros-dock-tip {
+  position: absolute;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(240, 236, 244, 0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.ros-dock-app:hover .ros-dock-tip,
+.ros-dock-app.bounce .ros-dock-tip {
+  opacity: 1;
+}
+.ros-dock-dot {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: rgba(40, 20, 50, 0.7);
+}
+.ros-about {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  width: 260px;
+  padding: 22px 20px 16px;
+  border-radius: 12px;
+  background: rgba(250, 248, 252, 0.97);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.ros-about-logo .ros-glyph {
+  width: 54px;
+  height: 54px;
+  color: #b18bd6;
+}
+.ros-about b {
+  font-size: 18px;
+}
+.ros-about span {
+  color: #777;
+  font-size: 12px;
+}
+.ros-about p {
+  margin: 8px 0 10px;
+}
+.ros-about button {
+  border: 0;
+  padding: 4px 22px;
+  border-radius: 6px;
+  background: #7a5cff;
+  color: #fff !important;
+}
+
+/* ---- in the room: the backdrop (a click off the screen leaves) and the way back */
+.ros-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+}
+.ros-back {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(30, 20, 45, 0.72);
+  color: #fff;
+  font: 600 14px/1 -apple-system, 'Segoe UI', sans-serif;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.ros-back kbd {
+  font: 11px/1 -apple-system, 'Segoe UI', sans-serif;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ================= OneNote ================= */
+.ros-on {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: #fff;
+}
+.ros-ribbon {
+  flex: none;
+  background: var(--purple);
+  color: #fff;
+}
+.ros-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+}
+.ros-tabs button {
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 6px 14px 7px;
+  font-size: 13px;
+  border-radius: 6px 6px 0 0;
+}
+.ros-tabs button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.ros-tabs button.on {
+  background: #f6f3f8;
+  color: var(--purple);
+  font-weight: 600;
+}
+.ros-rbody {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 86px;
+  padding: 6px 8px 0;
+  background: #f6f3f8;
+  color: #262626;
+  border-bottom: 1px solid #ddd6e3;
+}
+.ros-rgroup {
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px;
+  border-right: 1px solid #e0d8e6;
+}
+.ros-rgroup-body {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: center;
+  gap: 3px;
+  max-width: 460px;
+}
+.ros-rgroup-name {
+  flex: none;
+  text-align: center;
+  font-size: 11px;
+  color: #777;
+  padding: 3px 0 4px;
+}
+.ros-rrow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+.ros-rb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: none;
+  padding: 4px 5px;
+  border-radius: 4px;
+  position: relative;
+}
+.ros-rb.wide {
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 8px;
+  font-size: 12px;
+  min-width: 52px;
+}
+.ros-rb.wide .ros-glyph {
+  width: 24px;
+  height: 24px;
+}
+.ros-rb:hover,
+.ros-caret:hover {
+  background: #e7dff0;
+}
+.ros-rb.on {
+  background: #dccdea;
+}
+.ros-swatch {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 1px;
+  height: 3px;
+  border-radius: 1px;
+}
+.ros-split {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.ros-caret {
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  border-radius: 3px;
+}
+.ros-caret .ros-glyph {
+  width: 11px;
+  height: 11px;
+}
+.ros-pop {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(6, 22px);
+  gap: 4px;
+  padding: 6px;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+}
+.ros-swatch-btn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+.ros-stickers {
+  grid-template-columns: repeat(8, 28px);
+  top: 54px;
+}
+.ros-stickers button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: none;
+  font-size: 18px;
+  border-radius: 4px;
+}
+.ros-stickers button:hover {
+  background: #eee6f5;
+}
+.ros-sel {
+  height: 24px;
+  border: 1px solid #cfc6d8;
+  border-radius: 4px;
+  background: #fff;
+  font: 12px var(--ui);
+  padding: 0 4px;
+  width: 128px;
+}
+.ros-sel.small {
+  width: 52px;
+}
+.ros-styles {
+  display: grid;
+  grid-template-columns: repeat(3, 86px);
+  gap: 3px;
+}
+.ros-style {
+  border: 1px solid #e0d8e6;
+  background: #fff;
+  border-radius: 3px;
+  height: 25px;
+  font-size: 12px !important;
+  text-align: left;
+  padding: 0 7px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ros-style:hover {
+  border-color: var(--purple);
+}
+.ros-style.s-h1 {
+  color: #1e4e79 !important;
+  font-weight: 600;
+  font-family: 'Calibri Light', var(--note) !important;
+}
+.ros-style.s-h2 {
+  color: #2e75b5 !important;
+  font-family: 'Calibri Light', var(--note) !important;
+}
+.ros-style.s-h3 {
+  color: #1f3763 !important;
+  font-weight: 600;
+}
+.ros-style.s-blockquote {
+  font-style: italic;
+  color: #595959 !important;
+}
+.ros-style.s-pre {
+  font-family: Consolas, 'Courier New', monospace !important;
+}
+.ros-tags {
+  display: grid;
+  grid-template-columns: repeat(2, 104px);
+  gap: 2px 4px;
+}
+.ros-tagbtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 12px !important;
+}
+.ros-tagbtn:hover {
+  background: #e7dff0;
+}
+.ros-sym {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #e0d8e6;
+  background: #fff;
+  border-radius: 4px;
+  font-size: 14px !important;
+}
+.ros-sym:hover {
+  border-color: var(--purple);
+}
+.ros-pen {
+  width: 34px;
+  height: 52px;
+  border: 0;
+  background: none;
+  border-radius: 5px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6px;
+}
+.ros-pen .ros-glyph {
+  width: 30px;
+  height: 30px;
+  transition: transform 0.12s;
+}
+.ros-pen:hover .ros-glyph,
+.ros-pen.on .ros-glyph {
+  transform: translateY(-8px);
+}
+.ros-pen.on {
+  background: #e3d6ee;
+}
+.ros-thick {
+  width: 34px;
+  height: 40px;
+  border: 0;
+  background: none;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ros-thick i {
+  display: block;
+  background: #333;
+  border-radius: 4px;
+}
+.ros-thick:hover,
+.ros-thick.on {
+  background: #e3d6ee;
+}
+.ros-paper {
+  width: 30px;
+  height: 38px;
+  border: 1px solid #cfc6d8;
+  border-radius: 3px;
+}
+.ros-paper.on {
+  outline: 2px solid var(--purple);
+  outline-offset: 1px;
+}
+.ros-rulebtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: none;
+  font-size: 11px !important;
+  padding: 3px 5px;
+  border-radius: 4px;
+}
+.ros-rulebtn i {
+  display: block;
+  width: 34px;
+  height: 30px;
+  border: 1px solid #cfc6d8;
+  background: #fff;
+}
+.ros-rulebtn.r-narrow i {
+  background: repeating-linear-gradient(#fff 0 5px, #a8c7ea 5px 6px);
+}
+.ros-rulebtn.r-college i {
+  background: repeating-linear-gradient(#fff 0 8px, #a8c7ea 8px 9px);
+}
+.ros-rulebtn.r-grid i {
+  background: repeating-linear-gradient(#fff 0 6px, #cbd8e8 6px 7px), repeating-linear-gradient(90deg, transparent 0 6px, #cbd8e8 6px 7px);
+  background-blend-mode: multiply;
+}
+.ros-rulebtn:hover,
+.ros-rulebtn.on {
+  background: #e3d6ee;
+}
+.ros-zoom {
+  min-width: 42px;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* ---- the notebook pane */
+.ros-on-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.ros-nav {
+  flex: none;
+  width: 400px;
+  display: flex;
+  flex-direction: column;
+  background: #f3f0f5;
+  border-right: 1px solid #ddd6e3;
+}
+.ros-nav-book {
+  position: relative;
+  padding: 8px 8px 4px;
+}
+.ros-book-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: none;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 14px !important;
+  font-weight: 600;
+}
+.ros-book-btn:hover {
+  background: #e7dff0;
+}
+.ros-book-btn span {
+  flex: 1;
+  text-align: left;
+}
+.ros-books {
+  position: absolute;
+  z-index: 60;
+  left: 8px;
+  right: 8px;
+  top: 44px;
+  padding: 5px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+}
+.ros-books button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 6px 8px;
+  border-radius: 5px;
+  text-align: left;
+}
+.ros-books button:hover,
+.ros-books button.on {
+  background: #efe7f6;
+}
+.ros-books-add {
+  color: var(--purple) !important;
+  margin-top: 3px;
+  border-top: 1px solid #eee !important;
+}
+.ros-search {
+  margin: 2px 12px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid #ddd6e3;
+  color: #777;
+}
+.ros-search input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: 13px var(--ui);
+  color: #222;
+  user-select: text;
+}
+.ros-search button {
+  border: 0;
+  background: none;
+  font-size: 16px;
+  line-height: 1;
+  color: #999;
+}
+.ros-cols {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.ros-sections {
+  width: 170px;
+  flex: none;
+  overflow-y: auto;
+  padding: 2px 0 10px;
+}
+.ros-section {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 14px;
+  margin: 0 6px 1px;
+  border-radius: 6px;
+  font-size: 13.5px;
+}
+.ros-section i {
+  flex: none;
+  width: 5px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--tab);
+}
+.ros-section span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ros-section:hover {
+  background: #e9e3ef;
+}
+.ros-section.on {
+  background: color-mix(in srgb, var(--tab) 32%, #fff);
+  font-weight: 600;
+}
+.ros-pages {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 2px 0 10px;
+  background: color-mix(in srgb, var(--tab) 14%, #fbfafc);
+  border-left: 1px solid #e3dce8;
+}
+.ros-pagerow {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  margin: 0 6px 1px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13.5px;
+}
+.ros-pagerow em {
+  color: #888;
+}
+.ros-pagerow.lv1 {
+  padding-left: 30px;
+}
+.ros-pagerow.lv2 {
+  padding-left: 48px;
+}
+.ros-pagerow:hover {
+  background: color-mix(in srgb, var(--tab) 22%, #fff);
+}
+.ros-pagerow.on {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 1px color-mix(in srgb, var(--tab) 60%, #fff);
+  font-weight: 600;
+}
+.ros-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 10px 0;
+  padding: 5px 8px;
+  border: 0;
+  background: none;
+  border-radius: 6px;
+  color: #555 !important;
+}
+.ros-add .ros-glyph {
+  width: 14px;
+  height: 14px;
+}
+.ros-add:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+.ros-rename {
+  width: 100%;
+  font: inherit;
+  padding: 3px 5px;
+  border: 1px solid var(--purple);
+  border-radius: 4px;
+  outline: 0;
+  user-select: text;
+}
+.ros-col-head {
+  padding: 4px 14px 8px;
+  color: #777;
+  font-size: 12px;
+}
+.ros-results {
+  flex: 1;
+  overflow-y: auto;
+}
+.ros-results button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: calc(100% - 16px);
+  margin: 0 8px 4px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: #fff;
+  text-align: left;
+}
+.ros-results button:hover {
+  background: #efe7f6;
+}
+.ros-results small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #777;
+  font-size: 11px;
+}
+.ros-results small i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.ros-results span {
+  color: #444;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- the page */
+.ros-page {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  position: relative;
+}
+.ros-page-zoom {
+  transform-origin: 0 0;
+  position: relative;
+}
+.ros-page-head {
+  padding: 26px 48px 0;
+}
+.ros-title {
+  width: 520px;
+  border: 0;
+  border-bottom: 1px solid #c9c9c9;
+  outline: 0;
+  background: none;
+  font: 300 26px/1.3 'Calibri Light', var(--note);
+  color: #222;
+  padding: 2px 0 4px;
+  user-select: text;
+}
+.ros-title::placeholder {
+  color: #aaa;
+}
+.ros-page-date {
+  margin-top: 6px;
+  font: 12px var(--note);
+  color: #767676;
+}
+.ros-page-date span {
+  margin-left: 22px;
+}
+.ros-canvas {
+  position: relative;
+  margin-top: 10px;
+}
+.ros-tool-type {
+  cursor: text;
+}
+.ros-rules-narrow {
+  background-image: repeating-linear-gradient(transparent 0 20px, #b9d3ef 20px 21px);
+}
+.ros-rules-college {
+  background-image: repeating-linear-gradient(transparent 0 28px, #b9d3ef 28px 29px);
+}
+.ros-rules-grid {
+  background-image: repeating-linear-gradient(transparent 0 24px, #d4e0ee 24px 25px), repeating-linear-gradient(90deg, transparent 0 24px, #d4e0ee 24px 25px);
+}
+.ros-note {
+  position: absolute;
+  min-height: 28px;
+  cursor: auto;
+}
+.ros-note-bar {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: -9px;
+  height: 9px;
+  border-radius: 3px 3px 0 0;
+  background: #d9d9d9 radial-gradient(circle, #8e8e8e 0.9px, transparent 1.2px) center / 6px 4px repeat-x;
+  cursor: move;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.ros-note:hover .ros-note-bar,
+.ros-note:focus-within .ros-note-bar {
+  opacity: 1;
+}
+.ros-note:hover,
+.ros-note:focus-within {
+  box-shadow: 0 0 0 1px #d0d0d0;
+}
+.ros-note-body {
+  min-height: 24px;
+  padding: 3px 8px 5px;
+  outline: 0;
+  font: 11pt/1.35 var(--note);
+  color: #000;
+  user-select: text;
+  cursor: text;
+  overflow-wrap: anywhere;
+}
+.ros-note-size {
+  position: absolute;
+  right: -5px;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+}
+.ros-note-body p,
+.ros-note-body h1,
+.ros-note-body h2,
+.ros-note-body h3,
+.ros-note-body blockquote,
+.ros-note-body pre {
+  margin: 0 0 3px;
+}
+.ros-note-body h1 {
+  font: 16pt/1.3 'Calibri Light', var(--note);
+  color: #1e4e79;
+}
+.ros-note-body h2 {
+  font: 14pt/1.3 'Calibri Light', var(--note);
+  color: #2e75b5;
+}
+.ros-note-body h3 {
+  font: 600 12pt/1.3 var(--note);
+  color: #1f3763;
+}
+.ros-note-body blockquote {
+  font-style: italic;
+  color: #595959;
+  padding-left: 10px;
+  border-left: 3px solid #d0c3dc;
+}
+.ros-note-body pre {
+  font: 10pt/1.4 Consolas, 'Courier New', monospace;
+  background: #f4f4f4;
+  padding: 4px 6px;
+  white-space: pre-wrap;
+}
+.ros-note-body ul,
+.ros-note-body ol {
+  margin: 0 0 3px;
+  padding-left: 26px;
+}
+.ros-note-img img {
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+}
+.ros-note-img:focus {
+  outline: 2px solid #7a5cff;
+  outline-offset: 2px;
+}
+.ros-ink {
+  position: absolute;
+  inset: 0 auto auto 0;
+  z-index: 5;
+  touch-action: none;
+}
+
+/* the tags */
+.ros-tag {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 2px;
+  position: relative;
+  user-select: none;
+}
+.ros-tag-todo {
+  border: 1.5px solid #5f5f5f;
+  border-radius: 2px;
+  background: #fff;
+  cursor: pointer;
+}
+.ros-tag-todo[data-on='1']::after {
+  content: '';
+  position: absolute;
+  left: 3.5px;
+  top: 0px;
+  width: 4px;
+  height: 8px;
+  border: solid #1d7d2d;
+  border-width: 0 2px 2px 0;
+  transform: rotate(40deg);
+}
+.ros-tag-star::before {
+  content: '★';
+  color: #f2a900;
+  font-size: 15px;
+  line-height: 14px;
+}
+.ros-tag-question::before {
+  content: '?';
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #8b3dbf;
+  color: #fff;
+  font: 700 10px/14px Arial, sans-serif;
+  text-align: center;
+}
+.ros-tag-critical::before {
+  content: '!';
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #d13438;
+  color: #fff;
+  font: 700 10px/14px Arial, sans-serif;
+  text-align: center;
+}
+.ros-tag-idea::before {
+  content: '💡';
+  font-size: 12px;
+  line-height: 14px;
+}
+
+/* the right-click menu */
+.ros-menu {
+  position: absolute;
+  z-index: 200;
+  min-width: 190px;
+  padding: 5px;
+  border-radius: 8px;
+  background: rgba(252, 250, 253, 0.97);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+}
+.ros-menu > button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 5px 10px;
+  border-radius: 5px;
+}
+.ros-menu > button:hover:not(:disabled) {
+  background: #7a5cff;
+  color: #fff;
+}
+.ros-menu > button:disabled {
+  color: #b5b5b5;
+}
+.ros-menu > button.danger:hover {
+  background: #d13438;
+}
+.ros-menu-colors {
+  padding: 5px 10px 7px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 3px;
+}
+.ros-menu-colors span {
+  display: block;
+  color: #777;
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+.ros-menu-colors div {
+  display: grid;
+  grid-template-columns: repeat(8, 18px);
+  gap: 4px;
+}
+.ros-menu-colors button {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+.ros-toast {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 300;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fff4ce;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+}

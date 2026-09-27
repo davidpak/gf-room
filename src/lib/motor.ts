@@ -1,3 +1,4 @@
+import { typing } from './inputLock'
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Hum } from './hum'
@@ -53,13 +54,13 @@ export function useDeskMotor(keyboard = true) {
   useEffect(() => {
     const keys: Record<string, KeypadButton> = { ArrowUp: 'up', ArrowDown: 'down', '1': 'preset1', '2': 'preset2', '3': 'preset3' }
     const kd = (e: KeyboardEvent) => {
-      if (!keyboard) return
+      if (!keyboard || typing(e)) return
       const b = keys[e.key]
       if (!b || e.repeat) return
       e.preventDefault()
       state.press(b)
     }
-    const ku = (e: KeyboardEvent) => keyboard && keys[e.key] && state.release()
+    const ku = (e: KeyboardEvent) => keyboard && !typing(e) && keys[e.key] && state.release()
     const pu = () => state.release()
     window.addEventListener('keydown', kd)
     window.addEventListener('keyup', ku)
