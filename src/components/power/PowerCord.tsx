@@ -180,14 +180,14 @@ export function WallOutlet({
 }
 
 // ---- the way a cord runs
-const _h = new Vector3()
 /**
  * A cord's run from an appliance to a socket (control points, world): `from` (out of the appliance
- * and over what it crosses), straight down from the last of them to the floor, past `via` on the
- * floor (x, z), to the wall under the socket, up, and in: out of the plug's back and falling away
- * to `side`, so the plug's back (plugBack from its face) is the last point.
+ * and over what it crosses), then hanging from the last of them to just under the socket in a curve
+ * `depth` deep at its middle (lying along the floor where it would go below it), then up and in: out
+ * of the plug's back and falling away to `side`, so the plug's back (plugBack from its face) is the
+ * last point. `plan` bends the hanging stretch's way across the floor (x, z: round a desk foot).
  */
-export function cordRoute(o: { from: Vector3[]; via?: [number, number][]; socket: Matrix4; side: -1 | 1; back: number; r: number; floor?: number }) {
+export function cordRoute(o: { from: Vector3[]; socket: Matrix4; side: -1 | 1; back: number; r: number; depth: number; plan?: [number, number][]; floor?: number }) {
   const { r, side, back } = o
   const floor = o.floor ?? 0
   const s = o.socket
@@ -195,59 +195,76 @@ export function cordRoute(o: { from: Vector3[]; via?: [number, number][]; socket
   const P0 = local(0, 0, back)
   const P1 = local(5 * side, -1, back + 7)
   const P2 = local(22 * side, -8, back + 13)
-  const W = local(34 * side, 0, back + 18).setY(floor + r + 35)
-  const Wf = local(46 * side, 0, back + 36).setY(floor + r)
-  const via = (o.via ?? []).map(([x, z]) => new Vector3(x, floor + r, z))
+  const W = local(30 * side, -32, back + 17) // where it comes up to the plug
   const A = o.from[o.from.length - 1]
-  const next = via[0] ?? Wf
-  _h.set(next.x - A.x, 0, next.z - A.z).normalize()
-  const drop = [new Vector3(A.x, floor + r + 40, A.z), new Vector3(A.x + _h.x * 40, floor + r, A.z + _h.z * 40)]
-  return [...o.from.map((p) => p.clone()), ...drop, ...via, Wf, W, P2, P1, P0]
+  // the hanging stretch's way across (x, z), measured along
+  const way = [new Vector2(A.x, A.z), ...(o.plan ?? []).map(([x, z]) => new Vector2(x, z)), new Vector2(W.x, W.z)]
+  const acc = [0]
+  for (let i = 1; i < way.length; i++) acc.push(acc[i - 1] + way[i].distanceTo(way[i - 1]))
+  const total = acc[acc.length - 1] || 1
+  const at = (d: number) => {
+    let i = 1
+    while (i < acc.length - 1 && acc[i] < d) i++
+    const k = (d - acc[i - 1]) / Math.max(1e-6, acc[i] - acc[i - 1])
+    return way[i - 1].clone().lerp(way[i], Math.min(1, Math.max(0, k)))
+  }
+  const hang: Vector3[] = []
+  const K = 12
+  for (let k = 1; k < K; k++) {
+    const t = k / K
+    const p = at(t * total)
+    const y = Math.max(floor + r, A.y + (W.y - A.y) * t - o.depth * 4 * t * (1 - t))
+    hang.push(new Vector3(p.x, y, p.y))
+  }
+  return [...o.from.map((p) => p.clone()), ...hang, W, P2, P1, P0]
 }
 
 /**
- * The cord laid along a run, as near `length` long as a gentle sway of its floor stretch allows (at
- * most 25 to either side: the run's own floor loop carries the slack, so it stays in open floor). n + 1
- * points, evenly along it. If the run is longer than the cord, it's cut short (the plug doesn't reach).
+ * The cord laid along its run, `length` long: the hanging stretch sags just as deep as the length
+ * takes (found by halving); if even lying along the floor it's too short a way, what's left sways
+ * gently side to side on the floor; if the way is longer than the cord, it's cut short (the plug
+ * doesn't reach). n + 1 points, evenly along it.
  */
-export function layCord(run: Vector3[], length: number, n: number, floor: number, r: number) {
-  // the floor stretch, filled in so it can sway smoothly
-  const pts: { p: Vector3; floor: boolean }[] = []
-  for (let i = 0; i < run.length; i++) {
-    const f = run[i].y < floor + r + 1
-    if (i > 0 && f && pts[pts.length - 1].floor) {
-      const a = pts[pts.length - 1].p
-      const b = run[i]
-      const k = Math.max(1, Math.round(a.distanceTo(b) / 120))
-      for (let j = 1; j < k; j++) pts.push({ p: a.clone().lerp(b, j / k), floor: true })
+export function layCord(runAt: (depth: number) => Vector3[], length: number, n: number, floor: number, r: number) {
+  const len = (pts: Vector3[]) => new CatmullRomCurve3(pts, false, 'centripetal').getLength()
+  let run = runAt(0)
+  if (len(run) < length) {
+    const deep = 6000
+    if (len(runAt(deep)) <= length) run = runAt(deep)
+    else {
+      let lo = 0
+      let hi = deep
+      for (let i = 0; i < 30; i++) {
+        const m = (lo + hi) / 2
+        if (len(runAt(m)) < length) lo = m
+        else hi = m
+      }
+      run = runAt((lo + hi) / 2)
     }
-    pts.push({ p: run[i].clone(), floor: f })
   }
-  const firstF = pts.findIndex((q) => q.floor)
-  let lastF = -1
-  pts.forEach((q, i) => q.floor && (lastF = i))
-  const make = (amp: number) =>
-    pts.map((q, i) => {
-      if (!q.floor || i === firstF || i === lastF) return q.p
-      const a = pts[Math.max(i - 1, 0)].p
-      const b = pts[Math.min(i + 1, pts.length - 1)].p
-      const perp = new Vector3(-(b.z - a.z), 0, b.x - a.x).normalize()
-      return q.p.clone().addScaledVector(perp, amp * ((i - firstF) % 2 ? 1 : -1))
-    })
-  const len = (amp: number) => new CatmullRomCurve3(make(amp), false, 'centripetal').getLength()
-  let amp = 0
-  if (firstF >= 0 && len(0) < length) {
+  // still short (flat on the floor): the floor stretch sways, a little
+  if (len(run) < length) {
+    const onFloor = run.map((p) => p.y <= floor + r + 0.5)
+    const first = onFloor.indexOf(true)
+    const last = onFloor.lastIndexOf(true)
+    const make = (amp: number) =>
+      run.map((p, i) => {
+        if (!onFloor[i] || i === first || i === last) return p
+        const a = run[i - 1]
+        const b = run[i + 1]
+        const perp = new Vector3(-(b.z - a.z), 0, b.x - a.x).normalize()
+        return p.clone().addScaledVector(perp, amp * (i % 2 ? 1 : -1))
+      })
     let lo = 0
-    let hi = 25
-    for (let i = 0; i < 26; i++) {
+    let hi = 60
+    for (let i = 0; i < 24; i++) {
       const m = (lo + hi) / 2
-      if (len(m) < length) lo = m
+      if (len(make(m)) < length) lo = m
       else hi = m
     }
-    amp = (lo + hi) / 2
+    run = make((lo + hi) / 2)
   }
-  const curve = new CatmullRomCurve3(make(amp), false, 'centripetal')
-  const total = curve.getLength()
-  const reach = Math.min(1, length / total)
+  const curve = new CatmullRomCurve3(run, false, 'centripetal')
+  const reach = Math.min(1, length / curve.getLength())
   return Array.from({ length: n + 1 }, (_, i) => curve.getPointAt((i / n) * reach))
 }

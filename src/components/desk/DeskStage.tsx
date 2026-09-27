@@ -37,12 +37,13 @@ const CORD_R = PLUGS[2].cord
 const MOTOR_X = DESK.legX - DESK.outer.w / 2 - DESK.motor.r - 2 // as Desk draws the motor
 const MOTOR_Y = STACK.bracketBottom - DESK.motor.len - (DESK.topUnder + DESK.top.t) // its bottom, below the desktop
 /**
- * Where the cords wander on the floor (x, z): a loose zigzag of slack in open floor (the lamp's
- * between the right foot and the desk's edge, the desk's under the middle), clear of the foot. Sized
- * so each lies naturally at the desk's lowest, with plenty to spare as it goes up.
+ * The cords are just long enough: plugged in with the desk right up, with a little to spare, so they
+ * hang from the desk to the wall (a deeper sag when it's down) rather than coil on the floor. The
+ * desk's hangs round behind the right foot (x, z), not over it.
  */
-const LAMP_VIA: [number, number][] = [[560, -230], [472, -120], [560, -10], [472, 100], [455, -200]]
-const DESK_VIA: [number, number][] = [[300, 100], [180, 40], [300, -60], [180, -160], [340, -325]]
+const LAMP_CORD = 1100
+const DESK_CORD = 950
+const DESK_PLAN: [number, number][] = [[340, -305]]
 /**
  * The charger's cable on the desk: out of its top, over its face toward the lamp's left (away from
  * the back corner), across the base and off it, then a loose loop round the far side of David out
@@ -146,10 +147,10 @@ function DeskWithMotor() {
         l.updateWorldMatrix(true, false)
         return { p: new Vector3(0, 3.5, -(LAMP.base.r + 3)).applyMatrix4(l.matrixWorld), q: new Quaternion().setFromRotationMatrix(l.matrixWorld).multiply(backward) }
       },
-      run: (socket) => cordRoute({ from: lampCord(), via: LAMP_VIA, socket, side: 1, back: plugBack(2), r: PLUGS[2].cord }),
+      run: (socket, depth) => cordRoute({ from: lampCord(), socket, side: 1, back: plugBack(2), r: PLUGS[2].cord, depth }),
       sockets,
       start: 0,
-      length: 2150,
+      length: LAMP_CORD,
       prongs: 2,
       onPower: (on) => power.set('lamp', on),
       moving,
@@ -161,10 +162,10 @@ function DeskWithMotor() {
         t.updateWorldMatrix(true, false)
         return { p: new Vector3(MOTOR_X, MOTOR_Y + 2, DESK.beam.z).applyMatrix4(t.matrixWorld), q: down }
       },
-      run: (socket) => cordRoute({ from: deskCord(), via: DESK_VIA, socket, side: -1, back: plugBack(3), r: PLUGS[3].cord }),
+      run: (socket, depth) => cordRoute({ from: deskCord(), socket, side: -1, back: plugBack(3), r: PLUGS[3].cord, depth, plan: DESK_PLAN }),
       sockets,
       start: 1,
-      length: 1750,
+      length: DESK_CORD,
       prongs: 3,
       onPower: (on) => power.set('desk', on),
       moving,

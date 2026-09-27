@@ -4,7 +4,7 @@ import { useBeforePhysicsStep, useRapier, type RapierRigidBody } from '@react-th
 import { Box3, Group, Matrix4, Quaternion, Vector3 } from 'three'
 import { grabbable, isHolding } from '../../lib/physics/Hand'
 import { GROUP, Tube, createRope, groups, type Joint, type Rope } from '../../lib/physics/rope'
-import { GLIDE, Path, smoother } from '../../lib/physics/route'
+import { Flight, GLIDE, Path, planRoute, smoother } from '../../lib/physics/route'
 import { stepAlpha } from '../../lib/physics/World'
 import { ContactShadow } from '../../lib/render/contactShadow'
 import { thump } from '../../lib/sound/thump'
@@ -19,8 +19,10 @@ import { CORD, PLUGS, PlugHead, layCord, plugBack, type Prongs } from './PowerCo
  *   grab the plug it comes out (power off); hold it close in front of a free socket and it goes in
  *   the cord      carry any bit of it (on a leash: it's never dragged through anything)
  *   pulled taut   raise the desk too far and the plug pops out of the wall, as it would
- *   plug back in  a fix-it prompt: the cord reels into the appliance along itself and feeds back out
- *                 along its run, the plug riding its end into the socket
+ *   plug back in  a fix-it prompt: the plug flies to the socket along a route round things, lined up
+ *                 for the last bit, the (short) cord following under physics. If the cord's caught on
+ *                 something and the flight would stretch it, it reels into the appliance along itself
+ *                 and feeds back out along its run instead
  *
  * Sockets are shared between cords (`taken`): a plug only goes into a free one.
  */
@@ -30,8 +32,8 @@ export type CordSetup = {
   id: string
   /** where the cord leaves its appliance (world): its +Z is the way the cord comes out */
   anchor: () => Pose
-  /** the cord's run to a socket, from the anchor to the plug's back (./PowerCord cordRoute) */
-  run: (socket: Matrix4) => Vector3[]
+  /** the cord's run to a socket, from the anchor to the plug's back, sagging `depth` (./PowerCord cordRoute) */
+  run: (socket: Matrix4, depth: number) => Vector3[]
   sockets: () => Socket[]
   /** the socket it starts in */
   start: number
@@ -66,6 +68,7 @@ const frameOf = (m: Matrix4): Pose => {
 // back when it's let go)
 type Reel = { t: number; lay: Path; rest: Path; root: Vector3; dir: Vector3; T1: number; T2: number; socket: number; socketId: string; end: Pose; landing: boolean; dist: number[] }
 type Snap = { from: Pose; to: Pose; t: number; socket: number; landing: boolean }
+type Fly = { fl: Flight; socket: number; socketId: string; pose: Pose; landing: boolean; tight: number }
 
 export function LiveCord({ setup }: { setup: CordSetup }) {
   const { world, rapier } = useRapier()
@@ -85,6 +88,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
   const sockBodies = useRef(new Map<string, RapierRigidBody>())
   const reel = useRef<Reel | null>(null)
   const snap = useRef<Snap | null>(null)
+  const fly = useRef<Fly | null>(null)
   const draw = useRef({ plugScale: 1, visibleFrom: 0 })
   const plugPrev = useRef({ p: new Vector3(), q: new Quaternion(), ok: false })
   const J = useMemo(() => Array.from({ length: N + 1 }, () => new Vector3()), [N])
@@ -187,8 +191,8 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     const socks = st.sockets()
     const sk = socks[st.start]
     if (!sk) return // (the outlet isn't there yet: next frame)
-    const run = st.run(sk.frame)
-    const lay = layCord(run, st.length, N, 0, R)
+    const run = st.run(sk.frame, 0)
+    const lay = layCord((d) => st.run(sk.frame, d), st.length, N, 0, R)
     const rope = createRope(world, rapier, lay, { radius: R, mass: 0.003, bend: 8, bendDamping: 0.3, memory: 0.4, linearDamping: 2.5, angularDamping: 20 })
     const a = st.anchor()
     const anchor = world.createRigidBody(rapier.RigidBodyDesc.kinematicPositionBased().setTranslation(a.p.x, a.p.y, a.p.z).setRotation({ x: a.q.x, y: a.q.y, z: a.q.z, w: a.q.w }))
@@ -253,7 +257,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     if (i < 0 || !socks[i]) return
     const lay = s.rope.points([]).map((p) => p.clone())
     const real = s.rope.lengths.reduce((a, l) => a + l, 0) // (the cord as it really is)
-    const rest = layCord(st.run(socks[i].frame), real, N, 0, R)
+    const rest = layCord((d) => st.run(socks[i].frame, d), real, N, 0, R)
     const a = st.anchor()
     s.rope.detach()
     for (const b of [...s.rope.links, s.plug]) b.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
@@ -275,7 +279,28 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     taken.set(socks[i].id, st.id) // (claimed on the way)
     wakeAll()
   }
-  // every physics step: the anchor rides its appliance; reeling and snapping in are moved here too
+  /** plug back in: the plug flies to a free socket round what's in the way, the cord following */
+  const flyIn = () => {
+    const s = sys.current
+    const st = setupRef.current
+    if (!s || reel.current || fly.current || snap.current || s.socket !== null) return
+    const socks = st.sockets()
+    let i = st.start
+    if (!socks[i] || taken.get(socks[i].id)) i = socks.findIndex((sk) => !taken.get(sk.id))
+    if (i < 0) return
+    const to = frameOf(socks[i].frame)
+    const from = poseOf(s.plug)
+    const out = new Vector3(0, 0, 1).applyQuaternion(to.q) // out of the wall
+    const curve = planRoute(world, rapier, from.p, to.p, { approach: to.p.clone().addScaledVector(out, 45), clearance: 40, radius: 14 })
+    const fl = new Flight(curve, from.q, to.q, { speed: 240, min: 1.0, max: 2.4, turn: [0.05, 0.75] })
+    s.plug.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
+    plugGroups(true)
+    fly.current = { fl, socket: i, socketId: socks[i].id, pose: from, landing: false, tight: 0 }
+    taken.set(socks[i].id, st.id) // (claimed on the way)
+    wakeAll()
+  }
+
+  // every physics step: the anchor rides its appliance; flying, reeling and snapping in are moved here too
   useBeforePhysicsStep((w) => {
     const s = sys.current
     if (!s) return
@@ -308,6 +333,37 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
         s.plug.setNextKinematicTranslation(p)
         s.plug.setNextKinematicRotation(_q.copy(sn.from.q).slerp(sn.to.q, smoother(k / 0.6)))
         if (sn.t >= 1) sn.landing = true
+      }
+    }
+    // flying home
+    const fy = fly.current
+    if (fy) {
+      if (fy.landing) {
+        fly.current = null
+        s.plug.setLinvel({ x: 0, y: 0, z: 0 }, false)
+        s.plug.setAngvel({ x: 0, y: 0, z: 0 }, false)
+        s.plug.setBodyType(rapier.RigidBodyType.Dynamic, true)
+        taken.delete(fy.socketId)
+        lockIn(fy.socket)
+        settled.current = 0
+        thump(0.25, 'hard')
+      } else {
+        const done = fy.fl.step(dt)
+        fy.fl.pose(fy.pose.p, fy.pose.q)
+        s.plug.setNextKinematicTranslation(fy.pose.p)
+        s.plug.setNextKinematicRotation(fy.pose.q)
+        // caught on something (the cord stretching as the plug flies): let it go and reel it instead
+        let worst = 0
+        const p = s.rope.points(pts.current)
+        for (let i = 0; i < N; i++) worst = Math.max(worst, p[i].distanceTo(p[i + 1]) / s.rope.lengths[i])
+        fy.tight = worst > 1.25 ? fy.tight + 1 : 0
+        if (fy.tight > 10) {
+          fly.current = null
+          s.plug.setLinvel({ x: 0, y: 0, z: 0 }, false)
+          s.plug.setBodyType(rapier.RigidBodyType.Dynamic, true)
+          taken.delete(fy.socketId)
+          startReel()
+        } else if (done) fy.landing = true
       }
     }
     // reeling
@@ -374,12 +430,12 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     return { from: setupRef.current.anchor().p, length: along * 0.97 }
   }
   const plugGrab = grabbable({
-    body: () => (reel.current ? null : sys.current?.plug),
+    body: () => (reel.current || fly.current ? null : sys.current?.plug),
     lift: 30,
     pull: 0.06,
     grip: 0.04,
     mark: 18,
-    keep: () => !snap.current && !reel.current,
+    keep: () => !snap.current && !reel.current && !fly.current,
     leash: () => tether(setupRef.current.length + back),
     onGrab: () => {
       wakeAll()
@@ -406,7 +462,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     leash: () => tether((heldLink.current + 0.5) * LINK + 2 * R),
     body: (point) => {
       const s = sys.current
-      if (!s || reel.current) return null
+      if (!s || reel.current || fly.current) return null
       let best = 0
       let d = Infinity
       s.rope.links.forEach((l, i) => {
@@ -436,10 +492,10 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     }
     // pulled taut while plugged in (the desk going up): it pops out of the wall
     settled.current += 1 / 60
-    if (s.socket !== null && !snap.current && !reel.current && settled.current > 2 && ++tick.current % 5 === 0) {
+    if (s.socket !== null && !snap.current && !reel.current && !fly.current && settled.current > 2 && ++tick.current % 5 === 0) {
       const p = s.rope.points(pts.current)
       let worst = 0
-      for (let i = 0; i < N; i++) worst = Math.max(worst, p[i].distanceTo(p[i + 1]) / (setupRef.current.length / N))
+      for (let i = 0; i < N; i++) worst = Math.max(worst, p[i].distanceTo(p[i + 1]) / s.rope.lengths[i])
       taut.current = worst > 1.18 ? taut.current + 1 : 0
       if (taut.current >= 6) {
         taut.current = 0
@@ -462,7 +518,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
       return
     }
     // at rest: asleep (no idle shimmer); anything that touches it wakes it
-    calm.current = !isHolding() && !snap.current && !reel.current && !setupRef.current.moving?.() && fastest < 30 ? calm.current + 1 : 0
+    calm.current = !isHolding() && !snap.current && !reel.current && !fly.current && !setupRef.current.moving?.() && fastest < 30 ? calm.current + 1 : 0
     if (calm.current >= 20 && calm.current % 20 === 0) for (const b of [...s.rope.links, s.plug]) if (b.isDynamic() && !b.isSleeping()) b.sleep()
     // draw: blended between physics steps
     const alpha = Math.min(1, Math.max(0, stepAlpha()))
@@ -495,8 +551,8 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
         const t = sys.current?.plug.translation()
         return t ? out.set(t.x, t.y + 45, t.z) : out
       },
-      when: () => !!sys.current && sys.current.socket === null && !held.current && !snap.current && !reel.current,
-      run: startReel,
+      when: () => !!sys.current && sys.current.socket === null && !held.current && !snap.current && !reel.current && !fly.current,
+      run: flyIn,
     },
   ]
 
