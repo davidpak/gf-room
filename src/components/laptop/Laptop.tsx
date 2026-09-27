@@ -1,15 +1,15 @@
 import { useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { CuboidCollider, useBeforePhysicsStep, type RapierCollider } from '@react-three/rapier'
-import { CircleGeometry, Color, CylinderGeometry, ExtrudeGeometry, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, ShapeGeometry, Vector3, type BufferGeometry, type Group, type Matrix4 } from 'three'
+import { CircleGeometry, CylinderGeometry, ExtrudeGeometry, MeshBasicMaterial, MeshStandardMaterial, Quaternion, ShapeGeometry, Vector3, type BufferGeometry, type Group, type Matrix4 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { Holdable } from '../../lib/physics/Holdable'
 import { usePerch } from '../../lib/physics/usePerch'
 import { GROUP, groups } from '../../lib/physics/rope'
 import { roundedRect } from '../../lib/shapes'
 import { Prompts } from '../prompt/Prompts'
-import { LAPTOP, keyLayout, rowZ, touchBar, FN_Z, KB_W } from './spec'
-import { LEGEND_AREA, bezelTexture, grilleTexture, heartsTexture, legendsTexture, screenTexture, touchBarTexture } from './print'
+import { LAPTOP, keyLayout, touchBar } from './spec'
+import { KEY_AREA, deckTextures, faceTextures, heartsTexture, keysTexture } from './print'
 
 /**
  * Rina's MacBook Pro in its heart case (./spec).
@@ -36,7 +36,8 @@ const GAP = -L.hinge.y + 0.1
 const BOTTOM = -T / 2 - L.case.t - L.case.feet // the lowest point (the case's feet)
 
 /** a rounded slab: `w` × `d` in plan (corners `corner`), `h` tall from y = 0, its edges eased by
- *  `bevel`; `forward`: the outline's y runs to +z (for pictures laid on its caps) */
+ *  `bevel`; `forward`: the outline's y runs to +z (for pictures laid on its caps). Its groups: the
+ *  caps (0), the sides (1) */
 function slab(w: number, d: number, h: number, corner: number, bevel: number, forward = false, y0 = -d / 2) {
   const s = roundedRect(w - 2 * bevel, d - 2 * bevel, Math.max(0.5, corner - bevel))
   const g = new ExtrudeGeometry(s, { depth: h - 2 * bevel, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 10 })
@@ -50,42 +51,54 @@ function slab(w: number, d: number, h: number, corner: number, bevel: number, fo
   return g
 }
 
-/** a flat rounded rectangle lying face up */
-function flat(w: number, d: number, r: number) {
-  return new ShapeGeometry(roundedRect(w, d, r), 8).rotateX(-Math.PI / 2)
+/** a slab's caps split in two: the top one keeps material 0, the bottom one gets material 2 (the
+ *  caps come as two runs, one then the other) */
+function splitCaps(g: BufferGeometry) {
+  const caps = g.groups[0]
+  const half = caps.count / 2
+  const firstUp = g.attributes.normal.getY(caps.start) > 0
+  g.groups = [
+    { start: caps.start, count: half, materialIndex: firstUp ? 0 : 2 },
+    { start: caps.start + half, count: half, materialIndex: firstUp ? 2 : 0 },
+    ...g.groups.slice(1),
+  ]
+  return g
 }
 
-/** the keys (all one mesh): rounded caps standing up off the deck */
+const SINK = 0.3
+/** the keys (all one mesh): rounded caps standing up off the deck, the picture of the keyboard laid
+ *  on them from above (the legends on their tops; their sides take the pink round them) */
 function keysGeometry() {
   const parts: BufferGeometry[] = []
   for (const k of keyLayout()) {
-    const g = new ExtrudeGeometry(roundedRect(k.w - 0.5, k.d - 0.5, Math.min(2.2, k.d / 3)), { depth: L.keys.rise - 0.5, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 1, curveSegments: 4 })
+    const g = new ExtrudeGeometry(roundedRect(k.w - 0.5, k.d - 0.5, Math.min(2.2, k.d / 3)), { depth: L.keys.rise - 0.5 + SINK, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 1, curveSegments: 4 })
     g.translate(0, 0, 0.25)
     g.rotateX(-Math.PI / 2)
-    g.translate(k.x, T / 2, k.z)
+    g.translate(k.x, T / 2 - SINK, k.z) // (sunk a little into the deck: no seam to sparkle where they meet it)
     parts.push(g)
   }
-  return mergeGeometries(parts)!
+  const g = mergeGeometries(parts)!
+  const pos = g.attributes.position
+  const uv = g.attributes.uv
+  const A = KEY_AREA
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) - A.x0) / A.w, 1 - (pos.getZ(i) - A.z0) / A.d)
+  uv.needsUpdate = true
+  return g
 }
 
-/** laid on the deck: drawn in front of it (no flicker zoomed out, where the depth runs short) */
+/** on the base's side: drawn in front of it (no flicker zoomed out) */
 const DECAL = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }
-const OVER_DECAL = { polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 } // (the display, over the bezel)
-const SCREEN_ON = new Color('#ffffff')
-const SCREEN_OFF = new Color('#050506')
+const DECK_Y = T / 2 - 2 // the deck's aluminium, from here to the top; the case's shell under it
 
 /** the laptop. `angle`: how far the lid's open (0 shut, LAPTOP.lid.open wide); `onLid`: the lid clicked */
 export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLid?: () => void }) {
   const geo = useMemo(() => {
     const tb = touchBar()
-    const margin = (B.w - KB_W) / 2
-    const kbD = rowZ(4) + L.keys.cap - FN_Z
     return {
-      shell: slab(SHELL_W, SHELL_D, T - 1.3 + L.case.t, B.corner + L.case.t, 1.6),
-      deck: slab(B.w, B.d, 2, B.corner, 0.7),
+      // the base: the case's dark shell, the deck on it, the same outline (flush: no rim to shimmer)
+      shell: slab(SHELL_W, SHELL_D, DECK_Y - (-T / 2 - L.case.t), B.corner + L.case.t, 1.2),
+      deck: slab(SHELL_W, SHELL_D, T / 2 - DECK_Y, B.corner + L.case.t, 0.6),
       keys: keysGeometry(),
-      bar: tb.bar,
-      barGeo: new PlaneGeometry(tb.bar.w, tb.bar.d).rotateX(-Math.PI / 2),
       id: (() => {
         const g = new ExtrudeGeometry(roundedRect(tb.id.w - 0.5, tb.id.d - 0.5, 2), { depth: L.keys.rise - 0.5, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.25, bevelSegments: 1, curveSegments: 6 })
         g.translate(0, 0, 0.25)
@@ -93,44 +106,32 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
         g.translate(tb.id.x, T / 2, tb.id.z)
         return g
       })(),
-      legends: new PlaneGeometry(LEGEND_AREA.w, LEGEND_AREA.d).rotateX(-Math.PI / 2),
-      trackpad: flat(L.trackpad.w, L.trackpad.d, 6),
-      grille: new PlaneGeometry(L.speaker.w, kbD).rotateX(-Math.PI / 2),
-      grilleX: KB_W / 2 + margin / 2,
-      grilleZ: FN_Z + kbD / 2,
       hinge: new CylinderGeometry(L.hinge.r, L.hinge.r, L.hinge.w, 20).rotateZ(Math.PI / 2),
-      lid: slab(SHELL_W, L.lid.len, LID_T, B.corner + L.case.t, 1.2, true, 0),
-      bezel: (() => {
-        const g = new ShapeGeometry(roundedRect(B.w, L.lid.len, B.corner), 8)
-        g.translate(0, L.lid.len / 2, 0)
-        g.rotateX(Math.PI / 2) // face down, outline y -> +z
-        return g
-      })(),
-      display: new PlaneGeometry(L.display.w, L.display.h).rotateX(Math.PI / 2), // (face down, its top toward the lid's front edge)
+      // the lid: the hearts on its back, the case's rim round it, its inside the face
+      lid: splitCaps(slab(SHELL_W, L.lid.len, LID_T, B.corner + L.case.t, 1.2, true, 0)),
       foot: new CylinderGeometry(5, 5, L.case.feet, 16),
       port: new ShapeGeometry(roundedRect(L.port.w, L.port.h, L.port.h / 2), 6).rotateY(-Math.PI / 2),
       jack: new CircleGeometry(L.jack.r, 16).rotateY(Math.PI / 2),
     }
   }, [])
-  const tb = geo.bar
   const mat = useMemo(() => {
-    const hearts = new MeshStandardMaterial({ map: heartsTexture(), roughness: 0.45 })
+    const deck = deckTextures()
+    const face = faceTextures()
     return {
       shell: new MeshStandardMaterial({ color: C.shell, roughness: 0.55 }),
       gray: new MeshStandardMaterial({ color: C.gray, roughness: 0.42, metalness: 0.15 }),
-      key: new MeshStandardMaterial({ color: C.key, roughness: 0.7 }),
-      legends: new MeshBasicMaterial({ map: legendsTexture(), transparent: true, depthWrite: false, ...DECAL }),
-      trackpad: new MeshStandardMaterial({ color: C.trackpad, roughness: 0.3, metalness: 0.1, ...DECAL }),
-      grille: new MeshStandardMaterial({ map: grilleTexture(L.speaker.w, 100), transparent: true, depthWrite: false, roughness: 0.6, ...DECAL }),
+      // the deck's top: its picture, and the Touch Bar's keys lit on it while it's on
+      deck: new MeshStandardMaterial({ map: deck.map, emissiveMap: deck.lit, emissive: '#ffffff', emissiveIntensity: 0, roughness: 0.42, metalness: 0.15 }),
+      keys: new MeshStandardMaterial({ map: keysTexture(), roughness: 0.7 }),
       dark: new MeshStandardMaterial({ color: C.hinge, roughness: 0.5 }),
       touchId: new MeshStandardMaterial({ color: '#1b1b1e', roughness: 0.25 }),
-      bar: new MeshBasicMaterial({ map: touchBarTexture(tb.w, tb.d), color: SCREEN_OFF.clone(), ...DECAL }),
-      lid: [hearts, new MeshStandardMaterial({ color: C.rim, roughness: 0.5 })],
-      bezel: new MeshStandardMaterial({ map: bezelTexture(), roughness: 0.2, ...DECAL }),
-      screen: new MeshBasicMaterial({ map: screenTexture(), color: SCREEN_OFF.clone(), ...OVER_DECAL }),
-      port: new MeshBasicMaterial({ color: '#0b0b0d' }),
+      hearts: new MeshStandardMaterial({ map: heartsTexture(), roughness: 0.45 }),
+      rim: new MeshStandardMaterial({ color: C.rim, roughness: 0.5 }),
+      // the lid's inside: the black glass round the display, and the screen lit on it while it's on
+      face: new MeshStandardMaterial({ map: face.map, emissiveMap: face.lit, emissive: '#ffffff', emissiveIntensity: 0, roughness: 0.22 }),
+      port: new MeshBasicMaterial({ color: '#0b0b0d', ...DECAL }),
     }
-  }, [tb])
+  }, [])
   const lid = useRef<Group>(null)
   useFrame(() => {
     const l = lid.current
@@ -138,44 +139,31 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
     l.rotation.x = -angle.current
     // on while it's open (it wakes as the lid comes up, sleeps as it comes down)
     const on = Math.min(1, Math.max(0, (angle.current - 0.5) / 0.4))
-    mat.screen.color.copy(SCREEN_OFF).lerp(SCREEN_ON, on * 0.92)
-    mat.bar.color.copy(SCREEN_OFF).lerp(SCREEN_ON, on)
+    mat.face.emissiveIntensity = on * 0.95
+    mat.deck.emissiveIntensity = on * 0.9
   })
   const click = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     onLid?.()
   }
-  const legendY = T / 2 + L.keys.rise + 0.03
-  const sideY = (T / 2 - 1.3 + BOTTOM + L.case.feet) / 2 // (halfway up the case's side)
+  const sideY = (DECK_Y + BOTTOM + L.case.feet) / 2 // (halfway up the case's side)
   return (
     <group>
-      {/* the base: the case's dark bottom shell, the Space Gray deck over it */}
       <mesh geometry={geo.shell} material={mat.shell} position={[0, -T / 2 - L.case.t, 0]} castShadow receiveShadow />
-      <mesh geometry={geo.deck} material={mat.gray} position={[0, T / 2 - 2, 0]} castShadow receiveShadow />
+      <mesh geometry={geo.deck} material={[mat.deck, mat.gray]} position={[0, DECK_Y, 0]} castShadow receiveShadow />
       {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => <mesh key={`${sx}${sz}`} geometry={geo.foot} material={mat.shell} position={[sx * (B.w / 2 - 25), BOTTOM + L.case.feet / 2, sz * (B.d / 2 - 25)]} />))}
-      {/* the keys under their pink cover, the legends through it; the Touch Bar, Touch ID */}
-      <mesh geometry={geo.keys} material={mat.key} castShadow receiveShadow />
-      <mesh geometry={geo.legends} material={mat.legends} position={[LEGEND_AREA.x0 + LEGEND_AREA.w / 2, legendY, LEGEND_AREA.z0 + LEGEND_AREA.d / 2]} />
-      <mesh geometry={geo.barGeo} material={mat.bar} position={[tb.x, T / 2 + 0.12, tb.z]} />
+      <mesh geometry={geo.keys} material={mat.keys} castShadow receiveShadow />
       <mesh geometry={geo.id} material={mat.touchId} castShadow />
-      <mesh geometry={geo.trackpad} material={mat.trackpad} position={[0, T / 2 + 0.1, B.d / 2 - L.trackpad.front - L.trackpad.d / 2]} receiveShadow />
-      {[-1, 1].map((s) => (
-        <mesh key={s} geometry={geo.grille} material={mat.grille} position={[s * geo.grilleX, T / 2 + 0.1, geo.grilleZ]} />
-      ))}
       {/* the ports on the left, the jack on the right */}
       {L.port.z.map((z) => (
-        <mesh key={z} geometry={geo.port} material={mat.port} position={[-SHELL_W / 2 - 0.02, sideY, z]} />
+        <mesh key={z} geometry={geo.port} material={mat.port} position={[-SHELL_W / 2 - 0.15, sideY, z]} />
       ))}
-      <mesh geometry={geo.jack} material={mat.port} position={[SHELL_W / 2 + 0.02, sideY, L.jack.z]} />
+      <mesh geometry={geo.jack} material={mat.port} position={[SHELL_W / 2 + 0.15, sideY, L.jack.z]} />
       <mesh geometry={geo.hinge} material={mat.dark} position={HINGE} castShadow />
-      {/* the lid, on its hinge: the hearts outside, the display in its black glass inside */}
+      {/* the lid, on its hinge */}
       <group position={HINGE}>
         <group ref={lid} onClick={click}>
-          <group position={[0, GAP, BACK]}>
-            <mesh geometry={geo.lid} material={mat.lid} castShadow receiveShadow />
-            <mesh geometry={geo.bezel} material={mat.bezel} position={[0, -0.2, 0]} />
-            <mesh geometry={geo.display} material={mat.screen} position={[0, -0.4, L.lid.len - L.display.top - L.display.h / 2]} />
-          </group>
+          <mesh geometry={geo.lid} material={[mat.hearts, mat.rim, mat.face]} position={[0, GAP, BACK]} castShadow receiveShadow />
         </group>
       </group>
     </group>

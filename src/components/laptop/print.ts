@@ -1,10 +1,16 @@
-import { CanvasTexture, RepeatWrapping, SRGBColorSpace } from 'three'
-import { FN_Z, KB_W, LAPTOP, keyLayout, rowZ } from './spec'
+import { CanvasTexture, SRGBColorSpace } from 'three'
+import { FN_Z, KB_W, LAPTOP, keyLayout, rowZ, touchBar } from './spec'
 
 /**
- * What's drawn on the laptop (./spec): the case's hearts on the lid, the screen (her desktop, a
- * notes page open like in the photos), the Touch Bar, the key legends through the pink cover, the
- * speaker grilles, the "MacBook Pro" chin.
+ * What's drawn on the laptop (./spec), each painted onto the surface it's on (nothing laid over
+ * anything: layers a hair apart flicker from afar, where the depth buffer can't tell them apart):
+ *
+ *   the lid's back     the case's hearts round the logo
+ *   the lid's inside   the black glass, "MacBook Pro" on the chin, the case's lip round it; and, lit
+ *                      (an emissive picture on the same face), the screen: her desktop, her notes
+ *   the deck           Space Gray, the trackpad, the speaker grilles, the Touch Bar's glass; lit, the
+ *                      Touch Bar's keys
+ *   the keys           the pink cover, the legends through it
  */
 const L = LAPTOP
 const C = L.color
@@ -97,9 +103,10 @@ export function apple(into: CanvasRenderingContext2D, s: number, color: string) 
 /** the lid's back, len × w mm (u across the laptop, +x; v from the hinge to the front edge): the
  *  hearts round the logo, as seen from behind the open lid (so drawn mirrored: its right is -x).
  *  The photo (macbook-case.jpg): pink in the corners, then whole hearts one inside the next, mint,
- *  cream, then pinks, a pale one round the logo; the mint one nearly fills the lid, top to bottom.
- *  Each is the same heart smaller, scaled about the point halfway between its dip and its tip (so
- *  the rings keep much the same width all round), that point on the logo in the lid's middle */
+ *  cream, then pinks, a pale one round the logo; the mint one reaches the lid's edges, top, bottom
+ *  and sides (the heart's drawn a little wider than it's tall, ~1.17×, to fill it). Each is the same
+ *  heart smaller, scaled about the point halfway between its lobes' tops and its tip (so the rings
+ *  keep much the same width all round, and each sits in the middle top to bottom), on the logo */
 export function heartsTexture() {
   const PX = 4
   const w = L.base.w + 2 * L.case.t
@@ -111,16 +118,20 @@ export function heartsTexture() {
   g.translate(c.width / 2, c.height / 2)
   g.scale(-1, 1) // (seen from behind)
   const n = C.hearts.length - 1
-  // the mint one: tip to lobe tops ~7 short of the lid's height
+  const EDGE = 0.6 // (mm of pink left at the edges: the mint one just reaches them)
   const { tipY } = heartPoints(1)
-  const R0 = ((h - 14) * PX) / (1 - tipY)
-  const mid = (Math.sqrt(1 - HEART.a ** 2) + tipY) / 2 // (halfway from the dip to the tip, per R)
+  const R0 = ((h - 2 * EDGE) * PX) / (1 - tipY)
+  const sx = ((w - 2 * EDGE) * PX) / (2 * (1 + HEART.a) * R0)
+  const mid = (1 + tipY) / 2 // (halfway from the lobes' tops to the tip, per R)
+  g.save()
+  g.scale(sx, 1)
   for (let i = 1; i <= n; i++) {
     const R = R0 * (1 - (i - 1) * 0.125)
     g.fillStyle = C.hearts[i]
-    heart(g, R, mid * R) // (its circles' line sits mid·R above the logo: that point stays put)
+    heart(g, R, mid * R) // (its circles' line sits mid·R off the logo: that point stays put)
     g.fill()
   }
+  g.restore()
   apple(g, 30 * PX, '#3a383b')
   g.restore()
   const t = texture(c)
@@ -130,8 +141,8 @@ export function heartsTexture() {
   return t
 }
 
-/** the screen: her desktop, a notes page open (the photos: OneNote, always) */
-export function screenTexture() {
+/** the screen: her desktop, a notes page open (the photos: OneNote, always), 1280 × 800 */
+function screenCanvas() {
   const [W, H] = [1280, 800]
   const { c, g } = canvas(W, H)
   // the wallpaper: a soft pastel wash, blobs of light
@@ -249,7 +260,7 @@ export function screenTexture() {
     round(g, (W - dw) / 2 + 14 + i * 56, H - 68, 48, 48, 11)
     g.fill()
   })
-  return texture(c)
+  return c
 }
 
 function round(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -257,13 +268,9 @@ function round(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: 
   g.roundRect(x, y, w, h, r)
 }
 
-/** the Touch Bar while it's on: dim keys along it (the app's controls; brightness, dark mode,
- *  volume, Siri), each label in the middle of its key */
-export function touchBarTexture(w: number, h: number) {
-  const PX = 8
-  const { c, g } = canvas(w * PX, h * PX)
-  g.fillStyle = '#050507'
-  g.fillRect(0, 0, c.width, c.height)
+/** the Touch Bar's keys (the app's controls; brightness, dark mode, volume, Siri), each label in the
+ *  middle of its key, into a w × h mm box at (x, y) px */
+function drawTouchBar(g: CanvasRenderingContext2D, x0: number, y0: number, w: number, h: number, PX: number) {
   const k = h * PX
   const keys: { x: number; w: number; label: string }[] = []
   let x = 3
@@ -273,6 +280,8 @@ export function touchBarTexture(w: number, h: number) {
   }
   const x1 = w - 3 - 4 * 13
   ;['☼', '◐', '◀)', '◉'].forEach((label, i) => keys.push({ x: x1 + i * 13, w: 11, label }))
+  g.save()
+  g.translate(x0, y0)
   g.textAlign = 'center'
   g.textBaseline = 'middle'
   for (const key of keys) {
@@ -292,17 +301,76 @@ export function touchBarTexture(w: number, h: number) {
       g.fillText(key.label, cx, k / 2)
     }
   }
-  return texture(c)
+  g.restore()
 }
 
-/** the legends on the keys, seen through the pink cover: a picture over the whole keyboard (x from
- *  -KB_W/2, z from the Touch Bar row's back edge), clear between */
-export const LEGEND_AREA = { x0: -KB_W / 2, z0: FN_Z, w: KB_W, d: rowZ(4) + L.keys.cap - FN_Z }
-export function legendsTexture() {
+/** the deck, the base's top (SHELL_W × SHELL_D in the laptop's x, z; the slab's outline runs to -z,
+ *  so the picture's top is the back): Space Gray, the trackpad, the grilles, the Touch Bar's dark
+ *  glass; `lit`: the Touch Bar's keys, for the emissive map */
+export function deckTextures() {
+  const PX = 6
+  const W = L.base.w + 2 * L.case.t
+  const D = L.base.d + 2 * L.case.t
+  const at = (x: number, z: number) => [(x + W / 2) * PX, (z + D / 2) * PX] as const // (the laptop's x, z to px)
+  const map = canvas(W * PX, D * PX)
+  const lit = canvas(W * PX, D * PX)
+  let g = map.g
+  g.fillStyle = C.gray
+  g.fillRect(0, 0, map.c.width, map.c.height)
+  // the trackpad: a touch lighter, a fine edge round it
+  const tp = L.trackpad
+  const [tx, ty] = at(-tp.w / 2, L.base.d / 2 - tp.front - tp.d)
+  g.fillStyle = C.trackpad
+  round(g, tx, ty, tp.w * PX, tp.d * PX, 6 * PX)
+  g.fill()
+  g.strokeStyle = 'rgba(0,0,0,0.12)'
+  g.lineWidth = 0.35 * PX
+  g.stroke()
+  // the grilles either side of the keys: rows of tiny holes
+  const kbD = rowZ(4) + L.keys.cap - FN_Z
+  const gx = KB_W / 2 + (L.base.w - KB_W) / 4
+  g.fillStyle = '#3c3c40'
+  for (const side of [-1, 1]) {
+    const x0 = side * gx - L.speaker.w / 2
+    const step = 1.1
+    for (let z = step / 2; z < kbD; z += step) {
+      for (let x = step / 2 + ((Math.round(z / step) % 2) * step) / 2; x < L.speaker.w; x += step) {
+        const [px, py] = at(x0 + x, FN_Z + z)
+        g.beginPath()
+        g.arc(px, py, 0.3 * PX, 0, Math.PI * 2)
+        g.fill()
+      }
+    }
+  }
+  // the Touch Bar: dark glass here; its keys lit, on the emissive picture
+  const bar = touchBar().bar
+  const [bx, by] = at(bar.x - bar.w / 2, bar.z - bar.d / 2)
+  g.fillStyle = C.touchBar
+  round(g, bx, by, bar.w * PX, bar.d * PX, 1.2 * PX)
+  g.fill()
+  g = lit.g
+  g.fillStyle = '#000000'
+  g.fillRect(0, 0, lit.c.width, lit.c.height)
+  drawTouchBar(g, bx, by, bar.w, bar.d, PX)
+  const out = [texture(map.c), texture(lit.c)].map((t) => {
+    t.repeat.set(1 / W, 1 / D)
+    t.offset.set(0.5, 0.5)
+    return t
+  })
+  return { map: out[0], lit: out[1] }
+}
+
+/** the keys: the pink cover, the legends through it, over the whole keyboard (x from -KB_W/2, z
+ *  from the Touch Bar row's back edge: the keys' UVs are laid on from above) */
+export const KEY_AREA = { x0: -KB_W / 2, z0: FN_Z, w: KB_W, d: rowZ(4) + L.keys.cap - FN_Z }
+export function keysTexture() {
   const PX = 10
-  const A = LEGEND_AREA
+  const A = KEY_AREA
   const { c, g } = canvas(A.w * PX, A.d * PX)
+  g.fillStyle = C.key
+  g.fillRect(0, 0, c.width, c.height)
   g.fillStyle = C.legend
+  g.globalAlpha = 0.85
   g.textBaseline = 'middle'
   for (const k of keyLayout()) {
     const cx = (k.x - A.x0) * PX
@@ -324,47 +392,44 @@ export function legendsTexture() {
   return texture(c)
 }
 
-/** the speaker grilles: rows of tiny holes, tiled */
-export function grilleTexture(w: number, d: number) {
-  const PX = 12
-  const { c, g } = canvas(w * PX, d * PX)
-  g.fillStyle = '#1f1f22'
-  const step = 1.1
-  for (let y = step / 2; y < d; y += step) {
-    for (let x = step / 2 + ((Math.round(y / step) % 2) * step) / 2; x < w; x += step) {
-      g.beginPath()
-      g.arc(x * PX, y * PX, 0.28 * PX, 0, Math.PI * 2)
-      g.fill()
-    }
-  }
-  const t = texture(c)
-  t.wrapS = t.wrapT = RepeatWrapping
-  return t
-}
-
-/** the inside of the lid round the display: black glass, "MacBook Pro" on the chin (shape coords:
- *  x from -w/2, y from the lid's back edge) */
-export function bezelTexture() {
-  const PX = 4
-  const w = L.base.w
-  const h = L.lid.len
-  const { c, g } = canvas(w * PX, h * PX)
+/** the inside of the lid (SHELL_W × len; the lid's outline runs to +z, drawn round its middle, so
+ *  the picture's top is the front edge: the screen's top, open), seen from in front: the case's lip
+ *  round the edge, the black glass, the camera, "MacBook Pro" on the chin; `lit`: the screen in
+ *  its place, the rest black */
+export function faceTextures() {
+  const PX = 4.4
+  const W = L.base.w + 2 * L.case.t
+  const H = L.lid.len
+  const map = canvas(W * PX, H * PX)
+  const lit = canvas(W * PX, H * PX)
+  let g = map.g
+  g.fillStyle = C.rim
+  g.fillRect(0, 0, map.c.width, map.c.height)
   g.fillStyle = C.bezel
-  g.fillRect(0, 0, c.width, c.height)
-  const chin = h - L.display.top - L.display.h
+  round(g, L.case.t * PX, L.case.t * PX, (W - 2 * L.case.t) * PX, (H - 2 * L.case.t) * PX, L.base.corner * PX)
+  g.fill()
+  const dx = ((W - L.display.w) / 2) * PX
+  const dy = L.display.top * PX
+  g.fillStyle = '#08080a'
+  g.fillRect(dx, dy, L.display.w * PX, L.display.h * PX)
+  g.fillStyle = '#222228'
+  g.beginPath()
+  g.arc(map.c.width / 2, (L.display.top / 2) * PX, 1.1 * PX, 0, Math.PI * 2)
+  g.fill()
+  const chin = H - L.display.top - L.display.h
   g.fillStyle = '#6d6d72'
   g.font = `500 ${3.4 * PX}px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif`
   g.textAlign = 'center'
   g.textBaseline = 'middle'
-  // (v runs from the back edge: the chin's the canvas's bottom; seen from in front, not mirrored)
-  g.fillText('MacBook Pro', c.width / 2, c.height - (chin / 2 + 0.5) * PX)
-  // the camera over the display
-  g.fillStyle = '#222228'
-  g.beginPath()
-  g.arc(c.width / 2, (L.display.top / 2) * PX, 1.1 * PX, 0, Math.PI * 2)
-  g.fill()
-  const t = texture(c)
-  t.repeat.set(1 / w, 1 / h)
-  t.offset.set(0.5, 0.5) // (its outline is drawn round its middle)
-  return t
+  g.fillText('MacBook Pro', map.c.width / 2, map.c.height - (chin / 2 + 0.5) * PX)
+  g = lit.g
+  g.fillStyle = '#000000'
+  g.fillRect(0, 0, lit.c.width, lit.c.height)
+  g.drawImage(screenCanvas(), dx, dy, L.display.w * PX, L.display.h * PX)
+  const out = [texture(map.c), texture(lit.c)].map((t) => {
+    t.repeat.set(1 / W, 1 / H)
+    t.offset.set(0.5, 0.5)
+    return t
+  })
+  return { map: out[0], lit: out[1] }
 }
