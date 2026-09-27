@@ -17,7 +17,9 @@ import { Prompts, useItemHover, withHover, type PromptItem } from '../prompt/Pro
  *
  *   near plug   locked into the port by a fixed joint. Grab it (or click it) and it comes out; let
  *               it go near the port, lined up, and it slides back in
- *   far plug    free at the other end
+ *   far plug    free at the other end, or in a device's port (`sockets`: the laptop's): let it go
+ *               near a port and it slides in, locked there by a fixed joint; grab it (or click it) and
+ *               it comes out. Carry the device off further than the cable reaches and it pops out
  *   outlet      let the charger go over an outlet, prongs out, and it seats itself (it then stays put
  *               until you pick it up again, riding along if the outlet moves: the lamp on the desk)
  *   prompts     out of place and left alone a moment, a fix-it prompt offers to put it right (../prompt):
@@ -63,7 +65,14 @@ export type ChargerSetup = {
   startLabel?: string
   /** something it rests on is moving (the desk): don't put it to sleep meanwhile */
   moving?: () => boolean
+  /** ports the cable's far plug fits (a laptop's): the plug's pose in each, and the body it's in
+   *  (read every frame: they move) */
+  sockets?: () => PlugSocket[]
+  /** start with the far plug in this socket (the cable's layout ends there) */
+  farStart?: number
 }
+/** a port the far plug goes into: where the plug's body sits in it, and what it's in */
+export type PlugSocket = { pose: Pose; body: RapierRigidBody }
 /** the charger page: on the desk slab, the stand's one outlet */
 export const STAND_SETUP: ChargerSetup = {
   outlets: () => [{ frame: standOutlet(), flip: true }],
@@ -183,6 +192,11 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
   const placed = useRef(false) // put where the setup says, on the first frame
   const seatAt = useRef<{ i: number; flip: boolean } | null>(null) // the outlet it's in (or going into)
   const still = useRef(0)
+  const farIn = useRef<{ i: number; joint: Joint } | null>(null) // the far plug in a socket
+  const farWant = useRef(setup.farStart !== undefined) // it should be in one: it goes in once it's there
+  const farWait = useRef(0) // (frames waited for the socket to come to it, at the start)
+  const farHeld = useRef(false)
+  const farArmed = useRef(false) // the magnet works once the plug has been pulled well clear
 
   /** a fixed joint that keeps two bodies exactly as they are now, meeting at world point p */
   const lockHere = (b1: RapierRigidBody, b2: RapierRigidBody, p: Vector3) => {
@@ -264,13 +278,20 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
       joint.setContactsEnabled(false)
     }
     sys.current = { rope, near, far, joint }
+    farIn.current = null
+    if (farWant.current) {
+      // it starts in its socket: held where the layout ends till the socket's there to lock into
+      farGroups(far, true)
+      far.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
+      farWait.current = 0
+    }
     {
       const h = setupRef.current.home()
       const inv = h.q.clone().invert()
       const fp = poseOf(far)
       farHome.current = { p: fp.p.sub(h.p).applyQuaternion(inv), q: inv.multiply(fp.q) }
     }
-    if (import.meta.env.DEV) Object.assign(window, { __charger: { sys, charger, actual, world, rapier } }) // for inspecting from the console
+    if (import.meta.env.DEV) Object.assign(window, { __charger: { sys, charger, actual, world, rapier, farIn, farWant, farWait, setupRef } }) // for inspecting from the console
   }
 
   const teardown = () => {
@@ -278,8 +299,10 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     if (!s) return
     if (s.joint && world.getImpulseJoint(s.joint.handle)) world.removeImpulseJoint(s.joint, false)
     s.rope.remove()
-    for (const b of [s.near, s.far]) if (world.getRigidBody(b.handle)) world.removeRigidBody(b)
+    for (const b of [s.near, s.far]) if (world.getRigidBody(b.handle)) world.removeRigidBody(b) // (its joints go with it)
     sys.current = null
+    farIn.current = null
+    farWant.current = setupRef.current.farStart !== undefined
   }
   useEffect(() => teardown, [world]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -419,6 +442,79 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     if (state.pose === 0 && actual.current.seated) toDesk()
   }, [state.pose]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- the far plug and the sockets
+  /** a far plug in (or going into) a socket passes through what it's in (and the other things on
+   *  the desk: it's held fast); a loose one doesn't */
+  const farGroups = (b: RapierRigidBody, intoItem: boolean) => {
+    const g = groups(GROUP.plug, 0xffff & ~GROUP.rope & (intoItem ? ~GROUP.item : 0xffff))
+    for (let i = 0; i < b.numColliders(); i++) b.collider(i).setCollisionGroups(g)
+  }
+  /** the socket nearest a point, and how far */
+  const nearestSocket = (p: Vector3) => {
+    const socks = setupRef.current.sockets?.() ?? []
+    let best: { i: number; d: number; sock: PlugSocket } | null = null
+    socks.forEach((sock, i) => {
+      const d = sock.pose.p.distanceTo(p)
+      if (!best || d < best.d) best = { i, d, sock }
+    })
+    return best as { i: number; d: number; sock: PlugSocket } | null
+  }
+  /** the loose far plug is close enough to a socket to find it (a gentle magnet, 30 mm) */
+  const farNearSocket = () => {
+    const s = sys.current
+    if (!s) return null
+    const n = nearestSocket(poseOf(s.far).p)
+    return n && n.d < 30 ? n : null
+  }
+  /** lock the far plug where it is into socket i */
+  const lockFar = (i: number) => {
+    const s = sys.current
+    const sock = setupRef.current.sockets?.()[i]
+    if (!s || !sock) return
+    farGroups(s.far, true)
+    const joint = lockHere(sock.body, s.far, sock.pose.p)
+    joint.setContactsEnabled(false)
+    farIn.current = { i, joint }
+    farWant.current = false
+  }
+  const unplugFar = (push: boolean) => {
+    const s = sys.current
+    const f = farIn.current
+    if (!s || !f) return
+    anims.current.far = null
+    if (world.getImpulseJoint(f.joint.handle)) world.removeImpulseJoint(f.joint, true)
+    farIn.current = null
+    if (s.far.bodyType() !== rapier.RigidBodyType.Dynamic) dynamic(s.far)
+    if (push) {
+      const out = _v.set(1, 0, 0).applyQuaternion(poseOf(s.far).q).multiplyScalar(s.far.mass() * 900) // (the plug's +X is out of the port; a good tug: clear of it)
+      s.far.applyImpulse({ x: out.x, y: out.y + s.far.mass() * 60, z: out.z }, true)
+    }
+    const far = s.far
+    setTimeout(() => {
+      if (!farIn.current && !anims.current.far && world.getRigidBody(far.handle)) farGroups(far, false)
+    }, 350)
+  }
+  const plugFarIn = (i: number) => {
+    const s = sys.current
+    const sock = () => setupRef.current.sockets?.()[i]
+    if (!s || !sock() || farIn.current || anims.current.far) return
+    farGroups(s.far, true)
+    kinematic(s.far)
+    const from = poseOf(s.far)
+    anims.current.far = {
+      body: s.far,
+      from,
+      to: () => sock()?.pose ?? from,
+      t: 0,
+      dur: Math.min(1.1, Math.max(0.28, from.p.distanceTo(sock()!.pose.p) / 500)),
+      lift: 0,
+      end: () => {
+        dynamic(s.far)
+        lockFar(i)
+      },
+    }
+  }
+
   // ---- grabbing
   /** wake the whole cable set (a sleeping neighbour would hold a grabbed link like a nail) */
   const wakeAll = () => {
@@ -508,7 +604,18 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     lift: 25,
     pull: 0.05,
     grip: 0.03,
-    onGrab: () => wakeAll(),
+    keep: () => !anims.current.far && !farIn.current,
+    onGrab: () => {
+      wakeAll()
+      farHeld.current = true
+      farArmed.current = !farIn.current && !farNearSocket()
+      unplugFar(false)
+    },
+    onRelease: () => {
+      farHeld.current = false
+      const n = farNearSocket()
+      if (farArmed.current && n) plugFarIn(n.i)
+    },
     leash: () => tether(CHARGER.cable.length + 2 * HALF.x),
   })
   const heldLink = useRef(0) // which link of the cable is held
@@ -685,6 +792,36 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
       chargerArmed.current ||= clearOfOutlets(c)
       if (chargerArmed.current && overOutlet(c)) seat()
     }
+    // the far plug going into its socket at the start (or after a tidy): once the socket's there
+    if (farWant.current && !farIn.current && !restore.current && !anims.current.far) {
+      const n = nearestSocket(poseOf(s.far).p)
+      if (n && n.d < 4) {
+        s.far.setTranslation(n.sock.pose.p, false)
+        s.far.setRotation(n.sock.pose.q, false)
+        if (s.far.bodyType() !== rapier.RigidBodyType.Dynamic) dynamic(s.far)
+        lockFar(n.i)
+      } else if (n && ++farWait.current > 90) {
+        // (it isn't coming: a loose plug after all)
+        farWant.current = false
+        if (s.far.bodyType() !== rapier.RigidBodyType.Dynamic) dynamic(s.far)
+        farGroups(s.far, false)
+      }
+    }
+    // held near a socket, the far plug finds it
+    if (farHeld.current && !farIn.current && !anims.current.far) {
+      const n = farNearSocket()
+      if (!n) {
+        const m = nearestSocket(poseOf(s.far).p)
+        farArmed.current ||= !m || m.d > 45
+      } else if (farArmed.current) plugFarIn(n.i)
+    }
+    // carried off further than the cable reaches (it's drawn taut): the far plug pops out
+    if (farIn.current && !restore.current) {
+      const P = s.rope.points(pts.current)
+      let along = 0
+      for (let i = 1; i < P.length; i++) along += P[i].distanceTo(P[i - 1])
+      if (along > s.rope.lengths.reduce((a, b) => a + b, 0) * 1.06) unplugFar(true) // (its own length, as laid)
+    }
     // held near the port, the plug finds it
     if (nearHeld.current && !actual.current.plugged && !anims.current.plug) {
       if (!nearPort()) nearArmed.current ||= poseOf(s.near).p.distanceTo(inPort(c).p) > 45
@@ -810,6 +947,11 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
       if (!stateRef.current.plugged) set({ plugged: true })
     }
     if (R.trail || R.reel) s.rope.attach() // one chain again, where it landed
+    // laid back out to rest: into its socket again, if the socket's there (the laptop at home)
+    if (R.mode === 'tidy' && setupRef.current.farStart !== undefined) {
+      const n = nearestSocket(poseOf(s.far).p)
+      if (n && n.d < 4) lockFar(n.i)
+    }
     through.current = false
     wakeAll()
   }
@@ -866,6 +1008,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     // (wide: the cable trails the charger's top, which swings out as it turns)
     const curve = planRoute(world, rapier, from.p, to.p, { approach: to.p.clone().add(new Vector3(0, 80, 0)), clearance: 80, radius: 60 })
     const fl = new Flight(curve, from.q, to.q, { speed: 250, min: 1.4, max: 3.8, turn: [0.05, 0.8] })
+    unplugFar(false)
     const R = begin('home', fl, from)
     if (actual.current.plugged) {
       R.trail = makeTrail(fl, (p, q, out) => out.copy(PORT.moldEnd).applyQuaternion(q).add(p))
@@ -893,6 +1036,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     const out = new Vector3(1, 0, 0).applyQuaternion(to.q) // the port faces out along the charger's +X
     const curve = planRoute(world, rapier, from.p, to.p, { approach: to.p.clone().addScaledVector(out, 45), clearance: 45, radius: 12 })
     const fl = new Flight(curve, from.q, to.q, { speed: 230, min: 1.2, max: 2.8, turn: [0.05, 0.75] })
+    unplugFar(false)
     const R = begin('plug', fl, from)
     R.trail = makeTrail(fl, (p, q, o) => o.copy(nearTip.current).applyQuaternion(q).add(p))
     plugGroups(s.near, true)
@@ -907,6 +1051,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     const s = sys.current
     if (!c || !s || restore.current || !actual.current.plugged) return
     const cp = poseOf(c)
+    unplugFar(false)
     const lay = s.rope.points([]).map((p) => p.clone())
     const R = begin('tidy', null, cp)
     const len = R.dist[LINKS]
@@ -946,7 +1091,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     const h = setupRef.current.home()
     return { p: f.p.clone().applyQuaternion(h.q).add(h.p), q: h.q.clone().multiply(f.q) }
   }
-  const idle = () => !anims.current.plug && !anims.current.charger && !anims.current.far && !restore.current
+  const idle = () => !anims.current.plug && !anims.current.charger && !anims.current.far && !restore.current && !farHeld.current
   const prompts: PromptItem[] = [
     {
       key: 'seat',
@@ -974,8 +1119,12 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
       when: () => {
         const s = sys.current
         const rest = farRest()
-        if (!s || !rest || !actual.current.plugged || !idle()) return false
+        if (!s || !rest || !actual.current.plugged || !idle() || farIn.current) return false
         if (!atHome()) return false // (the charger first: the rest layout is for where it lives)
+        // its socket's where the layout ends (the laptop's at home) and it's out: the tidy puts it in
+        const st = setupRef.current
+        const sock = st.farStart !== undefined ? st.sockets?.()[st.farStart] : undefined
+        if (sock && sock.pose.p.distanceTo(rest.p) < 4) return true
         return through.current || poseOf(s.far).p.distanceTo(rest.p) > 150
       },
       run: reelTidy,
@@ -987,6 +1136,15 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     e.stopPropagation()
     if (actual.current.plugged) unplug(true)
     else plugIn()
+  }
+  if (import.meta.env.DEV) Object.assign(window, { __chargerFar: { unplugFar, plugFarIn, farNearSocket, reelTidy, farHeld } }) // (for trying the far plug from the console)
+  const clickFar = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation()
+    if (farIn.current) unplugFar(true)
+    else {
+      const n = farNearSocket()
+      if (n) plugFarIn(n.i)
+    }
   }
 
   const bladeHalf: [number, number, number] = [CHARGER.prong.out / 2, CHARGER.prong.w / 2, CHARGER.prong.t / 2]
@@ -1021,7 +1179,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
       </group>
       <group ref={farMesh} {...withHover(farGrab, hover)}>
         <group position={[-SLEEVE, 0, 0]}>
-          <UsbCPlug />
+          <UsbCPlug onClick={clickFar} />
         </group>
       </group>
       <Prompts items={prompts} />

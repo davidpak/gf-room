@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { CuboidCollider, useBeforePhysicsStep, type RapierCollider } from '@react-three/rapier'
+import { CuboidCollider, useBeforePhysicsStep, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
 import { CircleGeometry, CylinderGeometry, ExtrudeGeometry, MeshBasicMaterial, MeshStandardMaterial, Quaternion, ShapeGeometry, Vector3, type BufferGeometry, type Group, type Matrix4 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { Holdable } from '../../lib/physics/Holdable'
@@ -9,6 +9,7 @@ import { GROUP, groups } from '../../lib/physics/rope'
 import { roundedRect } from '../../lib/shapes'
 import { Prompts } from '../prompt/Prompts'
 import { LAPTOP, keyLayout, touchBar } from './spec'
+import { CHARGER } from '../charger/spec'
 import { KEY_AREA, deckTextures, faceTextures, heartsTexture, keysTexture } from './print'
 
 /**
@@ -89,6 +90,7 @@ function keysGeometry() {
 /** on the base's side: drawn in front of it (no flicker zoomed out) */
 const DECAL = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }
 const DECK_Y = T / 2 - 2 // the deck's aluminium, from here to the top; the case's shell under it
+const PORT_Y = (DECK_Y + BOTTOM + L.case.feet) / 2 // the ports' middles, halfway up the case's side
 
 /** the laptop. `angle`: how far the lid's open (0 shut, LAPTOP.lid.open wide); `onLid`: the lid clicked */
 export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLid?: () => void }) {
@@ -146,7 +148,6 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
     e.stopPropagation()
     onLid?.()
   }
-  const sideY = (DECK_Y + BOTTOM + L.case.feet) / 2 // (halfway up the case's side)
   return (
     <group>
       <mesh geometry={geo.shell} material={mat.shell} position={[0, -T / 2 - L.case.t, 0]} castShadow receiveShadow />
@@ -156,9 +157,9 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
       <mesh geometry={geo.id} material={mat.touchId} castShadow />
       {/* the ports on the left, the jack on the right */}
       {L.port.z.map((z) => (
-        <mesh key={z} geometry={geo.port} material={mat.port} position={[-SHELL_W / 2 - 0.15, sideY, z]} />
+        <mesh key={z} geometry={geo.port} material={mat.port} position={[-SHELL_W / 2 - 0.15, PORT_Y, z]} />
       ))}
-      <mesh geometry={geo.jack} material={mat.port} position={[SHELL_W / 2 + 0.15, sideY, L.jack.z]} />
+      <mesh geometry={geo.jack} material={mat.port} position={[SHELL_W / 2 + 0.15, PORT_Y, L.jack.z]} />
       <mesh geometry={geo.hinge} material={mat.dark} position={HINGE} castShadow />
       {/* the lid, on its hinge */}
       <group position={HINGE}>
@@ -181,7 +182,7 @@ function lidPose(a: number) {
 }
 
 /** the laptop on the desk, to pick up and put back, its lid to open and shut */
-export function LiveLaptop({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spawn: [number, number, number] }) {
+export function LiveLaptop({ homeAt, spawn, bodyOut }: { homeAt: () => Matrix4 | null; spawn: [number, number, number]; bodyOut?: { current: RapierRigidBody | null } }) {
   const angle = useRef(L.lid.open)
   const target = useRef(L.lid.open)
   const lidBox = useRef<RapierCollider>(null)
@@ -203,6 +204,7 @@ export function LiveLaptop({ homeAt, spawn }: { homeAt: () => Matrix4 | null; sp
   })
   // its box follows it
   useBeforePhysicsStep(() => {
+    if (bodyOut) bodyOut.current = perch.body.current // (for the charger's plug, going into its ports)
     const c = lidBox.current
     if (!c) return
     const { p, q } = lidPose(angle.current)
@@ -227,6 +229,17 @@ export function LiveLaptop({ homeAt, spawn }: { homeAt: () => Matrix4 | null; sp
       <Prompts items={[perch.prompt]} />
     </>
   )
+}
+
+/** A USB-C plug in each of the ports on the left, for the laptop at `m` (its world matrix): where
+ *  the plug's body sits (its overmold against the case, the shell in the port; the plug's +X out of
+ *  the port, its thin side up), as the charger's plugs are laid out (../charger). Port 0 is the back
+ *  one, the one her charger's in */
+const PLUG_OUT = 0.3 + CHARGER.plug.mold[2] / 2 // the plug body's middle, out from the port's mouth
+const PLUG_Q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI) // (its +X along the laptop's -X)
+export function laptopSockets(m: Matrix4) {
+  const q = new Quaternion().setFromRotationMatrix(m)
+  return L.port.z.map((z) => ({ p: new Vector3(-SHELL_W / 2 - PLUG_OUT, PORT_Y, z).applyMatrix4(m), q: q.clone().multiply(PLUG_Q) }))
 }
 
 /** where its lowest point is below its middle (for putting it on things) */
