@@ -22,18 +22,43 @@ function texture(c: HTMLCanvasElement) {
   return t
 }
 
-/** a heart, its middle at (0, 0), `s` across (the classic parametric heart, lobes up: -y) */
-function heart(g: CanvasRenderingContext2D, s: number) {
-  g.beginPath()
-  for (let i = 0; i <= 120; i++) {
-    const t = (i / 120) * Math.PI * 2
-    const x = 16 * Math.sin(t) ** 3
-    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
-    const px = (x / 34) * s
-    const py = (-(y - 2.5) / 34) * s
-    if (i === 0) g.moveTo(px, py)
-    else g.lineTo(px, py)
+/** a heart as in the case's print: two round lobes (circles R across, their middles ±0.6R apart
+ *  sideways) and straight sides tangent to them down to a softly rounded tip (58° off upright), so
+ *  every side's convex: 2.55R tall, 3.2R wide. Drawn `scale` times, about `at` (px, y down: the
+ *  lobes up), R in px */
+export const HEART = { a: 0.6, side: (58 * Math.PI) / 180, tip: 0.14 }
+function heartPoints(R: number) {
+  const a = HEART.a * R
+  const th = HEART.side
+  const n = [Math.cos(th), -Math.sin(th)] // the right side's outward normal (math axes: y up)
+  const tipY = -(a * Math.cos(th) + R) / Math.sin(th)
+  const dipA = Math.atan2(Math.sqrt(R * R - a * a), -a) // where the lobes meet, on the right lobe
+  const pts: [number, number][] = []
+  // up the right side from the tip, round the right lobe over its top to the dip
+  const t0 = Math.atan2(n[1], n[0])
+  for (let k = 0; k <= 40; k++) {
+    const t = t0 + ((dipA - t0) * k) / 40
+    pts.push([a + R * Math.cos(t), R * Math.sin(t)])
   }
+  // the left lobe (mirrored), from the dip over its top and down to its side
+  for (let k = 40; k >= 0; k--) {
+    const [x, y] = pts[k]
+    pts.push([-x, y])
+  }
+  return { pts, tipY }
+}
+function heart(g: CanvasRenderingContext2D, R: number, cy: number) {
+  const { pts, tipY } = heartPoints(R)
+  const r = HEART.tip * R
+  g.beginPath()
+  // (math y up -> canvas y down, about cy)
+  const P = ([x, y]: [number, number]) => [x, cy - y] as const
+  g.moveTo(...P(pts[0]))
+  for (const p of pts.slice(1)) g.lineTo(...P(p))
+  // down the left side to the tip, round it, and back up to the start
+  const left = pts[pts.length - 1]
+  g.arcTo(...P([0, tipY]), ...P([-left[0], left[1]]), r)
+  g.lineTo(...P(pts[0]))
   g.closePath()
 }
 
@@ -70,7 +95,11 @@ export function apple(into: CanvasRenderingContext2D, s: number, color: string) 
 }
 
 /** the lid's back, len × w mm (u across the laptop, +x; v from the hinge to the front edge): the
- *  hearts round the logo, as seen from behind the open lid (so drawn mirrored: its right is -x) */
+ *  hearts round the logo, as seen from behind the open lid (so drawn mirrored: its right is -x).
+ *  The photo (macbook-case.jpg): pink in the corners, then whole hearts one inside the next, mint,
+ *  cream, then pinks, a pale one round the logo; the mint one nearly fills the lid, top to bottom.
+ *  Each is the same heart smaller, scaled about the point halfway between its dip and its tip (so
+ *  the rings keep much the same width all round), that point on the logo in the lid's middle */
 export function heartsTexture() {
   const PX = 4
   const w = L.base.w + 2 * L.case.t
@@ -82,16 +111,15 @@ export function heartsTexture() {
   g.translate(c.width / 2, c.height / 2)
   g.scale(-1, 1) // (seen from behind)
   const n = C.hearts.length - 1
-  const sn = (1.5 - (n - 1) * 0.19) * h * PX // (the middle one, round the logo, in the lid's middle)
+  // the mint one: tip to lobe tops ~7 short of the lid's height
+  const { tipY } = heartPoints(1)
+  const R0 = ((h - 14) * PX) / (1 - tipY)
+  const mid = (Math.sqrt(1 - HEART.a ** 2) + tipY) / 2 // (halfway from the dip to the tip, per R)
   for (let i = 1; i <= n; i++) {
-    const s = (1.5 - (i - 1) * 0.19) * h * PX // (the outer ones run off the lid: mint only in its corners)
-    // each bigger one a little toward the lobes, so the rings keep their width round the dip too
-    g.save()
-    g.translate(0, -0.24 * (s - sn))
+    const R = R0 * (1 - (i - 1) * 0.125)
     g.fillStyle = C.hearts[i]
-    heart(g, s)
+    heart(g, R, mid * R) // (its circles' line sits mid·R above the logo: that point stays put)
     g.fill()
-    g.restore()
   }
   apple(g, 30 * PX, '#3a383b')
   g.restore()
@@ -229,31 +257,41 @@ function round(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: 
   g.roundRect(x, y, w, h, r)
 }
 
-/** the Touch Bar while it's on: dim keys along it (the app's controls, brightness, volume, Siri) */
+/** the Touch Bar while it's on: dim keys along it (the app's controls; brightness, dark mode,
+ *  volume, Siri), each label in the middle of its key */
 export function touchBarTexture(w: number, h: number) {
   const PX = 8
   const { c, g } = canvas(w * PX, h * PX)
   g.fillStyle = '#050507'
   g.fillRect(0, 0, c.width, c.height)
-  g.fillStyle = '#3a3a3e'
   const k = h * PX
-  const pill = (x: number, pw: number) => {
-    round(g, x * PX, k * 0.15, pw * PX, k * 0.7, k * 0.2)
-    g.fill()
-  }
+  const keys: { x: number; w: number; label: string }[] = []
   let x = 3
-  for (const pw of [22, 22, 22, 34, 22]) {
-    pill(x, pw)
+  for (const [label, pw] of [['Aa', 22], ['•••', 22], ['✎', 22], ['Search', 34], ['+', 22]] as const) {
+    keys.push({ x, w: pw, label })
     x += pw + 2.5
   }
-  x = w - 3 - 4 * 13
-  for (let i = 0; i < 4; i++) pill(x + i * 13, 11)
-  g.fillStyle = '#9a9aa0'
-  g.font = `500 ${k * 0.42}px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif`
+  const x1 = w - 3 - 4 * 13
+  ;['☼', '◐', '◀)', '◉'].forEach((label, i) => keys.push({ x: x1 + i * 13, w: 11, label }))
   g.textAlign = 'center'
   g.textBaseline = 'middle'
-  ;['Aa', '•••', '✎', 'Search', '＋'].forEach((s, i) => g.fillText(s, (3 + i * 24.5 + (i > 3 ? 12 : i === 3 ? 17 : 11)) * PX, k / 2))
-  ;['☼', '◐', '◀)', '◉'].forEach((s, i) => g.fillText(s, (x + i * 13 + 5.5) * PX, k / 2))
+  for (const key of keys) {
+    g.fillStyle = '#3a3a3e'
+    round(g, key.x * PX, k * 0.15, key.w * PX, k * 0.7, k * 0.2)
+    g.fill()
+    const cx = (key.x + key.w / 2) * PX
+    g.fillStyle = '#9a9aa0'
+    if (key.label === '+') {
+      // drawn, not typed (a glyph's own sidebearings put it off the middle)
+      const s = k * 0.34
+      const t = k * 0.07
+      g.fillRect(cx - s / 2, k / 2 - t / 2, s, t)
+      g.fillRect(cx - t / 2, k / 2 - s / 2, t, s)
+    } else {
+      g.font = `500 ${k * 0.42}px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif`
+      g.fillText(key.label, cx, k / 2)
+    }
+  }
   return texture(c)
 }
 

@@ -68,6 +68,9 @@ function keysGeometry() {
   return mergeGeometries(parts)!
 }
 
+/** laid on the deck: drawn in front of it (no flicker zoomed out, where the depth runs short) */
+const DECAL = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }
+const OVER_DECAL = { polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 } // (the display, over the bezel)
 const SCREEN_ON = new Color('#ffffff')
 const SCREEN_OFF = new Color('#050506')
 
@@ -116,15 +119,15 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
       shell: new MeshStandardMaterial({ color: C.shell, roughness: 0.55 }),
       gray: new MeshStandardMaterial({ color: C.gray, roughness: 0.42, metalness: 0.15 }),
       key: new MeshStandardMaterial({ color: C.key, roughness: 0.7 }),
-      legends: new MeshBasicMaterial({ map: legendsTexture(), transparent: true, depthWrite: false }),
-      trackpad: new MeshStandardMaterial({ color: C.trackpad, roughness: 0.3, metalness: 0.1 }),
-      grille: new MeshStandardMaterial({ map: grilleTexture(L.speaker.w, 100), transparent: true, depthWrite: false, roughness: 0.6 }),
+      legends: new MeshBasicMaterial({ map: legendsTexture(), transparent: true, depthWrite: false, ...DECAL }),
+      trackpad: new MeshStandardMaterial({ color: C.trackpad, roughness: 0.3, metalness: 0.1, ...DECAL }),
+      grille: new MeshStandardMaterial({ map: grilleTexture(L.speaker.w, 100), transparent: true, depthWrite: false, roughness: 0.6, ...DECAL }),
       dark: new MeshStandardMaterial({ color: C.hinge, roughness: 0.5 }),
       touchId: new MeshStandardMaterial({ color: '#1b1b1e', roughness: 0.25 }),
-      bar: new MeshBasicMaterial({ map: touchBarTexture(tb.w, tb.d), color: SCREEN_OFF.clone() }),
+      bar: new MeshBasicMaterial({ map: touchBarTexture(tb.w, tb.d), color: SCREEN_OFF.clone(), ...DECAL }),
       lid: [hearts, new MeshStandardMaterial({ color: C.rim, roughness: 0.5 })],
-      bezel: new MeshStandardMaterial({ map: bezelTexture(), roughness: 0.2 }),
-      screen: new MeshBasicMaterial({ map: screenTexture(), color: SCREEN_OFF.clone() }),
+      bezel: new MeshStandardMaterial({ map: bezelTexture(), roughness: 0.2, ...DECAL }),
+      screen: new MeshBasicMaterial({ map: screenTexture(), color: SCREEN_OFF.clone(), ...OVER_DECAL }),
       port: new MeshBasicMaterial({ color: '#0b0b0d' }),
     }
   }, [tb])
@@ -153,11 +156,11 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
       {/* the keys under their pink cover, the legends through it; the Touch Bar, Touch ID */}
       <mesh geometry={geo.keys} material={mat.key} castShadow receiveShadow />
       <mesh geometry={geo.legends} material={mat.legends} position={[LEGEND_AREA.x0 + LEGEND_AREA.w / 2, legendY, LEGEND_AREA.z0 + LEGEND_AREA.d / 2]} />
-      <mesh geometry={geo.barGeo} material={mat.bar} position={[tb.x, T / 2 + 0.03, tb.z]} />
+      <mesh geometry={geo.barGeo} material={mat.bar} position={[tb.x, T / 2 + 0.12, tb.z]} />
       <mesh geometry={geo.id} material={mat.touchId} castShadow />
-      <mesh geometry={geo.trackpad} material={mat.trackpad} position={[0, T / 2 + 0.02, B.d / 2 - L.trackpad.front - L.trackpad.d / 2]} receiveShadow />
+      <mesh geometry={geo.trackpad} material={mat.trackpad} position={[0, T / 2 + 0.1, B.d / 2 - L.trackpad.front - L.trackpad.d / 2]} receiveShadow />
       {[-1, 1].map((s) => (
-        <mesh key={s} geometry={geo.grille} material={mat.grille} position={[s * geo.grilleX, T / 2 + 0.02, geo.grilleZ]} />
+        <mesh key={s} geometry={geo.grille} material={mat.grille} position={[s * geo.grilleX, T / 2 + 0.1, geo.grilleZ]} />
       ))}
       {/* the ports on the left, the jack on the right */}
       {L.port.z.map((z) => (
@@ -170,8 +173,8 @@ export function LaptopModel({ angle, onLid }: { angle: { current: number }; onLi
         <group ref={lid} onClick={click}>
           <group position={[0, GAP, BACK]}>
             <mesh geometry={geo.lid} material={mat.lid} castShadow receiveShadow />
-            <mesh geometry={geo.bezel} material={mat.bezel} position={[0, -0.12, 0]} />
-            <mesh geometry={geo.display} material={mat.screen} position={[0, -0.3, L.lid.len - L.display.top - L.display.h / 2]} />
+            <mesh geometry={geo.bezel} material={mat.bezel} position={[0, -0.2, 0]} />
+            <mesh geometry={geo.display} material={mat.screen} position={[0, -0.4, L.lid.len - L.display.top - L.display.h / 2]} />
           </group>
         </group>
       </group>

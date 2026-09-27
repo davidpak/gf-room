@@ -43,8 +43,8 @@ export const LAPTOP = {
     legend: '#ffffff',
     trackpad: '#9a9ca1',
     touchBar: '#0d0d0f',
-    // the lid's hearts, outside in (the photo's, cooled from the warm lamp light)
-    hearts: ['#a9dfcd', '#fbe4c6', '#f8c3ba', '#f4a3a3', '#ef8d95', '#f6b2b0', '#fbd9cf', '#fff4ec'],
+    // the lid's print (the photo's colours, cooled from the warm lamp light)
+    hearts: ['#f6bcc6', '#a9e2d3', '#fdebcb', '#f9cabe', '#f5aaae', '#f0929c', '#f7c2bd', '#fff5ee'], // the corners, then each heart outside in
   },
 }
 
