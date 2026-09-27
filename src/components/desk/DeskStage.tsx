@@ -20,6 +20,7 @@ import { LiveCord, type CordSetup, type Socket } from '../power/LiveCord'
 import { power } from '../../lib/power'
 import { LiveWumpus } from '../wumpus/Wumpus'
 import { perch } from '../wumpus/spec'
+import { ClawClip } from '../clip/ClawClip'
 
 // Rina's lamp on the back-right corner, and David (crocheted) sitting against its base
 const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
@@ -190,6 +191,7 @@ function DeskWithMotor() {
         <group ref={top} />
         <group ref={lamp} position={LAMP_AT} rotation={[0, LAMP_YAW, 0]}>
           <Lamp />
+          <ClawClip />
         </group>
         <group position={[LAMP_AT[0] + Math.sin(DOLL_YAW) * DOLL_R, 0, LAMP_AT[2] + Math.cos(DOLL_YAW) * DOLL_R]} rotation={[0, DOLL_YAW, 0]}>
           <SeatedDoll />

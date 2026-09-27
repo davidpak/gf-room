@@ -1,11 +1,13 @@
 import { CatmullRomCurve3, Matrix4, Quaternion, Vector3 } from 'three'
 import { LAMP, armPoints, shadeFrame } from '../lamp/spec'
+import { CLIP_TOP } from '../clip/spec'
 
 /**
  * Rina's Wumpus stress ball (Discord's "Destress Ball": Wumpus's head in soft foam), millimetres.
  * References (public/reference/):
  *   wumpus.webp          still in its bag, face on (David's photo): proportions and every feature
- *   room-desk-night.jpg  where it lives: tucked into the lamp's arm, under the hook, beside the pole
+ *   room-desk-night.jpg  where it lives: tucked into the lamp's arm, under the hook, beside the pole,
+ *                        sat on a claw clip clamped on the pole (../clip/spec)
  *   lamp-arm.webp        the same spot from the side: its back against the pole and the arm's rising
  *                        leg, facing out sideways (the way the arm's S is seen in profile)
  *   discordmerch.com/products/destress-ball: 76.2 × 50.8 × 50.8 (3 × 2 × 2 in), "9/10 doctors
@@ -118,12 +120,12 @@ export function shapePoints(step = 12) {
 }
 
 /**
- * Its perch on the lamp (in the lamp's frame, ../lamp/spec): facing out sideways (+X), its back
- * resting against the pole and the arm's rising leg (the leg is 30 from the pole: it sits across the
- * middle of the pair), under the hook. In the photos a claw clip on the pole props it up; here it's
- * wedged there until picked up.
+ * Its perch on the lamp (in the lamp's frame, ../lamp/spec): sat on the top of Rina's claw clip
+ * (../clip/spec), facing out sideways (+X), its back resting against the pole and the arm's rising
+ * leg (the leg is 30 from the pole: it sits across the middle of the pair), under the hook.
  */
-export const PERCH_Y = 455
+export const PERCH_SIT = 0.5 // its bottom over the clip's top
+export const PERCH_Y = CLIP_TOP + HEAD.b + PERCH_SIT
 export const PERCH_GAP = 0.8 // between its back and the pole's collider
 export function perch() {
   const lateral = LAMP.arm.offset / 2 // the pole and the leg, either side of its middle
@@ -179,6 +181,8 @@ export function checkWumpus() {
   const worldTips = tips.map((p) => p.clone().applyMatrix4(P))
   const pole = Math.min(...world.map((p) => Math.hypot(p.x, p.z) - (LAMP.pole.r + 1)))
   add('rests against the pole', pole > 0.2 && pole < 2, `${pole.toFixed(1)} mm`)
+  const sit = Math.min(...world.map((p) => p.y)) - CLIP_TOP
+  add('sits on the claw clip', sit > 0.1 && sit < 1.5, `${sit.toFixed(1)} mm over its top`)
   const arm = new CatmullRomCurve3(armPoints(), false, 'centripetal').getSpacedPoints(300)
   const armGap = Math.min(...world.map((p) => Math.min(...arm.map((a) => a.distanceTo(p))))) - (LAMP.arm.r + 0.5)
   add('beside the arm, not in it', armGap > 0.2 && armGap < 6, `${armGap.toFixed(1)} mm`)
@@ -194,6 +198,7 @@ export function checkWumpus() {
   }
   add('clear of the shade and cap', shade > 5, `${shade.toFixed(0)} mm`)
   const topY = Math.max(...worldTips.map((t) => t.y))
-  add('under the hook', topY < LAMP.arm.peakY - 58, `leaves ${(LAMP.arm.peakY - 58 - topY).toFixed(0)} mm below its bend`)
+  // (the hook is in the arm's plane, which it sits beside: 'beside the arm' covers it) the finial's urn tops the pole
+  add('under the finial', topY < LAMP.pole.top - 10, `leaves ${(LAMP.pole.top - topY).toFixed(0)} mm below it`)
   return results
 }

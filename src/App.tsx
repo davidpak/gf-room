@@ -23,7 +23,7 @@ const PARTS = {
   lamp: { stage: LampStage, check: LampCheck, title: "Rina's lamp", hint: 'click the lamp or its switch · drag to look · add &check for the verification sheet' },
   charger: { stage: ChargerStage, check: ChargerCheck, title: 'Apple 70W USB-C', hint: 'left-drag to carry (wheel: up / down) · right-drag to turn in place (wheel: tilt) · hold both to turn mid-carry · while carrying, Q/E spin, R/F tip, Z/C tilt · press the wheel and drag to look' },
   keypad: { stage: KeypadStage, check: KeypadCheck, title: 'FEZIBO keypad', hint: 'hold ▲ / ▼ · presets 1 2 3 · keys work too · drag to look' },
-  wumpus: { stage: WumpusStage, check: WumpusCheck, title: 'Wumpus stress ball', hint: 'left-drag to carry it (it gets a squeeze) · drop it and it squishes · let go near the lamp and it hops back on its perch · right-drag to turn · press the wheel and drag to look' },
+  wumpus: { stage: WumpusStage, check: WumpusCheck, title: 'Wumpus stress ball', hint: 'left-drag to carry it (it gets a squeeze) · drop it and it squishes · let go near the lamp and it hops back onto the claw clip · right-drag to turn · press the wheel and drag to look' },
   prompt: { stage: PromptStage, check: PromptStage, title: 'Fix-it prompts', hint: 'click a prompt · carry a block away and its prompt comes back when it settles · press the wheel and drag to look' },
 } as const
 

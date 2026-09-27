@@ -16,10 +16,10 @@ import { EAR, EAR_AT, HEAD, MUZZLE, MUZZLE_AT, WUMPUS, eyeAt, leafFrame, nostril
  *   carry / turn  the shared hand, like everything else (left-drag, right-drag, wheel, keys)
  *   squishy       the hand squeezes it as it picks it up (and holds it a little squashed); it squashes
  *                 on landing, by how hard, and wobbles back (drawn only: its collider stays whole)
- *   its perch     it lives tucked in the lamp's arm, back to the pole (`perchAt`, the perch in the
+ *   its perch     it lives tucked in the lamp's arm, sat on a claw clip, back to the pole (`perchAt`, the perch in the
  *                 world). There it's held fast, riding along as the desk goes up and down. Let go of
  *                 it near there and it hops back in
- *   put it back   anywhere else, once it's at rest, a fix-it prompt flies it home round what's in the
+ *   Return Wumpus anywhere else, once it's at rest, a fix-it prompt flies it home round what's in the
  *                 way and settles it back in, backing into its spot
  */
 const C = WUMPUS.color
@@ -267,7 +267,7 @@ export function LiveWumpus({ perchAt, spawn }: { perchAt: () => Matrix4 | null; 
 
   const item: PromptItem = {
     key: 'wumpus',
-    label: 'Put it back',
+    label: 'Return Wumpus',
     icon: 'home',
     at: (out) => {
       const b = body.current
