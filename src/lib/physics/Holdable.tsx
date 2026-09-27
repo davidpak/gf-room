@@ -53,6 +53,9 @@ export function Holdable({ children, hold, sound = 'hard', onImpact, bodyRef, po
           return holdRef.current?.turn
         },
         ignore: (c) => holdRef.current?.ignore?.(c) ?? false,
+        get lowest() {
+          return holdRef.current?.lowest
+        },
         get pull() {
           return holdRef.current?.pull
         },

@@ -43,6 +43,12 @@ const _m2 = new Matrix4()
 const ONE = new Vector3(1, 1, 1)
 
 type Door = 'one' | 'many'
+/** a puck turned to q: how far its lowest point (a rim edge, or a face) is below its middle, for the
+ *  hand turning it (it stands on its edge, not hovering over where a box's corner would be) */
+const puckLowest = (q: Quaternion) => {
+  const up = _v2.set(0, 1, 0).applyQuaternion(q).y
+  return P.r * Math.sqrt(Math.max(0, 1 - up * up)) + (P.h / 2) * Math.abs(up)
+}
 type DoorState = { open: boolean; v: number }
 /** each divot in the rim's inner edge: its half width and which side (+1 "one", -1 "many") */
 const DIVOTS = [
@@ -654,7 +660,7 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
 
   return (
     <>
-      <Holdable bodyRef={perch.body} position={spawn} colliders={false} sound="hard" hold={{ lift: 30, ...perch.hold, ignore: (c) => mintHandles.has(c.parent()?.handle ?? -1) }}>
+      <Holdable bodyRef={perch.body} position={spawn} colliders={false} sound="hard" hold={{ lift: 30, ...perch.hold, ignore: (c) => mintHandles.has(c.parent()?.handle ?? -1), lowest: puckLowest }}>
         <group ref={drawn} {...perch.hover.bind}>
           <PuckModel doors={doors} onTab={toggle} />
         </group>

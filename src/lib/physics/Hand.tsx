@@ -56,6 +56,9 @@ export type GrabSpec = {
   box?: Box3
   /** things riding inside it (the mints in their tin): not what it rests on, when it's turned */
   ignore?: (collider: RapierCollider) => boolean
+  /** how far its lowest point is below its centre, turned to `q` (a round thing: its box's corners
+   *  would lift it clear of the surface, and bob it up and down as it spins) */
+  lowest?: (q: Quaternion) => number
   /** kg the hand lends it while held (GRIP unless given): light for cable pieces, whose neighbours
    *  weigh grams (a heavy link among light ones stretches the chain) */
   grip?: number
@@ -596,10 +599,12 @@ export function Hand({ children }: { children: ReactNode }) {
       let y = h.anchor.y
       if (below !== null) {
         let lowest = Infinity
-        for (const [i, j, k] of CORNERS) {
-          _v.set(i ? h.box.max.x : h.box.min.x, j ? h.box.max.y : h.box.min.y, k ? h.box.max.z : h.box.min.z).applyQuaternion(h.qT)
-          lowest = Math.min(lowest, _v.y)
-        }
+        if (h.spec.lowest) lowest = -h.spec.lowest(h.qT)
+        else
+          for (const [i, j, k] of CORNERS) {
+            _v.set(i ? h.box.max.x : h.box.min.x, j ? h.box.max.y : h.box.min.y, k ? h.box.max.z : h.box.min.z).applyQuaternion(h.qT)
+            lowest = Math.min(lowest, _v.y)
+          }
         y = Math.max(y, below - lowest + 1)
       }
       const lv = b.linvel()
