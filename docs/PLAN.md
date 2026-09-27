@@ -56,6 +56,10 @@ Each milestone is something you can open in a browser and show someone.
 - [ ] **M5: Polish.** Post-processing (bloom on the lamp, vignette), day/night toggle, loading screen, deploy to Vercel/Netlify with a custom domain.
 - [ ] **M6 (optional): Blender.** Model the whole apartment in Blender, bake lighting, export one GLB. This is the Three.js Journey "portal scene" workflow and is where it starts looking like Bruno's.
 
+## Known bugs
+
+- **Ice Breakers tin still bounces with mints inside** (`?part=mints`, desk page). Dropping or throwing it with mints in, especially with a tab open, can still send it bouncing or hopping. Commit 73112e1 fixed one cause (mints teleported back inside shoved the tin), but big bounces remain. Leads: contacts between the near-weightless mints (0.00005 kg) and the 12 g tin, the rattle cap and shared gravity/damping in `src/components/mints/Mints.tsx`, and unpacking mints while the tin is moving. Idea to try: while the tin is moving, keep every mint packed (kinematic, touching nothing) and only let them loose once it is still.
+
 ## Running
 
 ```bash
