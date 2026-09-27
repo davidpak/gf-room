@@ -47,12 +47,18 @@ export function Desk({ motor, children }: { motor: Motor; children?: ReactNode }
   const lift = useRef<Group>(null)
   const topMarker = useRef<Group>(null)
   const topBody = useRef<RapierRigidBody>(null)
+  const placed = useRef(false) // the first frame the desktop's body is put straight in place (not swept up from the floor through everything)
   useFrame(() => {
     if (lift.current) lift.current.position.y = motor.height - H_MIN
     // the desktop is a moving (kinematic) collider: whatever sits on it rides up and down with it
     if (topMarker.current && topBody.current) {
       topMarker.current.getWorldPosition(_p)
       topMarker.current.getWorldQuaternion(_r)
+      if (!placed.current) {
+        placed.current = true
+        topBody.current.setTranslation(_p, true)
+        topBody.current.setRotation(_r, true)
+      }
       topBody.current.setNextKinematicTranslation(_p)
       topBody.current.setNextKinematicRotation(_r)
     }

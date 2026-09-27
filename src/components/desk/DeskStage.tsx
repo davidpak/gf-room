@@ -127,10 +127,12 @@ function DeskWithMotor() {
 
   // the two cords: real, unpluggable; the lamp and the desk only work while they're in the wall
   const cords = useMemo(() => {
+    // (none while the outlet isn't there: mounting, unmounting)
     const sockets = (): Socket[] =>
-      [lampSocket, deskSocket].map((r, i) => {
-        r.current!.updateWorldMatrix(true, false)
-        return { id: i ? 'bottom' : 'top', frame: r.current!.matrixWorld.clone() }
+      [lampSocket, deskSocket].flatMap((r, i) => {
+        if (!r.current) return []
+        r.current.updateWorldMatrix(true, false)
+        return [{ id: i ? 'bottom' : 'top', frame: r.current.matrixWorld.clone() }]
       })
     const backward = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI) // (the lamp's cord leaves along its -Z)
     const down = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), new Vector3(0, -1, 0))

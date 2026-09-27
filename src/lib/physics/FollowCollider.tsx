@@ -10,18 +10,27 @@ import { Quaternion, Vector3, type Object3D } from 'three'
  * actually is. Put `target` (an empty group) at the centre of the moving part; `half` is the box's
  * half size in the target's frame; or give it colliders as children (placed in the target's frame)
  * for another shape. Needs a <Physics> ancestor.
+ *
+ * The first frame it's put straight where the target is (a kinematic body that swept there from the
+ * origin would bat aside whatever lay on its way: a cord laid round the lamp).
  */
 const _p = new Vector3()
 const _q = new Quaternion()
 
 export function FollowCollider({ target, half, children }: { target: RefObject<Object3D | null>; half?: [number, number, number]; children?: ReactNode }) {
   const body = useRef<RapierRigidBody>(null)
+  const placed = useRef(false)
   useFrame(() => {
     const t = target.current
     const b = body.current
     if (!t || !b) return
     t.getWorldPosition(_p)
     t.getWorldQuaternion(_q)
+    if (!placed.current) {
+      placed.current = true
+      b.setTranslation(_p, true)
+      b.setRotation(_q, true)
+    }
     b.setNextKinematicTranslation(_p)
     b.setNextKinematicRotation(_q)
   })

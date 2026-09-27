@@ -61,7 +61,7 @@ const frameOf = (m: Matrix4): Pose => {
   m.decompose(p, q, new Vector3())
   return { p, q }
 }
-type Reel = { t: number; lay: Path; rest: Path; root: Vector3; dir: Vector3; T1: number; T2: number; socket: number; end: Pose; landing: boolean }
+type Reel = { t: number; lay: Path; rest: Path; root: Vector3; dir: Vector3; T1: number; T2: number; socket: number; socketId: string; end: Pose; landing: boolean }
 type Snap = { from: Pose; to: Pose; t: number; socket: number; landing: boolean }
 
 export function LiveCord({ setup }: { setup: CordSetup }) {
@@ -77,7 +77,8 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
   const shade = useMemo(() => new ContactShadow(world, rapier, N + 1), [world, rapier, N])
   const pts = useRef<Vector3[]>([])
   const plugMesh = useRef<Group>(null)
-  const sys = useRef<{ rope: Rope; anchor: RapierRigidBody; plug: RapierRigidBody; joint: Joint | null; socket: number | null } | null>(null)
+  // socket: its index in sockets(); socketId: its name (kept, so letting go never needs the outlet, which may be gone)
+  const sys = useRef<{ rope: Rope; anchor: RapierRigidBody; plug: RapierRigidBody; joint: Joint | null; socket: number | null; socketId: string | null } | null>(null)
   const sockBodies = useRef(new Map<string, RapierRigidBody>())
   const reel = useRef<Reel | null>(null)
   const snap = useRef<Snap | null>(null)
@@ -126,6 +127,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     j.setContactsEnabled(false)
     s.joint = j
     s.socket = i
+    s.socketId = sk.id
     taken.set(sk.id, setupRef.current.id)
     plugGroups(true)
     setupRef.current.onPower(true)
@@ -136,10 +138,11 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     const sk = setupRef.current.sockets()[s.socket]
     if (s.joint && world.getImpulseJoint(s.joint.handle)) world.removeImpulseJoint(s.joint, true)
     s.joint = null
-    taken.delete(sk.id)
+    if (s.socketId) taken.delete(s.socketId)
     s.socket = null
+    s.socketId = null
     setupRef.current.onPower(false)
-    if (push) {
+    if (push && sk) {
       const out = _v.copy(Z).applyQuaternion(frameOf(sk.frame).q).multiplyScalar(s.plug.mass() * 400)
       s.plug.applyImpulse({ x: out.x, y: out.y, z: out.z }, true)
       thump(0.3, 'hard')
@@ -180,6 +183,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     const st = setupRef.current
     const socks = st.sockets()
     const sk = socks[st.start]
+    if (!sk) return // (the outlet isn't there yet: next frame)
     const run = st.run(sk.frame)
     const lay = layCord(run, st.length, N, 0, R)
     const rope = createRope(world, rapier, lay, { radius: R, mass: 0.003, bend: 8, bendDamping: 0.3, memory: 0.4, linearDamping: 2.5, angularDamping: 20 })
@@ -211,7 +215,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
       plug,
     )
     rope.ends(anchor, plug)
-    sys.current = { rope, anchor, plug, joint: null, socket: null }
+    sys.current = { rope, anchor, plug, joint: null, socket: null, socketId: null }
     settled.current = 0
     if (import.meta.env.DEV) Object.assign(window, { __cords: { ...((window as unknown as { __cords?: object }).__cords ?? {}), [st.id]: { sys, lay, run, reached, world } } }) // for inspecting from the console
     if (reached) lockIn(st.start)
@@ -220,7 +224,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
   const teardown = () => {
     const s = sys.current
     if (!s) return
-    if (s.socket !== null) taken.delete(setupRef.current.sockets()[s.socket].id)
+    if (s.socketId) taken.delete(s.socketId)
     if (s.joint && world.getImpulseJoint(s.joint.handle)) world.removeImpulseJoint(s.joint, false)
     s.rope.remove()
     for (const b of [s.anchor, s.plug]) if (world.getRigidBody(b.handle)) world.removeRigidBody(b)
@@ -243,7 +247,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     const socks = st.sockets()
     let i = st.start
     if (taken.get(socks[i].id)) i = socks.findIndex((sk) => !taken.get(sk.id))
-    if (i < 0) return
+    if (i < 0 || !socks[i]) return
     const lay = s.rope.points([]).map((p) => p.clone())
     const rest = layCord(st.run(socks[i].frame), st.length, N, 0, R)
     const a = st.anchor()
@@ -259,6 +263,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
       T1: Math.min(1.6, Math.max(0.9, st.length / 1300)),
       T2: Math.min(2.4, Math.max(1.3, st.length / 1000)),
       socket: i,
+      socketId: socks[i].id,
       end: frameOf(socks[i].frame),
       landing: false,
     }
@@ -322,7 +327,7 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
         draw.current = { plugScale: 1, visibleFrom: 0 }
         s.rope.attach()
         settled.current = 0
-        taken.delete(setupRef.current.sockets()[rl.socket].id)
+        taken.delete(rl.socketId)
         lockIn(rl.socket)
         return
       }
@@ -421,7 +426,8 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
 
   useFrame(() => {
     if (!sys.current) build()
-    const s = sys.current!
+    if (!sys.current) return
+    const s = sys.current
     // held close in front of a free socket, it goes in (armed once it's been well away from them all)
     if (held.current && s.socket === null && !snap.current) {
       if (nearSocket(90) < 0) armed.current = true
