@@ -61,7 +61,10 @@ const frameOf = (m: Matrix4): Pose => {
   m.decompose(p, q, new Vector3())
   return { p, q }
 }
-type Reel = { t: number; lay: Path; rest: Path; root: Vector3; dir: Vector3; T1: number; T2: number; socket: number; socketId: string; end: Pose; landing: boolean }
+// dist: each joint's distance along the cord by its links' real lengths (not the nominal length: a cord
+// laid along a run comes out a touch shorter, and spacing it nominally squashes its end, which springs
+// back when it's let go)
+type Reel = { t: number; lay: Path; rest: Path; root: Vector3; dir: Vector3; T1: number; T2: number; socket: number; socketId: string; end: Pose; landing: boolean; dist: number[] }
 type Snap = { from: Pose; to: Pose; t: number; socket: number; landing: boolean }
 
 export function LiveCord({ setup }: { setup: CordSetup }) {
@@ -249,7 +252,8 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
     if (taken.get(socks[i].id)) i = socks.findIndex((sk) => !taken.get(sk.id))
     if (i < 0 || !socks[i]) return
     const lay = s.rope.points([]).map((p) => p.clone())
-    const rest = layCord(st.run(socks[i].frame), st.length, N, 0, R)
+    const real = s.rope.lengths.reduce((a, l) => a + l, 0) // (the cord as it really is)
+    const rest = layCord(st.run(socks[i].frame), real, N, 0, R)
     const a = st.anchor()
     s.rope.detach()
     for (const b of [...s.rope.links, s.plug]) b.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
@@ -264,18 +268,13 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
       T2: Math.min(2.4, Math.max(1.3, st.length / 1000)),
       socket: i,
       socketId: socks[i].id,
+      dist: s.rope.lengths.reduce((d, l) => (d.push(d[d.length - 1] + l), d), [0]),
       end: frameOf(socks[i].frame),
       landing: false,
     }
     taken.set(socks[i].id, st.id) // (claimed on the way)
     wakeAll()
   }
-  const dist = useMemo(() => {
-    const d = [0]
-    for (let i = 0; i < N; i++) d.push(d[i] + setup.length / N)
-    return d
-  }, [N, setup.length])
-
   // every physics step: the anchor rides its appliance; reeling and snapping in are moved here too
   useBeforePhysicsStep((w) => {
     const s = sys.current
@@ -327,12 +326,15 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
         draw.current = { plugScale: 1, visibleFrom: 0 }
         s.rope.attach()
         settled.current = 0
+        // it ends at the socket's mouth, by its own length: the plug glides the last bit in (nothing's
+        // pulled apart, so nothing springs back)
         taken.delete(rl.socketId)
-        lockIn(rl.socket)
+        plugIn(rl.socket)
         return
       }
       rl.t += dt
-      const L = setupRef.current.length
+      const dist = rl.dist
+      const L = dist[N]
       const inward = rl.t < rl.T1
       const shift = inward ? L * GLIDE(rl.t / rl.T1) : L * (1 - GLIDE((rl.t - rl.T1) / rl.T2))
       const path = inward ? rl.lay : rl.rest
@@ -357,10 +359,6 @@ export function LiveCord({ setup }: { setup: CordSetup }) {
       const u = inward ? 0 : (rl.t - rl.T1) / rl.T2
       if (u > 0.8) _q.slerp(rl.end.q, smoother((u - 0.8) / 0.2))
       const ppos = _v.copy(J[N]).addScaledVector(_w.copy(Z).applyQuaternion(_q), -back)
-      if (u >= 1) {
-        ppos.copy(rl.end.p)
-        _q.copy(rl.end.q)
-      }
       s.plug.setNextKinematicTranslation(ppos)
       s.plug.setNextKinematicRotation(_q)
       draw.current = { plugScale: smoother((L - shift) / 50), visibleFrom: Math.max(0, first - 1) }

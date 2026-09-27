@@ -98,19 +98,21 @@ function DeskWithMotor() {
     const a = out(LAMP.base.r + 3, 3.5) // (just outside the base: the cord leaves its side)
     const b = out(LAMP.base.r + 11, CORD_R + 0.5)
     const c = out(LAMP.base.r + 21, CORD_R)
-    const e = DESK.top.edge
     const back = -DESK.top.d / 2
     const x = c.x + 6
-    const R = e + CORD_R // round the top's bevelled back edge
+    // over the back edge round the desktop collider's square corner (its visible edge is rounded, but
+    // the collider's corner sticks out past that), wide enough that even one straight 30 mm link across
+    // the whole bend clears it: laid tighter, the links dig into the corner and spring out when let go
+    const Rc = 10
+    const arc = [90, 45, 0].map((deg) => [x, Rc * Math.sin((deg * Math.PI) / 180), back - Rc * Math.cos((deg * Math.PI) / 180)] as [number, number, number])
     return (): Vector3[] =>
       onTop([
         [a.x, a.y, a.z],
         [b.x, b.y, b.z],
         [c.x, c.y, c.z],
-        [x, CORD_R, back + e],
-        [x, -e + R * Math.SQRT1_2, back + e - R * Math.SQRT1_2],
-        [x, -e, back - CORD_R],
-        [x, -45, back - CORD_R - 1],
+        [x, CORD_R + 1.5, back + 6],
+        ...arc,
+        [x, -45, back - Rc - 0.5],
       ])
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // the desk's cord: out of the bottom of the motor under the top, straight down
