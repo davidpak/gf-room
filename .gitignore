@@ -1,0 +1,12 @@
+node_modules
+dist
+.DS_Store
+*.local
+
+# Blender autosave backups, Python caches, bake logs
+*.blend1
+__pycache__/
+blender/bake/*.log
+
+# local tool settings
+.claude/

@@ -1,0 +1,194 @@
+import { Suspense, useMemo, useRef, useState } from 'react'
+import { Canvas } from '@react-three/fiber'
+import { ToyControls } from '../stage/ToyControls'
+import { Matrix4, PCFShadowMap, Quaternion, Vector3, type Group } from 'three'
+import { H_MAX, H_MIN, IN, useDeskMotor } from '../../lib/motor'
+import { CheckSheet } from '../check/CheckSheet'
+import { Effects } from '../stage/StageLights'
+import { TOY, ToyLights } from '../stage/ToyLights'
+import { Stylize } from '../../lib/stylize'
+import { Desk } from './Desk'
+import { World } from '../../lib/physics/World'
+import { DESK, STACK } from './spec'
+import { Lamp } from '../room/Lamp'
+import { SeatedDoll, SEATED } from '../doll/SeatedDoll'
+import { LiveCharger, type ChargerSetup, type ChargerState } from '../charger/ChargerPhysics'
+import { CHARGER, LAMP_BACK, cablePoints, lampOutlets } from '../charger/spec'
+import { LAMP } from '../lamp/spec'
+import { PowerCord, WallOutlet } from '../power/PowerCord'
+
+// Rina's lamp on the back-right corner, and David (crocheted) sitting against its base
+const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
+const LAMP_YAW = -0.6 // turned to face into the desk
+const DOLL_YAW = -1.3 // on the desk side of the lamp, facing the room
+const DOLL_R = 110 - SEATED.backZ - 4 // his back against the rim of the lamp's base
+
+/**
+ * The wall outlet behind the desk (floating: there is no wall on this page), at outlet height, on
+ * the right where the lamp and the desk's motor are. The lamp plugs into the top socket, the desk
+ * into the bottom one.
+ */
+const OUTLET_AT: [number, number, number] = [450, 300, -DESK.top.d / 2 - 80]
+const LAMP_OUTLETS = lampOutlets()
+const LAMP_M = new Matrix4().makeRotationY(LAMP_YAW).setPosition(...LAMP_AT) // lamp frame -> desktop frame
+const CORD_R = 2.8
+/**
+ * The charger's cable on the desk: out of its top, over its face toward the lamp's left (away from
+ * the back corner), across the base and off it, then a loose loop round the far side of David out
+ * toward the middle of the desk. (x, z) steps in the lamp's frame, left being -x.
+ */
+const CHARGER_LOOP: [number, number][] = [[-14, 10], [-85, 10], [-165, 100], [-185, 220], [-145, 340], [-65, 400], [15, 420]]
+const LAMP_EDGE = Math.sqrt(LAMP.base.r ** 2 - (LAMP.base.ring + 1.5) ** 2) // port to the base's edge, going left
+
+function DeskWithMotor() {
+  const motor = useDeskMotor()
+  const lamp = useRef<Group>(null)
+  const top = useRef<Group>(null) // the desktop's frame (rides up and down)
+  const lampSocket = useRef<Group>(null)
+  const deskSocket = useRef<Group>(null)
+  const [charger, setCharger] = useState<ChargerState>({ folded: false, plugged: true, pose: 1 })
+
+  // Rina's charger lives in the lamp's back outlet; it plugs into any of the three
+  const setup = useMemo<ChargerSetup>(() => {
+    const lampWorld = () => {
+      const l = lamp.current!
+      l.updateWorldMatrix(true, false)
+      return l.matrixWorld
+    }
+    return {
+      outlets: () => (lamp.current ? LAMP_OUTLETS.map((m) => ({ frame: lampWorld().clone().multiply(m), flip: false })) : []),
+      home: () => {
+        const m = lampWorld()
+        return { p: new Vector3(-190, CHARGER.body.h / 2, -40).applyMatrix4(m), q: new Quaternion().setFromRotationMatrix(m) }
+      },
+      cable: (S) => {
+        const m = lampWorld()
+        const ex = new Vector3().setFromMatrixColumn(m, 0).normalize()
+        const ez = new Vector3().setFromMatrixColumn(m, 2).normalize()
+        const floor = new Vector3().setFromMatrixPosition(m).y
+        return cablePoints(S, 1, { ex, ez, floor, edge: LAMP_EDGE, loop: CHARGER_LOOP })
+      },
+      start: LAMP_BACK,
+      startLabel: 'Plug back in',
+      moving: () => motor.velocity !== 0,
+    }
+  }, [motor])
+
+  /** points in the desktop's frame, to the world */
+  const onTop = (pts: [number, number, number][]) => {
+    const t = top.current
+    if (!t) return []
+    t.updateWorldMatrix(true, false)
+    return pts.map((p) => new Vector3(...p).applyMatrix4(t.matrixWorld))
+  }
+  // the lamp's cord: out of the back of its base, across the desk and over its back edge
+  const lampCord = useMemo(() => {
+    const out = (d: number, y: number) => new Vector3(0, y, -d).applyMatrix4(LAMP_M)
+    const a = out(LAMP.base.r - 2, 4)
+    const b = out(LAMP.base.r + 8, CORD_R + 0.5)
+    const c = out(LAMP.base.r + 18, CORD_R)
+    const e = DESK.top.edge
+    const back = -DESK.top.d / 2
+    const x = c.x + 6
+    const R = e + CORD_R // round the top's bevelled back edge
+    return (): Vector3[] =>
+      onTop([
+        [a.x, a.y, a.z],
+        [b.x, b.y, b.z],
+        [c.x, c.y, c.z],
+        [x, CORD_R, back + e],
+        [x, -e + R * Math.SQRT1_2, back + e - R * Math.SQRT1_2],
+        [x, -e, back - CORD_R],
+        [x, -45, back - CORD_R - 1],
+      ])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // the desk's cord: out of the bottom of the motor under the top, straight down
+  const deskCord = useMemo(() => {
+    const x = DESK.legX - DESK.outer.w / 2 - DESK.motor.r - 2 // as Desk draws the motor
+    const y = STACK.bracketBottom - DESK.motor.len - (DESK.topUnder + DESK.top.t)
+    return (): Vector3[] =>
+      onTop([
+        [x, y + 2, DESK.beam.z],
+        [x, y - 10, DESK.beam.z],
+        [x, y - 30, DESK.beam.z],
+      ])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      <Desk motor={motor}>
+        <group ref={top} />
+        <group ref={lamp} position={LAMP_AT} rotation={[0, LAMP_YAW, 0]}>
+          <Lamp />
+        </group>
+        <group position={[LAMP_AT[0] + Math.sin(DOLL_YAW) * DOLL_R, 0, LAMP_AT[2] + Math.cos(DOLL_YAW) * DOLL_R]} rotation={[0, DOLL_YAW, 0]}>
+          <SeatedDoll />
+        </group>
+      </Desk>
+      <LiveCharger state={charger} set={(p) => setCharger((s) => ({ ...s, ...p }))} setup={setup} />
+      <WallOutlet position={OUTLET_AT} top={lampSocket} bottom={deskSocket} />
+      <PowerCord from={lampCord} socket={lampSocket} side={1} prongs={2} radius={CORD_R} />
+      {/* under the desk it keeps inside the right foot, then round behind it to the wall */}
+      <PowerCord from={deskCord} via={[[352, -300]]} socket={deskSocket} side={-1} prongs={3} radius={3.2} />
+    </>
+  )
+}
+
+function Scene() {
+  return (
+    <>
+      <ToyLights extent={950} mapSize={4096} />
+      <Stylize />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <circleGeometry args={[2600, 96]} />
+        <meshStandardMaterial color={TOY.floor} roughness={1} />
+      </mesh>
+      <World timeStep={1 / 120}>
+        <Suspense fallback={null}>
+          <DeskWithMotor />
+        </Suspense>
+      </World>
+    </>
+  )
+}
+
+const HERO: [number, number, number] = [-1500, 1350, 2150]
+const TARGET: [number, number, number] = [0, 600, 0]
+
+/** Full-screen interactive desk. World units: mm. */
+export function DeskStage() {
+  return (
+    <Canvas shadows={{ type: PCFShadowMap }} dpr={[1, 1.25]} camera={{ position: HERO, fov: 32, near: 10, far: 20000 }} gl={{ antialias: false }}>
+      <Scene />
+      <Effects aoRadius={40} />
+      <ToyControls target={TARGET} minDistance={300} maxDistance={5000} maxPolarAngle={Math.PI / 2.05} enableDamping dampingFactor={0.06} />
+    </Canvas>
+  )
+}
+
+export function DeskCheck() {
+  const c = new Vector3(0, 600, 0)
+  return (
+    <CheckSheet
+      scene={() => <Scene />}
+      views={[
+        { kind: 'image', label: 'reference: product', src: '/reference/desk-product.webp' },
+        { kind: 'hero', label: 'hero (drag)', position: HERO, target: TARGET, fov: 32 },
+        { kind: 'image', label: 'reference: dimensions', src: '/reference/desk-dimensions.webp' },
+        { kind: 'ortho', label: `front · ${(H_MIN / IN).toFixed(1)}" to ${(H_MAX / IN).toFixed(1)}"`, from: new Vector3(0, 600, 4000), at: c, zoom: 0.34 },
+        { kind: 'ortho', label: 'right side', from: new Vector3(4000, 600, 0), at: c, zoom: 0.34 },
+        {
+          kind: 'text',
+          label: 'spec (mm)',
+          text: `top        ${DESK.top.w.toFixed(0)} × ${DESK.top.d.toFixed(0)} × ${DESK.top.t}
+legs       ${(2 * DESK.legX).toFixed(0)} apart (centres)
+outer tube ${DESK.outer.w} × ${DESK.outer.d} × ${DESK.outer.len}
+inner tube ${DESK.inner.w} × ${DESK.inner.d} × ${DESK.inner.len}
+overlap at max  ${(STACK.innerTop - (STACK.outerBottom + (H_MAX - H_MIN))).toFixed(0)}
+inner showing at min  ${(STACK.outerBottom - STACK.footTop).toFixed(0)}
+foot       ${DESK.foot.length} × ${DESK.foot.width} × ${DESK.foot.height}`,
+        },
+      ]}
+    />
+  )
+}

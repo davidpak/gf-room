@@ -1,0 +1,33 @@
+{
+  "name": "rina-room",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "blender:room": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" -b --python blender/build_room.py",
+    "blender:desk": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" -b --python blender/build_desk.py",
+    "blender:keypad": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" -b --python blender/build_keypad.py"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.1",
+    "@react-three/postprocessing": "^3.1.2",
+    "@react-three/rapier": "^2.2.0",
+    "maath": "^0.10.8",
+    "r3f-perf": "^7.2.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}

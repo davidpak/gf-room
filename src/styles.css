@@ -1,0 +1,109 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+body {
+  font-family: 'Nunito', system-ui, sans-serif;
+  background: #1a1530;
+  color: #f3e6d8;
+}
+.overlay {
+  position: fixed; left: 24px; bottom: 20px;
+  pointer-events: none; user-select: none;
+  font-size: 14px; line-height: 1.5; opacity: 0.75;
+}
+.overlay h1 { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+.note {
+  background: #fff8ef; color: #4a3728;
+  padding: 10px 14px; border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(60, 40, 20, 0.18);
+  font-size: 14px; white-space: nowrap; pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+.parts {
+  position: fixed; top: 16px; right: 16px; display: flex; gap: 6px;
+  font-size: 13px;
+}
+.parts a {
+  color: #e6e0ff; text-decoration: none; padding: 6px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(6px);
+}
+.parts a.on { background: #ffd9b0; color: #2a1a3f; }
+
+/* ---- fix-it prompts (components/prompt/Prompts.tsx): a label plate sliding out from behind a
+   diamond, after Bruno Simon's interactive points. The diamond's centre sits over the anchor. */
+.fix {
+  position: absolute; left: 0; top: 0;
+  transform: translate(calc(-100% + 21px), calc(-100% - 4px));
+  pointer-events: none; user-select: none;
+  font-family: 'Gaegu', 'Nunito', system-ui, sans-serif;
+}
+.fix-float { position: relative; }
+.fix-in .fix-float { animation: fix-bob 2.8s ease-in-out 1.1s infinite; }
+.fix-btn {
+  all: unset; pointer-events: auto; cursor: pointer;
+  display: flex; align-items: center;
+  filter: drop-shadow(0 3px 0 rgba(27, 22, 38, 0.35));
+  -webkit-tap-highlight-color: transparent;
+}
+.fix-out .fix-btn, .fix-fix .fix-btn { pointer-events: none; }
+.fix-label {
+  background: rgba(43, 37, 56, 0.94); color: #fff4e6;
+  font-weight: 700; font-size: 25px; line-height: 1; letter-spacing: 0.2px;
+  padding: 7px 34px 9px 16px; margin-right: -26px;
+  border: 2px solid #fff4e6; border-right: 0; border-radius: 12px 0 0 12px;
+  white-space: nowrap; transition: filter 0.2s;
+}
+.fix-pop { position: relative; z-index: 1; display: block; }
+.fix-dia {
+  width: 42px; height: 42px; display: grid; place-items: center;
+  background: #2b2538; border: 2px solid #fff4e6; border-radius: 10px;
+  transform: rotate(45deg);
+  transition: transform 0.28s cubic-bezier(0.34, 1.8, 0.5, 1), background 0.2s;
+}
+.fix-dia svg { width: 22px; height: 22px; color: #ffd6a0; transform: rotate(-45deg); }
+.fix-btn:hover .fix-dia, .fix-btn:focus-visible .fix-dia { transform: rotate(45deg) scale(1.14); background: #3a3150; }
+.fix-btn:hover .fix-label, .fix-btn:focus-visible .fix-label { filter: brightness(1.18); }
+
+/* in: the diamond springs up, then the icon, then the label slides out from behind it */
+.fix-in .fix-pop { animation: fix-pop 0.9s cubic-bezier(0.34, 1.8, 0.5, 1) both; }
+.fix-in .fix-dia svg { animation: fix-icon 0.7s cubic-bezier(0.34, 1.9, 0.5, 1) 0.3s both; }
+.fix-in .fix-label { animation: fix-label 0.55s cubic-bezier(0.2, 0.9, 0.3, 1) 0.22s both; }
+/* out: it winds up and snaps shut */
+.fix-out .fix-label { animation: fix-label-out 0.24s ease-in both; }
+.fix-out .fix-pop { animation: fix-pop-out 0.42s cubic-bezier(0.6, -0.7, 0.7, 0) 0.06s both; }
+/* pressed: a pulse, then gone in a burst of sparkles */
+.fix-fix .fix-label { animation: fix-label-out 0.22s ease-in both; }
+.fix-fix .fix-pop { animation: fix-press 0.62s cubic-bezier(0.3, 1.4, 0.5, 1) both; }
+.fix-spark { position: absolute; right: 21px; top: 50%; width: 0; height: 0; pointer-events: none; }
+.fix-spark i {
+  position: absolute; left: -4px; top: -4px; width: 8px; height: 8px;
+  background: #fff4e6; border-radius: 2px;
+  animation: fix-spark 0.7s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.fix-spark i:nth-child(odd) { background: #ffd6a0; width: 6px; height: 6px; left: -3px; top: -3px; }
+
+@keyframes fix-bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+@keyframes fix-pop { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes fix-pop-out { from { transform: scale(1); } to { transform: scale(0); } }
+@keyframes fix-icon { from { transform: rotate(-45deg) scale(0); } to { transform: rotate(-45deg) scale(1); } }
+@keyframes fix-label {
+  from { clip-path: inset(0 0 0 100%); translate: 18px 0; }
+  to { clip-path: inset(0 0 0 0); translate: 0 0; }
+}
+@keyframes fix-label-out {
+  from { clip-path: inset(0 0 0 0); translate: 0 0; }
+  to { clip-path: inset(0 0 0 100%); translate: 18px 0; }
+}
+@keyframes fix-press {
+  0% { transform: scale(1); }
+  22% { transform: scale(1.32); }
+  55% { transform: scale(0.92); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
+}
+@keyframes fix-spark {
+  0% { transform: rotate(var(--a)) translateY(-8px) rotate(45deg) scale(0.4); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: rotate(var(--a)) translateY(calc(-1 * var(--d))) rotate(45deg) scale(0); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fix-in .fix-float { animation: none; }
+}
