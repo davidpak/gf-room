@@ -339,6 +339,7 @@ function openingAt(doors: Record<Door, DoorState>, p: Vector3) {
  */
 type Mint = { body: RapierRigidBody; packed: { p: Vector3; q: Quaternion } | null; fly: { fl: Flight; pose: Pose; delay: number } | null; inside: Vector3 | null; prev: Pose } // prev: its pose before the last step (drawn blended toward now)
 const TIDY_GAP = 0.09 // s between one mint's flight home and the next
+const RATTLE = 450 // mm/s: the fastest a mint moves inside the puck, relative to it
 const TIDY_PASSES = 3 // tries for any that end up out again
 
 export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spawn: [number, number, number] }) {
@@ -430,7 +431,7 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
           rapier.RigidBodyDesc.kinematicPositionBased()
             .setTranslation(p.x, p.y, p.z)
             .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
-            .setLinearDamping(0.3)
+            .setLinearDamping(1.2) // (they settle rather than ricochet round the puck)
             .setAngularDamping(2.2) // (so a mint landing on its edge doesn't roll away across the desk like a coin)
             .setCcdEnabled(true), // (small, and the puck can swing round fast)
         )
@@ -504,6 +505,20 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
       const v = m.body.linvel()
       const sp = Math.hypot(v.x, v.y, v.z)
       if (sp > 2500) m.body.setLinvel({ x: (v.x / sp) * 2500, y: (v.y / sp) * 2500, z: (v.z / sp) * 2500 }, true)
+      // inside, no faster than a gentle rattle relative to the puck (a bump shouldn't fire them out)
+      if (m.inside) {
+        // and falling as it falls: let go, it floats down (the hand lightens its gravity, adds drag); the
+        // mints in it do too, or they'd drag it down
+        if (m.body.gravityScale() !== b.gravityScale()) m.body.setGravityScale(b.gravityScale(), false)
+        const drag = Math.max(1.2, b.linearDamping())
+        if (m.body.linearDamping() !== drag) m.body.setLinearDamping(drag)
+        const bv = b.linvel()
+        const rx = v.x - bv.x
+        const ry = v.y - bv.y
+        const rz = v.z - bv.z
+        const rs = Math.hypot(rx, ry, rz)
+        if (rs > RATTLE) m.body.setLinvel({ x: bv.x + (rx / rs) * RATTLE, y: bv.y + (ry / rs) * RATTLE, z: bv.z + (rz / rs) * RATTLE }, true)
+      }
       if (m.body.translation().y < -1500) {
         const s = mintSpots()[i % 19].clone()
         s.y = CAVITY.y1 - M.t
@@ -519,7 +534,12 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
         return
       }
       const was = m.inside
-      if (!was) return // (already out: loose)
+      if (!was) {
+        // out: its own weight again
+        if (m.body.gravityScale() !== 1) m.body.setGravityScale(1, true)
+        if (m.body.linearDamping() !== 1.2) m.body.setLinearDamping(1.2)
+        return
+      }
       if (throughOpening(was)) {
         m.inside = null
         return

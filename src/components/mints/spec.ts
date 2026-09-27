@@ -32,7 +32,7 @@ import { Vector3 } from 'three'
  */
 export const MINTS = {
   puck: { r: 35, h: 16, wall: 1.4, floor: 1.1, lid: 1.1, rim: 4.9, drop: 1, band: 0.4, edge: 1.2, round: 1.4 }, // drop: the label below the rim's top; band: the white share of the side; edge / round: the bottom and top edges' rounding
-  mint: { d: 13, t: 3.9, bevel: 1, mass: 0.00078 },
+  mint: { d: 13, t: 3.9, bevel: 1, mass: 0.00005 }, // (really 0.78 g; simulated as next to nothing, David: all of them together outweighed the puck, dragged it down and bounced it about)
   count: 27, // (half a tin: David asked for about half of the full 53)
   // the openings through the lid (out to the wall), and the tab / flap over each
   one: { hole: { w: 13.3, z0: 25.2 }, tab: { w: 13.5, z0: 23.9 }, divot: 2.5 }, // divot: into the rim's inner edge
