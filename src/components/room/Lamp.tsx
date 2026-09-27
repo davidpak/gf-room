@@ -3,6 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import {
   BackSide,
+  CanvasTexture,
   CatmullRomCurve3,
   Color,
   Euler,
@@ -12,6 +13,7 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  SRGBColorSpace,
   Path,
   Quaternion,
   Shape,
@@ -162,6 +164,28 @@ function LampColliders() {
 }
 
 const WARM = new Color('#ffb266') // a soft, warm incandescent
+/**
+ * How the shade glows, lit from inside: brightest around the bulb, low down, a little less to the
+ * bottom rim and dimming toward the top under the cap (as in lamp-arm.webp). Up the lathe's v: 0 at
+ * the bottom rim, 1 at the top.
+ */
+function glowMap() {
+  const c = document.createElement('canvas')
+  c.width = 4
+  c.height = 64
+  const g = c.getContext('2d')!
+  const grad = g.createLinearGradient(0, 64, 0, 0) // (canvas y runs down; the texture's v runs up)
+  grad.addColorStop(0, '#e8e8e8')
+  grad.addColorStop(0.4, '#ffffff')
+  grad.addColorStop(0.62, '#f2f2f2')
+  grad.addColorStop(1, '#8c8c8c')
+  g.fillStyle = grad
+  g.fillRect(0, 0, 4, 64)
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  return t
+}
+const GLOW = { fabric: 0.85, trim: 0.6 } // emissive at full: warm and soft (just a touch of bloom round it)
 const BULB_OFF = new Color('#d9d3c6')
 const BULB_ON = new Color('#fff1cf')
 const LINING_ON = new Color('#fff0d2')
@@ -179,8 +203,8 @@ export function Lamp({ solid = true }: { solid?: boolean }) {
   const mat = useMemo(
     () => ({
       metal: new MeshStandardMaterial({ color: '#d9d3e4', roughness: 1, metalness: 0 }), // lilac-silver, matte
-      fabric: new MeshStandardMaterial({ color: '#f6d67a', roughness: 1, side: FrontSide, emissive: '#ffb347', emissiveIntensity: 0 }), // butter yellow
-      trim: new MeshStandardMaterial({ color: '#eec35e', roughness: 1, emissive: '#ffb347', emissiveIntensity: 0 }),
+      fabric: new MeshStandardMaterial({ color: '#f6d67a', roughness: 1, side: FrontSide, emissive: '#ffb14f', emissiveMap: glowMap(), emissiveIntensity: 0 }), // butter yellow, glowing honey-warm
+      trim: new MeshStandardMaterial({ color: '#eec35e', roughness: 1, emissive: '#ffae4a', emissiveIntensity: 0 }),
       lining: new MeshBasicMaterial({ color: LINING_ON, side: BackSide, toneMapped: false }),
       bulb: new MeshBasicMaterial({ color: BULB_ON, toneMapped: false }),
       black: new MeshStandardMaterial({ color: '#3d3656', roughness: 1 }), // outlet faces, rocker: deep plum, not harsh black
@@ -265,8 +289,12 @@ export function Lamp({ solid = true }: { solid?: boolean }) {
     g.x += ((on ? 1 : 0) - g.x) * (1 - Math.exp(-dt * 12)) // a quick warm fade, not a hard cut
     if (spot.current) spot.current.intensity = 1300 * g.x // decay 1: a gentle falloff, so the whole desk is evenly lit
     if (spill.current) spill.current.intensity = 340 * g.x // decay 1: a soft warm fill all round
-    mat.fabric.emissiveIntensity = 0.32 * g.x
-    mat.trim.emissiveIntensity = 0.3 * g.x
+    // (the page's toy look swaps in a copy of each material, userData.twin: drive both)
+    for (const [m, k] of [[mat.fabric, GLOW.fabric], [mat.trim, GLOW.trim]] as const) {
+      m.emissiveIntensity = k * g.x
+      const twin = m.userData.twin as MeshStandardMaterial | undefined
+      if (twin) twin.emissiveIntensity = k * g.x
+    }
     mat.lining.color.copy(LINING_OFF).lerp(LINING_ON, g.x).multiplyScalar(0.4 + 0.75 * g.x)
     mat.bulb.color.copy(BULB_OFF).lerp(BULB_ON, g.x).multiplyScalar(0.6 + 1.5 * g.x)
     plug.current?.getWorldPosition(cozy.plug.position)

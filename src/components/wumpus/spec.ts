@@ -120,20 +120,21 @@ export function shapePoints(step = 12) {
 }
 
 /**
- * Its perch on the lamp (in the lamp's frame, ../lamp/spec): sat on the top of Rina's claw clip
- * (../clip/spec), facing out sideways (+X), its back resting against the pole and the arm's rising
- * leg (the leg is 30 from the pole: it sits across the middle of the pair), under the hook.
+ * Its perch on the lamp (in the lamp's frame, ../lamp/spec): resting on the top of Rina's claw clip
+ * (../clip/spec), lined up with it (its middle over the clip's, whose jaws are either side of the
+ * pole's plane), facing out the way the clip's handles point (+X), its back against the pole; the
+ * arm's rising leg beside it, under the hook.
  */
 export const PERCH_SIT = 0.5 // its bottom over the clip's top
 export const PERCH_Y = CLIP_TOP + HEAD.b + PERCH_SIT
 export const PERCH_GAP = 0.8 // between its back and the pole's collider
 let perchX: number | null = null
 export function perch() {
-  const lateral = LAMP.arm.offset / 2 // the pole and the leg, either side of its middle
+  const lateral = 0 // lined up with the clip
   const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2) // its +Z to the lamp's +X
   if (perchX === null) {
-    // back it up until the nearest of its back is PERCH_GAP off the pole's collider and the leg's
-    // (the tubes are round and its back bulges between them: found by halving, not by formula)
+    // back it up until the nearest of its back is PERCH_GAP off the pole's collider (or the leg's)
+    // (the tubes are round and so is its back: found by halving, not by formula)
     const back = shapePoints(16).map((p) => p.clone().applyQuaternion(q))
     const tubes = [
       { z: 0, r: LAMP.pole.r + 1 }, // (the colliders are a little fatter than the tubes)
@@ -202,7 +203,7 @@ export function checkWumpus() {
   add('sits on the claw clip', sit > 0.1 && sit < 1.5, `${sit.toFixed(1)} mm over its top`)
   const arm = new CatmullRomCurve3(armPoints(), false, 'centripetal').getSpacedPoints(300)
   const armGap = Math.min(...world.map((p) => Math.min(...arm.map((a) => a.distanceTo(p))))) - (LAMP.arm.r + 0.5)
-  add('beside the arm, not in it', armGap > 0.2 && armGap < 6, `${armGap.toFixed(1)} mm`)
+  add('clear of the arm', armGap > 0.2, `${armGap.toFixed(1)} mm`)
   const F = shadeFrame()
   const S = LAMP.shade
   let shade = 1e9
@@ -213,9 +214,9 @@ export function checkWumpus() {
     if (t >= 0 && t <= S.h) shade = Math.min(shade, r - (S.rTop + (S.rBottom - S.rTop) * (t / S.h)))
     else if (t < 0 && t > -LAMP.cap.h) shade = Math.min(shade, r - LAMP.cap.r)
   }
-  add('clear of the shade and cap', shade > 5, `${shade.toFixed(0)} mm`)
+  add('clear of the shade and cap', shade > 5, shade > 1e8 ? 'nowhere beside it' : `${shade.toFixed(0)} mm`)
   const topY = Math.max(...worldTips.map((t) => t.y))
-  // (the hook is in the arm's plane, which it sits beside: 'beside the arm' covers it) the finial's urn tops the pole
+  // (the hook is in the arm's plane, which it sits beside: 'clear of the arm' covers it) the finial's urn tops the pole
   add('under the finial', topY < LAMP.pole.top - 10, `leaves ${(LAMP.pole.top - topY).toFixed(0)} mm below it`)
   return results
 }
