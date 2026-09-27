@@ -127,12 +127,29 @@ export function shapePoints(step = 12) {
 export const PERCH_SIT = 0.5 // its bottom over the clip's top
 export const PERCH_Y = CLIP_TOP + HEAD.b + PERCH_SIT
 export const PERCH_GAP = 0.8 // between its back and the pole's collider
+let perchX: number | null = null
 export function perch() {
   const lateral = LAMP.arm.offset / 2 // the pole and the leg, either side of its middle
-  const back = front(HEAD, lateral, 0).p.z // how far back it reaches there (it's symmetric)
-  const x = LAMP.pole.r + 1 + back + PERCH_GAP // (the pole's collider is 1 mm fatter than the pole)
   const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2) // its +Z to the lamp's +X
-  return new Matrix4().compose(new Vector3(x, PERCH_Y, lateral), q, new Vector3(1, 1, 1))
+  if (perchX === null) {
+    // back it up until the nearest of its back is PERCH_GAP off the pole's collider and the leg's
+    // (the tubes are round and its back bulges between them: found by halving, not by formula)
+    const back = shapePoints(16).map((p) => p.clone().applyQuaternion(q))
+    const tubes = [
+      { z: 0, r: LAMP.pole.r + 1 }, // (the colliders are a little fatter than the tubes)
+      { z: LAMP.arm.offset, r: LAMP.arm.r + 0.5 },
+    ]
+    const gap = (x: number) => Math.min(...back.map((p) => Math.min(...tubes.map((t) => Math.hypot(p.x + x, p.z + lateral - t.z) - t.r))))
+    let lo = 0
+    let hi = 80
+    for (let i = 0; i < 40; i++) {
+      const m = (lo + hi) / 2
+      if (gap(m) < PERCH_GAP) lo = m
+      else hi = m
+    }
+    perchX = hi
+  }
+  return new Matrix4().compose(new Vector3(perchX, PERCH_Y, lateral), q, new Vector3(1, 1, 1))
 }
 
 /** The spec's own check: geometry that must hold before anything is built. */

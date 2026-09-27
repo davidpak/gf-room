@@ -28,7 +28,9 @@ const deg = (d: number) => (d * Math.PI) / 180
  *             its top (both photos): it is its own item now (../charger/spec.ts), plugged in there
  *
  * Proportions from lamp-arm.webp: the shade's top is ~0.42 of its bottom width, its height ~0.76;
- * the hook is ~65 wide; the shade's centre hangs ~90 in front of the pole. Heights from
+ * the hook is ~65 wide. From room-desk-wall.jpg (the pole ⌀18 is 55 px there): the arm's rising leg
+ * stands ~55 out from the pole, centre to centre, sweeping out of the collar in a long, easy S over
+ * ~75 of rise; so the shade hangs ~115 in front of the pole, for the hook to keep its width. Heights from
  * lamp-desk.webp against the 13" MacBook (screen top ~210 above the desk): shade bottom ~310,
  * spike top ~600.
  *
@@ -47,10 +49,10 @@ export const LAMP = {
   arm: {
     r: 6, // thinner than the pole
     collarY: 330, // where it leaves the pole: about level with the shade's bottom
-    offset: 30, // its rising leg, centre to centre from the pole (close, but not cramped)
+    offset: 52, // its rising leg, centre to centre from the pole (a hand's width apart, as in the photos)
     peakY: 562, // top of the hook
   },
-  shade: { rTop: 44, rBottom: 106, h: 162, topY: 470, reach: 100, tilt: deg(18), rimTop: 2, rimBottom: 2.8 },
+  shade: { rTop: 44, rBottom: 106, h: 162, topY: 470, reach: 115, tilt: deg(18), rimTop: 2, rimBottom: 2.8 },
   cap: { r: 24, h: 22 },
   bulbDepth: 72, // bulb centre, below the shade's top along its axis
   outlet: {
@@ -82,8 +84,9 @@ export function armPoints() {
   const lead = capTop.clone().addScaledVector(axis, -24) // straight run into the cap, along the shade's axis
   return [
     new Vector3(0, A.collarY, pr), // out of the collar
-    new Vector3(0, A.collarY + 16, pr + 6),
-    new Vector3(0, A.collarY + 42, A.offset), // the bottom of the S
+    new Vector3(0, A.collarY + 18, pr + 7),
+    new Vector3(0, A.collarY + 50, A.offset - 8), // the bottom of the S: a long, easy sweep out
+    new Vector3(0, A.collarY + 80, A.offset),
     new Vector3(0, A.peakY - 58, A.offset), // up beside the pole
     new Vector3(0, A.peakY - 20, A.offset + 6),
     new Vector3(0, A.peakY, (A.offset + lead.z) / 2), // over the top of the hook
