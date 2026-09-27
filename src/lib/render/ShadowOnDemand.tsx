@@ -7,7 +7,8 @@ type ShadowLight = Light & { shadow?: LightShadow }
 /**
  * Shadow maps are only redrawn when something that casts a shadow actually changed: moved,
  * turned, scaled, appeared, disappeared (a wall fading), or an instanced mesh updated (the
- * blinds tilting). The room is still most of the time, so this skips almost all shadow work.
+ * blinds tilting), or a mesh reshaped in place (a cable drawn over its moving links). The room is
+ * still most of the time, so this skips almost all shadow work.
  *
  * Generic on purpose: nothing needs to report its motion. Each frame it compares every caster's
  * world matrix + visibility with last frame (with a small tolerance, so springs settling forever
@@ -29,6 +30,7 @@ export function ShadowOnDemand() {
   const casters = useRef<Object3D[]>([])
   const snap = useRef<Float32Array>(new Float32Array(0))
   const versions = useRef<number[]>([])
+  const shapes = useRef<number[]>([]) // each caster's vertex positions version (reshaped in place)
   const lights = useRef<ShadowLight[]>([])
 
   useEffect(() => {
@@ -64,6 +66,7 @@ export function ShadowOnDemand() {
       casters.current = list
       snap.current = new Float32Array(list.length * 17)
       versions.current = list.map(() => -1)
+      shapes.current = list.map(() => -1)
       changed = true
     }
     if (!sameL || nl !== lights.current.length) {
@@ -100,6 +103,11 @@ export function ShadowOnDemand() {
       if (im && im.version !== versions.current[i]) {
         changed = true
         versions.current[i] = im.version
+      }
+      const pos = (o as Mesh).geometry?.attributes?.position as { version: number } | undefined
+      if (pos && pos.version !== shapes.current[i]) {
+        changed = true
+        shapes.current[i] = pos.version
       }
     })
     if (changed) gl.shadowMap.needsUpdate = true

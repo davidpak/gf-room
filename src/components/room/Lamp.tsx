@@ -24,6 +24,7 @@ import {
   type SpotLight,
 } from 'three'
 import { cozy, useCozy } from './cozy'
+import { usePower } from '../../lib/power'
 import { CapsuleCollider, ConvexHullCollider, CylinderCollider } from '@react-three/rapier'
 import { FollowCollider } from '../../lib/physics/FollowCollider'
 import { PAL } from '../../lib/palette'
@@ -166,7 +167,8 @@ const BULB_ON = new Color('#fff1cf')
 const LINING_ON = new Color('#fff0d2')
 const LINING_OFF = new Color('#cdbf9f')
 export function Lamp({ solid = true }: { solid?: boolean }) {
-  const on = useCozy().lamp
+  const switched = useCozy().lamp // the rocker
+  const on = switched && usePower().lamp // lit only while it's plugged in too
   const glow = useRef({ x: on ? 1 : 0 })
   const spot = useRef<SpotLight>(null)
   const spill = useRef<PointLight>(null)
@@ -297,7 +299,7 @@ export function Lamp({ solid = true }: { solid?: boolean }) {
           </group>
         ))}
         {/* the small black rocker at the front, lying east-west: O on the left, I on the right */}
-        <Rocker on={on} mat={mat} />
+        <Rocker on={switched} mat={mat} />
         {/* the back outlet, where the charger stands (the room's string lights take their power from here) */}
         <group ref={plug} position={[0, B.top, -B.ring]} />
         <mesh geometry={geo.pole} material={mat.metal} castShadow />

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Hum } from './hum'
+import { power } from './power'
 
 /** FEZIBO 47.2 x 23.6: 28.3 in to 46.5 in. Motor state lives in a ref; nothing re-renders per frame. */
 export const IN = 25.4 // mm
@@ -74,6 +75,11 @@ export function useDeskMotor(keyboard = true) {
 
   useFrame((_, dt) => {
     let v = 0
+    if (!power.get().desk) {
+      // unplugged: dead
+      dir.current = 0
+      goal.current = null
+    }
     if (dir.current !== 0) {
       goal.current = null
       v = dir.current * SPEED

@@ -15,7 +15,9 @@ import { SeatedDoll, SEATED } from '../doll/SeatedDoll'
 import { LiveCharger, type ChargerSetup, type ChargerState } from '../charger/ChargerPhysics'
 import { CHARGER, LAMP_BACK, cablePoints, lampOutlets } from '../charger/spec'
 import { LAMP } from '../lamp/spec'
-import { PowerCord, WallOutlet } from '../power/PowerCord'
+import { PLUGS, WallOutlet, cordRoute, plugBack } from '../power/PowerCord'
+import { LiveCord, type CordSetup, type Socket } from '../power/LiveCord'
+import { power } from '../../lib/power'
 
 // Rina's lamp on the back-right corner, and David (crocheted) sitting against its base
 const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
@@ -31,7 +33,16 @@ const DOLL_R = 110 - SEATED.backZ - 4 // his back against the rim of the lamp's 
 const OUTLET_AT: [number, number, number] = [450, 300, -DESK.top.d / 2 - 80]
 const LAMP_OUTLETS = lampOutlets()
 const LAMP_M = new Matrix4().makeRotationY(LAMP_YAW).setPosition(...LAMP_AT) // lamp frame -> desktop frame
-const CORD_R = 2.8
+const CORD_R = PLUGS[2].cord
+const MOTOR_X = DESK.legX - DESK.outer.w / 2 - DESK.motor.r - 2 // as Desk draws the motor
+const MOTOR_Y = STACK.bracketBottom - DESK.motor.len - (DESK.topUnder + DESK.top.t) // its bottom, below the desktop
+/**
+ * Where the cords wander on the floor (x, z): a loose zigzag of slack in open floor (the lamp's
+ * between the right foot and the desk's edge, the desk's under the middle), clear of the foot. Sized
+ * so each lies naturally at the desk's lowest, with plenty to spare as it goes up.
+ */
+const LAMP_VIA: [number, number][] = [[560, -230], [472, -120], [560, -10], [472, 100], [455, -200]]
+const DESK_VIA: [number, number][] = [[300, 100], [180, 40], [300, -60], [180, -160], [340, -325]]
 /**
  * The charger's cable on the desk: out of its top, over its face toward the lamp's left (away from
  * the back corner), across the base and off it, then a loose loop round the far side of David out
@@ -84,9 +95,9 @@ function DeskWithMotor() {
   // the lamp's cord: out of the back of its base, across the desk and over its back edge
   const lampCord = useMemo(() => {
     const out = (d: number, y: number) => new Vector3(0, y, -d).applyMatrix4(LAMP_M)
-    const a = out(LAMP.base.r - 2, 4)
-    const b = out(LAMP.base.r + 8, CORD_R + 0.5)
-    const c = out(LAMP.base.r + 18, CORD_R)
+    const a = out(LAMP.base.r + 3, 3.5) // (just outside the base: the cord leaves its side)
+    const b = out(LAMP.base.r + 11, CORD_R + 0.5)
+    const c = out(LAMP.base.r + 21, CORD_R)
     const e = DESK.top.edge
     const back = -DESK.top.d / 2
     const x = c.x + 6
@@ -104,8 +115,8 @@ function DeskWithMotor() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // the desk's cord: out of the bottom of the motor under the top, straight down
   const deskCord = useMemo(() => {
-    const x = DESK.legX - DESK.outer.w / 2 - DESK.motor.r - 2 // as Desk draws the motor
-    const y = STACK.bracketBottom - DESK.motor.len - (DESK.topUnder + DESK.top.t)
+    const x = MOTOR_X
+    const y = MOTOR_Y
     return (): Vector3[] =>
       onTop([
         [x, y + 2, DESK.beam.z],
@@ -113,6 +124,49 @@ function DeskWithMotor() {
         [x, y - 30, DESK.beam.z],
       ])
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the two cords: real, unpluggable; the lamp and the desk only work while they're in the wall
+  const cords = useMemo(() => {
+    const sockets = (): Socket[] =>
+      [lampSocket, deskSocket].map((r, i) => {
+        r.current!.updateWorldMatrix(true, false)
+        return { id: i ? 'bottom' : 'top', frame: r.current!.matrixWorld.clone() }
+      })
+    const backward = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI) // (the lamp's cord leaves along its -Z)
+    const down = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), new Vector3(0, -1, 0))
+    const moving = () => motor.velocity !== 0
+    const lampCordSetup: CordSetup = {
+      id: 'lamp',
+      anchor: () => {
+        const l = lamp.current!
+        l.updateWorldMatrix(true, false)
+        return { p: new Vector3(0, 3.5, -(LAMP.base.r + 3)).applyMatrix4(l.matrixWorld), q: new Quaternion().setFromRotationMatrix(l.matrixWorld).multiply(backward) }
+      },
+      run: (socket) => cordRoute({ from: lampCord(), via: LAMP_VIA, socket, side: 1, back: plugBack(2), r: PLUGS[2].cord }),
+      sockets,
+      start: 0,
+      length: 2150,
+      prongs: 2,
+      onPower: (on) => power.set('lamp', on),
+      moving,
+    }
+    const deskCordSetup: CordSetup = {
+      id: 'desk',
+      anchor: () => {
+        const t = top.current!
+        t.updateWorldMatrix(true, false)
+        return { p: new Vector3(MOTOR_X, MOTOR_Y + 2, DESK.beam.z).applyMatrix4(t.matrixWorld), q: down }
+      },
+      run: (socket) => cordRoute({ from: deskCord(), via: DESK_VIA, socket, side: -1, back: plugBack(3), r: PLUGS[3].cord }),
+      sockets,
+      start: 1,
+      length: 1750,
+      prongs: 3,
+      onPower: (on) => power.set('desk', on),
+      moving,
+    }
+    return { lamp: lampCordSetup, desk: deskCordSetup }
+  }, [motor]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -127,9 +181,9 @@ function DeskWithMotor() {
       </Desk>
       <LiveCharger state={charger} set={(p) => setCharger((s) => ({ ...s, ...p }))} setup={setup} />
       <WallOutlet position={OUTLET_AT} top={lampSocket} bottom={deskSocket} />
-      <PowerCord from={lampCord} socket={lampSocket} side={1} prongs={2} radius={CORD_R} />
+      <LiveCord setup={cords.lamp} />
       {/* under the desk it keeps inside the right foot, then round behind it to the wall */}
-      <PowerCord from={deskCord} via={[[352, -300]]} socket={deskSocket} side={-1} prongs={3} radius={3.2} />
+      <LiveCord setup={cords.desk} />
     </>
   )
 }
@@ -137,7 +191,9 @@ function DeskWithMotor() {
 function Scene() {
   return (
     <>
-      <ToyLights extent={950} mapSize={4096} />
+      {/* small biases (the depth one is a share of the shadow camera's 6 m depth: 0.00008 is 0.5 mm): thin
+          cables (4 mm) lying on the desk keep their shadows */}
+      <ToyLights extent={950} mapSize={4096} normalBias={0.5} bias={-0.00008} />
       <Stylize />
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[2600, 96]} />

@@ -12,7 +12,7 @@ export const TOY = {
   key: '#fff1e2',
 }
 
-export function ToyLights({ extent = 600, mapSize = 2048, normalBias }: { extent?: number; mapSize?: number; normalBias?: number }) {
+export function ToyLights({ extent = 600, mapSize = 2048, normalBias, bias = -0.0004 }: { extent?: number; mapSize?: number; normalBias?: number; bias?: number }) {
   const k = extent / 600
   return (
     <>
@@ -25,7 +25,7 @@ export function ToyLights({ extent = 600, mapSize = 2048, normalBias }: { extent
         color={TOY.key}
         shadow-mapSize={[mapSize, mapSize]}
         shadow-radius={6}
-        shadow-bias={-0.0004}
+        shadow-bias={bias}
         shadow-normalBias={normalBias ?? 2 * k}
         shadow-camera-left={-extent}
         shadow-camera-right={extent}

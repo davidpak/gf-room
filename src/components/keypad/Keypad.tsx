@@ -6,6 +6,7 @@ import { Color, DoubleSide, ExtrudeGeometry, MeshBasicMaterial, MeshStandardMate
 import { createMapleMaterial } from '../../lib/mapleMaterial'
 import { chevron, roundedPolygon, roundedRect, roundedTriangle } from '../../lib/shapes'
 import { IN, type KeypadButton, type Motor } from '../../lib/motor'
+import { power } from '../../lib/power'
 import { FACE, KP } from './spec'
 
 const FONT = '/fonts/helvetiker_bold.typeface.json'
@@ -168,14 +169,15 @@ function Screen({ motor }: { motor: Motor }) {
   const last = useRef('')
 
   useFrame((_, dt) => {
-    const t = (motor.height / IN).toFixed(1)
+    const live = power.get().desk // unplugged: the display goes dark
+    const t = live ? (motor.height / IN).toFixed(1) : ''
     if (t !== last.current && text.current) {
       last.current = t
       text.current.text = t
       text.current.sync()
     }
     // digits brighten while the motor runs
-    const target = motor.velocity !== 0 ? 2.4 : 1.6
+    const target = !live ? 0 : motor.velocity !== 0 ? 2.4 : 1.6
     const c = digits.color
     const k = Math.min(1, dt * 8)
     const base = DIGIT

@@ -3,6 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { CuboidCollider, CylinderCollider, RigidBody, RoundCuboidCollider, useBeforePhysicsStep, useRapier, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
 import { Flight, GLIDE, Path, planRoute, smoother } from '../../lib/physics/route'
 import { stepAlpha } from '../../lib/physics/World'
+import { ContactShadow } from '../../lib/render/contactShadow'
 import { Box3, CatmullRomCurve3, Group, Matrix4, Quaternion, Vector3 } from 'three'
 import { grabbable, isHolding } from '../../lib/physics/Hand'
 import { GROUP, Tube, createRope, groups, type Joint, type Rope } from '../../lib/physics/rope'
@@ -165,6 +166,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
   })
   const farHome = useRef<{ p: Vector3; q: Quaternion } | null>(null) // where the far plug lay, in the home frame (it rides the desk)
   const tube = useMemo(() => new Tube(LINKS + 1, 3, 10), [])
+  const shade = useMemo(() => new ContactShadow(world, rapier, LINKS + 1), [world, rapier]) // its soft shadow on what it lies on
   const pts = useRef<Vector3[]>([])
   const uLen = useMemo(() => ({ value: CHARGER.cable.length }), [])
   const woven = useMemo(() => wovenMaterial(uLen), [uLen])
@@ -696,6 +698,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
     const alpha = Math.min(1, stepAlpha())
     tube.update(s.rope.points(pts.current, alpha), R)
     tube.visibleFrom(drawState.current.visibleFrom)
+    shade.update(pts.current, R, drawState.current.visibleFrom)
     farMesh.current.scale.setScalar(Math.max(1e-3, drawState.current.farScale))
     farMesh.current.visible = drawState.current.farScale > 0.01
     ;[
@@ -1009,6 +1012,7 @@ export function LiveCharger({ state, set, setup = STAND_SETUP }: { state: Charge
         </group>
       </RigidBody>
       <mesh geometry={tube.geometry} material={woven} castShadow receiveShadow {...cableGrab} />
+      <primitive object={shade.mesh} />
       <group ref={nearMesh} {...nearGrab}>
         <group position={[-SLEEVE, 0, 0]}>
           <UsbCPlug onClick={clickNear} />

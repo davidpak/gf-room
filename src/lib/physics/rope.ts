@@ -242,7 +242,21 @@ export class Tube {
     this.geometry.setDrawRange(Math.max(0, i) * this.sub * this.radial * 6, Infinity)
   }
 
+  private last: Float32Array | null = null
   update(p: Vector3[], r: number) {
+    // unchanged since last time (a cable at rest): leave it, so nothing redraws for nothing (its shadow)
+    const n0 = p.length
+    if (!this.last || this.last.length !== n0 * 3 + 1) this.last = new Float32Array(n0 * 3 + 1).fill(NaN)
+    let moved = !(Math.abs(this.last[n0 * 3] - r) <= 1e-4) // (NaN at first: always drawn the first time)
+    for (let i = 0; i < n0 && !moved; i++)
+      if (!(Math.abs(this.last[i * 3] - p[i].x) <= 0.01 && Math.abs(this.last[i * 3 + 1] - p[i].y) <= 0.01 && Math.abs(this.last[i * 3 + 2] - p[i].z) <= 0.01)) moved = true
+    if (!moved) return
+    for (let i = 0; i < n0; i++) {
+      this.last[i * 3] = p[i].x
+      this.last[i * 3 + 1] = p[i].y
+      this.last[i * 3 + 2] = p[i].z
+    }
+    this.last[n0 * 3] = r
     const { c, sub, radial } = this
     const n = p.length
     let k = 0
