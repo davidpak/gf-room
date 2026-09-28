@@ -1,0 +1,130 @@
+/* the Quad's page: its title, the hint by a photo, looking at one (./QuadStage.tsx) */
+.quad-loading {
+  position: fixed;
+  inset: 0;
+  background: #f3dde6;
+}
+.quad-title {
+  position: fixed;
+  left: 50%;
+  top: 34px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: #6b4f63;
+  font-family: 'Gaegu', 'Nunito', cursive;
+  pointer-events: none;
+  animation: quad-title 5s ease-out both;
+}
+.quad-title b {
+  font-size: 44px;
+  line-height: 1;
+}
+.quad-title span {
+  font-size: 22px;
+  opacity: 0.8;
+}
+@keyframes quad-title {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  15%,
+  70% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.quad-near {
+  position: fixed;
+  left: 50%;
+  bottom: 70px;
+  transform: translate(-50%, 10px);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #5a4d5c;
+  font: 700 20px 'Gaegu', 'Nunito', cursive;
+  opacity: 0;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+  pointer-events: none;
+  box-shadow: 0 6px 20px rgba(120, 60, 90, 0.15);
+}
+.quad-near.on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.quad-near kbd {
+  font: 600 14px/1 'Nunito', sans-serif;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #f3dde6;
+}
+.quad-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(60, 35, 55, 0.45);
+  backdrop-filter: blur(6px);
+  animation: quad-fade 0.3s ease-out both;
+}
+.quad-viewer figure {
+  margin: 0;
+  padding: 18px 18px 0;
+  background: #fbf8f2;
+  border-radius: 4px;
+  box-shadow: 0 30px 70px rgba(40, 10, 30, 0.35);
+  animation: quad-pop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+.quad-viewer img {
+  display: block;
+  max-height: 72vh;
+  max-width: 80vw;
+}
+.quad-viewer figcaption {
+  padding: 14px 0 18px;
+  text-align: center;
+  color: #5a4d5c;
+  font: 700 28px 'Gaegu', 'Nunito', cursive;
+}
+.quad-viewer-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #fff;
+  font: 600 14px 'Nunito', sans-serif;
+}
+.quad-viewer-nav button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  color: #5a4d5c;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+@keyframes quad-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes quad-pop {
+  from {
+    opacity: 0;
+    transform: translateY(16px) rotate(-2deg) scale(0.96);
+  }
+}

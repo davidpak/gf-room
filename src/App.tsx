@@ -12,9 +12,10 @@ import { MintsCheck, MintsStage } from './components/mints/MintsStage'
 import { TissuesCheck, TissuesStage } from './components/tissues/TissuesStage'
 import { LaptopCheck, LaptopStage } from './components/laptop/LaptopStage'
 import { RinaOSStage } from './components/rinaos/RinaOSStage'
+import { QuadStage } from './components/quad/QuadStage'
 import { useOsMode } from './components/rinaos/mode'
 
-// ?part=room|doll|closet|bed|desk|lamp|charger|keypad|wumpus|mints|tissues|laptop|rinaos|prompt, add &check for the verification sheet
+// ?part=room|doll|closet|bed|desk|lamp|charger|keypad|wumpus|mints|tissues|laptop|rinaos|quad|prompt, add &check for the verification sheet
 const params = new URLSearchParams(location.search)
 const part = params.get('part') ?? 'room'
 const check = params.has('check')
@@ -33,6 +34,7 @@ const PARTS = {
   tissues: { stage: TissuesStage, check: TissuesCheck, title: 'Kleenex', hint: 'click the tissue to pull one · left-drag to carry, right-drag to turn · press the wheel and drag to look' },
   laptop: { stage: LaptopStage, check: LaptopCheck, title: 'MacBook Pro 13"', hint: 'click the lid to shut it or open it · left-drag to carry, right-drag to turn · press the wheel and drag to look' },
   rinaos: { stage: RinaOSStage, check: RinaOSStage, title: 'RinaOS', hint: 'her laptop, flat: open OneNote from the dock · click anywhere on a page to type · the ribbon: Home, Insert, Draw, View' },
+  quad: { stage: QuadStage, check: QuadStage, title: 'The Quad', hint: 'the first piece of the Quad: a cherry, a bench, a lamp · drag to look round · scroll to come closer' },
   prompt: { stage: PromptStage, check: PromptStage, title: 'Fix-it prompts', hint: 'click a prompt · carry a block away and its prompt comes back when it settles · press the wheel and drag to look' },
 } as const
 

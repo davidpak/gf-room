@@ -10,3 +10,7 @@ blender/bake/*.log
 
 # local tool settings
 .claude/
+
+# her photos: the originals stay local (photos/), and so do the web copies for now (public/photos/)
+photos/
+public/photos/
