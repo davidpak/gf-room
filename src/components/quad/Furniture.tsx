@@ -5,53 +5,59 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { bruno, shared } from './bruno'
 
 /**
- * The Quad's furniture, from the photos: the park bench (weathered wooden slats on dark green cast-
- * iron ends, the arms rolled over in a scroll) and the black lamp post (a stepped foot, a fluted
+ * The Quad's furniture, from the photos: the park bench (all weathered teak, slatted, flat arms on
+ * square posts) and the black lamp post (a stepped foot, a fluted
  * column, a lantern of warm glass under a little roof), which lights the blossom round it.
  */
-const IRON = bruno({ color: '#22382e' })
-const WOOD = ['#b9824f', '#a9713f', '#c28c5a', '#b27a47'].map((c) => bruno({ color: c }))
+/** weathered teak, the one wood all through, gone a light grey-brown */
+const TEAK = bruno({ color: '#aa9c8b' })
 
-/** a bench end in profile (z forward, y up): front leg, the seat rail, the back rising and leaning,
- *  the arm over the top rolled into a scroll at the front */
-function benchEnd() {
-  const s = new Shape()
-  s.moveTo(46, 0)
-  s.lineTo(58, 0)
-  s.lineTo(54, 92)
-  s.lineTo(60, 150)
-  s.bezierCurveTo(64, 172, 44, 180, 38, 166)
-  s.bezierCurveTo(34, 156, 46, 150, 50, 158) // (the scroll)
-  s.lineTo(46, 150)
-  s.lineTo(-40, 152)
-  s.lineTo(-58, 236)
-  s.bezierCurveTo(-62, 246, -76, 246, -74, 234)
-  s.lineTo(-58, 150)
-  s.lineTo(-66, 0)
-  s.lineTo(-54, 0)
-  s.lineTo(-46, 86)
-  s.lineTo(40, 86)
-  s.lineTo(46, 0)
-  const g = new ExtrudeGeometry(s, { depth: 12, bevelEnabled: true, bevelThickness: 2.5, bevelSize: 2.5, bevelSegments: 2, curveSegments: 10 })
-  g.translate(0, 0, -6)
-  g.rotateY(Math.PI / 2) // (the profile's x → the bench's z, its thickness along x)
-  return g
+type Part = { p: [number, number, number]; s: [number, number, number]; r?: number }
+/** the UW bench, all wood (from the photos): square posts, the front ones up to flat arms with a
+ *  rounded end, the back ones raked back up to a thick top rail; seat slats along its length; a back
+ *  of close upright slats between two rails; side rails and a low stretcher at each end */
+function benchParts(L: number): Part[] {
+  const parts: Part[] = []
+  const ends = [-1, 1].map((e) => e * (L / 2 - 12))
+  const SEAT = 92
+  for (const x of ends) {
+    parts.push({ p: [x, 75, 52], s: [16, 150, 16] }) // front post, up to the arm
+    parts.push({ p: [x, SEAT / 2, -50], s: [16, SEAT, 16] }) // back post, to the seat
+    parts.push({ p: [x + Math.sign(x) * 2, 152, 2], s: [20, 12, 140] }) // the arm
+    parts.push({ p: [x, SEAT - 16, 0], s: [14, 22, 110] }) // side rail under the seat
+    parts.push({ p: [x, 20, 0], s: [12, 12, 104] }) // low stretcher
+  }
+  // the seat: slats along it, and the rail under its front
+  for (let k = 0; k < 5; k++) parts.push({ p: [0, SEAT, -38 + k * 20], s: [L - 20, 8, 16] })
+  parts.push({ p: [0, SEAT - 18, 50], s: [L - 30, 18, 12] })
+  return parts
+}
+/** the back, in its own frame (raked back from the seat's back edge): posts, two rails, upright slats */
+function backParts(L: number): Part[] {
+  const parts: Part[] = []
+  for (const x of [-1, 1].map((e) => e * (L / 2 - 12))) parts.push({ p: [x, 70, 0], s: [16, 140, 16] })
+  parts.push({ p: [0, 18, 0], s: [L - 20, 14, 12] }) // the low rail
+  parts.push({ p: [0, 132, 1], s: [L - 8, 22, 18] }) // the thick top rail
+  const n = 15
+  for (let k = 0; k < n; k++) parts.push({ p: [-(L - 60) / 2 + (k * (L - 60)) / (n - 1), 75, 0], s: [11, 100, 6] })
+  return parts
 }
 
 export function Bench({ position = [0, 0, 0] as [number, number, number], rotation = 0 }) {
   const L = 440
-  const end = useMemo(benchEnd, [])
-  const slat = useMemo(() => new RoundedBoxGeometry(1, 1, 1, 2, 0.18), [])
-  const seat = [-38, -12, 14, 40].map((z, i) => ({ z, y: 94, w: 22, t: 9, tilt: 0, m: WOOD[i % 4] }))
-  const back = [0, 1, 2].map((i) => ({ z: -47 - i * 7.5, y: 150 + i * 30, w: 22, t: 9, tilt: -0.24, m: WOOD[(i + 2) % 4] }))
+  const box = useMemo(() => new RoundedBoxGeometry(1, 1, 1, 2, 0.2), [])
+  const parts = useMemo(() => benchParts(L), [])
+  const back = useMemo(() => backParts(L), [])
+  const mesh = (b: Part, i: number) => <mesh key={i} geometry={box} material={TEAK} position={b.p} scale={b.s} castShadow receiveShadow />
   return (
     <group position={position} rotation={[0, rotation, 0]}>
-      {[-1, 1].map((s) => (
-        <mesh key={s} geometry={end} material={IRON} position={[s * (L / 2 - 30), 4, 0]} castShadow receiveShadow />
-      ))}
-      {[...seat, ...back].map((b, i) => (
-        <mesh key={i} geometry={slat} material={b.m} position={[0, 4 + b.y, b.z]} rotation={[b.tilt, 0, 0]} scale={[L, b.t, b.w]} castShadow receiveShadow />
-      ))}
+      <group position={[0, 25, 0]}>{/* (on the pad's bricks) */}
+        {parts.map(mesh)}
+        {/* (the back raked back from the seat, about the back posts' tops) */}
+        <group position={[0, 92, -50]} rotation={[-0.16, 0, 0]}>
+          {back.map(mesh)}
+        </group>
+      </group>
     </group>
   )
 }

@@ -26,7 +26,7 @@ const REVERSE = 1100
 const ACCEL = 3000
 const BRAKE = 5200
 const STEER = 0.6
-const TOP = typeof location !== 'undefined' && new URLSearchParams(location.search).get('view') === 'top'
+const VIEW = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('view') : null
 const C = { body: '#9fdcc8', roof: '#fbeedd', trim: '#f4a9b4', wheel: '#2b2833', hub: '#fbeedd', glass: '#3b4466', light: '#fff4c8' }
 
 const keys = new Set<string>()
@@ -152,7 +152,13 @@ export function Car({ state, obstacles, paused }: { state: { current: CarState }
     // Bruno's camera: high, from the front and a little to the side, always the same way round
     camera.position.set(camAt.current.x + 1500 * z, 3300 * z, camAt.current.z + 3900 * z)
     camera.lookAt(camAt.current.x, 80, camAt.current.z - 150)
-    if (TOP) {
+    if (VIEW === 'bench') {
+      // (?view=bench: down low, in front of a bench on the walk)
+      const b = SET.benches[2]
+      camera.position.set(b.x + 380, 230, b.z + 560)
+      camera.lookAt(b.x, 110, b.z)
+    }
+    if (VIEW === 'top') {
       // (?view=top: straight down over the whole island, to hold up against the overhead photo)
       camera.position.set((SET.island.x0 + SET.island.x1) / 2, 15000, (SET.island.z0 + SET.island.z1) / 2 + 1)
       camera.lookAt((SET.island.x0 + SET.island.x1) / 2, 0, (SET.island.z0 + SET.island.z1) / 2)

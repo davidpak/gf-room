@@ -27,24 +27,22 @@ export const SET = {
     { x: 1680, z: -1420, model: 0, rot: 5.1, scale: 1.05 },
     { x: 3120, z: -1450, model: 2, rot: 2.7, scale: 0.95 },
   ],
+  // along the walk's north side, evenly: a bench (each on its own pad of brick off the walk), a
+  // lamp, a bench, a lamp…
   lamps: [
-    { x: -2900, z: -2380 },
-    { x: -380, z: -2380 },
-    { x: 2280, z: -2380 },
+    { x: -2600, z: -2330 },
+    { x: -1200, z: -2330 },
+    { x: 200, z: -2330 },
+    { x: 1600, z: -2330 },
   ],
-  benches: [
-    { x: -1640, z: -2370, rot: 0 },
-    { x: -1100, z: -2370, rot: 0 },
-    { x: 1000, z: -2370, rot: 0 },
-    { x: 1540, z: -2370, rot: 0 },
-  ],
+  benches: [-3300, -1900, -500, 900, 2300].map((x) => ({ x, z: -2385, rot: 0 })),
   // the building along the north edge (cut off where the island ends), its wing stepping out; the
   // dark hedge before the wing; bushes at the building's foot
   building: {
     h: 1200,
     blocks: [
-      { x0: -4700, x1: 2960, z0: -3700, z1: -3450 },
-      { x0: 1360, x1: 2960, z0: -3700, z1: -3040 },
+      { x0: -4640, x1: 2960, z0: -3670, z1: -3450 },
+      { x0: 1360, x1: 2960, z0: -3670, z1: -3040 },
     ],
   },
   hedges: [{ x0: 1440, x1: 3300, z: -2880, h: 360, d: 260 }],
@@ -75,8 +73,62 @@ export function walkDist(wk: Walk, x: number, z: number) {
   const t = Math.min(1, Math.max(0, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
   return Math.hypot(x - ax - dx * t, z - az - dz * t)
 }
-/** whether (x, z) is on a walk (the first `upTo` of them; `pad` past its edge) */
-export const onWalk = (x: number, z: number, pad = 0, upTo = SET.walks.length) => SET.walks.slice(0, upTo).some((wk) => walkDist(wk, x, z) < wk.w / 2 + pad)
+
+// ---- the paving as one shape: the walks and the benches' pads, run together with rounded corners
+// where they meet (a smooth union of their distance fields), cut to the island
+export type Pad = { x: number; z: number; w: number; d: number }
+/** each bench's pad: a rectangle of brick off the walk's edge, under the bench */
+export const PADS: Pad[] = SET.benches.map((b) => ({ x: b.x, z: -2340, w: 560, d: 340 }))
+const FILLET = 300 // (how round the corners where walks meet: mm)
+const PAD_FILLET = 60
+
+/** the signed distance from a walk's edge (negative on it) */
+export const walkSdf = (wk: Walk, x: number, z: number) => walkDist(wk, x, z) - wk.w / 2
+/** the signed distance from a pad's edge */
+export function padSdf(p: Pad, x: number, z: number) {
+  const dx = Math.abs(x - p.x) - p.w / 2
+  const dz = Math.abs(z - p.z) - p.d / 2
+  return Math.hypot(Math.max(dx, 0), Math.max(dz, 0)) + Math.min(Math.max(dx, dz), 0)
+}
+function smin(a: number, b: number, k: number) {
+  const h = Math.max(k - Math.abs(a - b), 0) / k
+  return Math.min(a, b) - h * h * k * 0.25
+}
+function islandSdf(x: number, z: number, inset: number) {
+  const { x0, x1, z0, z1, corner } = SET.island
+  const r = Math.max(1, corner - inset)
+  const dx = Math.abs(x - (x0 + x1) / 2) - ((x1 - x0) / 2 - inset - r)
+  const dz = Math.abs(z - (z0 + z1) / 2) - ((z1 - z0) / 2 - inset - r)
+  return Math.hypot(Math.max(dx, 0), Math.max(dz, 0)) + Math.min(Math.max(dx, dz), 0) - r
+}
+/** the signed distance from the paving's edge (negative on it) */
+export function paveSdf(x: number, z: number) {
+  let d = Infinity
+  for (const wk of SET.walks) d = smin(d, walkSdf(wk, x, z), FILLET)
+  for (const p of PADS) d = smin(d, padSdf(p, x, z), PAD_FILLET)
+  return Math.max(d, islandSdf(x, z, 30))
+}
+/** which shape a paved spot's bricks follow: the first walk it's on (so the main walks run straight
+ *  through a crossing), else a pad, else (in a rounded corner) whichever it's nearest. Walks are
+ *  0…, pads after them */
+export function paveOwner(x: number, z: number) {
+  const W = SET.walks.length
+  let best = -1
+  let bd = Infinity
+  for (let k = 0; k < W; k++) {
+    const d = walkSdf(SET.walks[k], x, z)
+    if (d < 0) return k
+    if (d < bd) [bd, best] = [d, k]
+  }
+  for (let k = 0; k < PADS.length; k++) {
+    const d = padSdf(PADS[k], x, z)
+    if (d < 0) return W + k
+    if (d < bd) [bd, best] = [d, W + k]
+  }
+  return best
+}
+/** whether (x, z) is on the paving (`pad` past its edge) */
+export const onWalk = (x: number, z: number, pad = 0) => paveSdf(x, z) < pad
 
 /** where tufts and petals keep off: the trunks' feet, the lamps' bases (x, z, r) */
 export const keepClear: [number, number, number][] = [...SET.trees.map((t) => [t.x, t.z, 130] as [number, number, number]), ...SET.lamps.map((l) => [l.x, l.z, 60] as [number, number, number])]

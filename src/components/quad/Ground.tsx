@@ -1,17 +1,18 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { BufferGeometry, CanvasTexture, BoxGeometry, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, InstancedMesh, Object3D, RepeatWrapping, SRGBColorSpace, Shape } from 'three'
+import { BufferGeometry, CanvasTexture, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, InstancedMesh, Object3D, RepeatWrapping, SRGBColorSpace, Shape } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from './bruno'
-import { SET, inIsland, keepClear, onWalk, type Walk } from './set'
+import { PADS, SET, inIsland, keepClear, onWalk, paveOwner, paveSdf, walkSdf } from './set'
 
 /**
  * The ground of the Quad's quarter (./set): an island of earth with a grass lip, a mown lawn on it
  * (soft mowing stripes, a gentle wash of greens, bare trodden earth under the cherries), chunky tufts
  * only where grass gathers (round the trees' feet, the benches' and the lamps', along the walks'
- * edges and the island's rim), little white clover flowers, the brick walks across it (UW's red
- * brick, laid in basketweave between a border course, each brick its own shade and a hair proud or
- * sunk), and the cherry petals: lying on the grass and the bricks, and a few still falling.
+ * edges and the island's rim), little white clover flowers, the brick walks across it and the benches'
+ * pads off them as one paving, rounded where they meet (UW's red brick, laid in basketweave inside a
+ * border course that follows the paving's edge all round, each brick its own shade and a hair proud or
+ * sunk, mortar between), and the cherry petals: lying on the grass and the bricks, and a few falling.
  */
 const _o = new Object3D()
 const _c = new Color()
@@ -93,6 +94,19 @@ function lawnTexture() {
       g.fillRect(ex - r, ey - r, r * 2, r * 2)
     }
   }
+  // the mortar under the paving (it shows in the joints between the bricks)
+  const img = g.getImageData(0, 0, W, H)
+  for (let py = 0; py < H; py++)
+    for (let px = 0; px < W; px++) {
+      const d = paveSdf(SET.island.x0 + (px + 0.5) * 8, SET.island.z0 + (py + 0.5) * 8)
+      if (d > 4) continue
+      const k = (py * W + px) * 4
+      const a = Math.min(1, (4 - d) / 8)
+      img.data[k] += (168 - img.data[k]) * a
+      img.data[k + 1] += (128 - img.data[k + 1]) * a
+      img.data[k + 2] += (116 - img.data[k + 2]) * a
+    }
+  g.putImageData(img, 0, 0)
   // a fine grain
   for (let i = 0; i < W * H * 0.03; i++) {
     g.fillStyle = rand() < 0.5 ? 'rgba(210,230,140,0.18)' : 'rgba(40,90,40,0.16)'
@@ -293,47 +307,174 @@ const CLOVER = bruno({ color: '#fbf6ee' })
 // ---- the brick walk
 const BRICKS = ['#c8664f', '#b95a47', '#d27a5c', '#a9503f', '#cf8466', '#bd6450', '#d98b6c']
 const BRICK = bruno({})
-const MORTAR = bruno({ color: '#7d5a55' })
-/** one walk's bricks, in its own frame: a border course down each edge, basketweave between (a
- *  brick 64 × 32: a basketweave square is two); none where an earlier walk already lies */
-function walkBricks(wk: Walk, k: number) {
-  const out: { x: number; z: number; w: number; d: number; a: number }[] = []
-  const [ax, az] = wk.a
-  const len = Math.hypot(wk.b[0] - ax, wk.b[1] - az)
-  const ux = (wk.b[0] - ax) / len
-  const uz = (wk.b[1] - az) / len
-  const a = Math.atan2(-uz, ux)
-  const put = (s: number, t: number, w: number, d: number) => out.push({ x: ax + ux * s - uz * t, z: az + uz * s + ux * t, w, d, a })
-  const B = 64
-  const half = wk.w / 2
-  const inner = half - 34
-  for (const side of [-1, 1]) for (let s = 0; s < len; s += B) put(s + B / 2, side * (half - 17), B - 3, 29)
-  const rows = Math.floor((inner * 2) / B)
-  const t0 = -(rows * B) / 2
-  for (let i = 0; i * B < len; i++)
-    for (let j = 0; j < rows; j++) {
-      const along = (i + j) % 2 === 0
-      for (const q of [0, 1]) {
-        if (along) put(i * B + B / 2, t0 + j * B + 16 + q * 32, B - 3, 29)
-        else put(i * B + 16 + q * 32, t0 + j * B + B / 2, 29, B - 3)
+/** the paving's bricks (a brick 64 × 32: a basketweave square is two). The border course: a brick
+ *  down each piece of the paving's edge, traced all round it (marching squares on its distance
+ *  field), so it follows the rounded corners too. Inside it, each walk's and pad's basketweave in its
+ *  own frame, a brick kept where it lies wholly inside the border and on its own shape's ground (./set
+ *  paveOwner), else its halves where they fit: cut bricks, as a paver would */
+type Brick = { x: number; z: number; w: number; d: number; a: number }
+const B = 64
+const BORDER = 34
+/** a course of bricks along where `field` crosses 0 (marching squares on a 64 mm grid over the
+ *  island), one brick a grid cell's worth of the line; `keep` picks which pieces of the line */
+function course(field: (x: number, z: number) => number, keep: (x: number, z: number, ax: number, az: number, bx: number, bz: number) => boolean = () => true) {
+  const out: Brick[] = []
+  const { x0, x1, z0, z1 } = SET.island
+  const C = 64
+  const nx = Math.ceil((x1 - x0) / C)
+  const nz = Math.ceil((z1 - z0) / C)
+  const f: number[] = []
+  for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) f.push(field(x0 + i * C, z0 + j * C))
+  const at = (i: number, j: number) => f[j * (nx + 1) + i]
+  for (let j = 0; j < nz; j++)
+    for (let i = 0; i < nx; i++) {
+      const v = [at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)]
+      const p = [
+        [x0 + i * C, z0 + j * C],
+        [x0 + (i + 1) * C, z0 + j * C],
+        [x0 + (i + 1) * C, z0 + (j + 1) * C],
+        [x0 + i * C, z0 + (j + 1) * C],
+      ]
+      const cross: [number, number][] = []
+      for (let e = 0; e < 4; e++) {
+        const a = v[e]
+        const b = v[(e + 1) % 4]
+        if (a < 0 !== b < 0) {
+          const t = a / (a - b)
+          const [ax, az] = p[e]
+          const [bx, bz] = p[(e + 1) % 4]
+          cross.push([ax + (bx - ax) * t, az + (bz - az) * t])
+        }
+      }
+      for (let k = 0; k + 1 < cross.length; k += 2) {
+        const [[ax, az], [bx, bz]] = [cross[k], cross[k + 1]]
+        const len = Math.hypot(bx - ax, bz - az)
+        if (len < 14 || !keep((ax + bx) / 2, (az + bz) / 2, ax, az, bx, bz)) continue
+        out.push({ x: (ax + bx) / 2, z: (az + bz) / 2, w: len - 3, d: 29, a: Math.atan2(-(bz - az), bx - ax) })
       }
     }
-  // (the strip either side of the weave, when the walk isn't a whole number of squares wide: running bond)
-  const gap = inner - rows * (B / 2)
-  if (gap > 12) for (const side of [-1, 1]) for (let s = 0; s < len; s += B) put(s + B / 2, side * (inner - gap / 2), B - 3, gap - 3)
-  return out.filter((b) => inIsland(b.x, b.z, 30) && !onWalk(b.x, b.z, 2, k))
+  return out
+}
+/** the border course, all round the paving's edge (its middle line 17 in) */
+const borderBricks = () => course((x, z) => paveSdf(x, z) + 17)
+/** the soldier course where a walk meets paving laid another way (a crossing walk, a bench's pad,
+ *  the rounded corners): along the walk's own edge, just inside it, so each weave ends on a
+ *  straight course of bricks, not ragged */
+function seamBricks() {
+  return SET.walks.flatMap((wk, k) =>
+    course(
+      (x, z) => walkSdf(wk, x, z) + 17,
+      (x, z, ax, az, bx, bz) => {
+        if (paveSdf(x, z) > -BORDER - 6 || paveOwner(x, z) !== k) return false
+        // (just across the walk's edge: paved, and laid another way)
+        let nx = -(bz - az)
+        let nz = bx - ax
+        const n = Math.hypot(nx, nz)
+        ;[nx, nz] = [nx / n, nz / n]
+        if (walkSdf(wk, x + nx, z + nz) < walkSdf(wk, x, z)) [nx, nz] = [-nx, -nz]
+        const [ox, oz] = [x + nx * 40, z + nz * 40]
+        return paveSdf(ox, oz) < -8 && paveOwner(ox, oz) !== k
+      },
+    ),
+  )
+}
+/** a shape's frame: where it starts, which way it runs, how long and wide, and how far past its
+ *  edges to lay weave (into the rounded corners) */
+function frames() {
+  return [
+    ...SET.walks.map((wk) => {
+      const len = Math.hypot(wk.b[0] - wk.a[0], wk.b[1] - wk.a[1])
+      return { ax: wk.a[0], az: wk.a[1], ux: (wk.b[0] - wk.a[0]) / len, uz: (wk.b[1] - wk.a[1]) / len, len, w: wk.w, over: 260 }
+    }),
+    ...PADS.map((p) => ({ ax: p.x - p.w / 2, az: p.z, ux: 1, uz: 0, len: p.w, w: p.d, over: 40 })),
+  ]
+}
+function weaveBricks() {
+  const out: Brick[] = []
+  frames().forEach((F, k) => {
+    const a = Math.atan2(-F.uz, F.ux)
+    const world = (s: number, t: number): [number, number] => [F.ax + F.ux * s - F.uz * t, F.az + F.uz * s + F.ux * t]
+    const wk = k < SET.walks.length ? SET.walks[k] : null
+    // whether a brick (along the frame: s, t its middle, ls × lt its size) lies inside the border, on
+    // its own shape's ground, and (on a walk) off the soldier course along the walk's edge
+    const inside = (x: number, z: number) => {
+      if (paveSdf(x, z) > -BORDER + 2 || paveOwner(x, z) !== k) return false
+      if (!wk) return true
+      const d = walkSdf(wk, x, z)
+      if (d < -BORDER + 2 || d > 0) return true
+      // (in the band along the walk's edge: clear only where the soldier course lies, i.e. across
+      // the edge is paving laid another way)
+      const e = 4
+      let gx = walkSdf(wk, x + e, z) - walkSdf(wk, x - e, z)
+      let gz = walkSdf(wk, x, z + e) - walkSdf(wk, x, z - e)
+      const g = Math.hypot(gx, gz) || 1
+      ;[gx, gz] = [gx / g, gz / g]
+      const [ox, oz] = [x + gx * (40 - d), z + gz * (40 - d)]
+      return !(paveSdf(ox, oz) < -8 && paveOwner(ox, oz) !== k)
+    }
+    const fits = (s: number, t: number, ls: number, lt: number) =>
+      [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ].every(([i, j]) => {
+        const [x, z] = world(s + (i * ls) / 2, t + (j * lt) / 2)
+        return inside(x, z)
+      })
+    // a brick that does not fit whole is cut: in eighths along its length, the runs of eighths that
+    // fit laid as one piece each
+    const put = (s: number, t: number, ls: number, lt: number) => {
+      const long = ls >= lt
+      const L = long ? ls : lt
+      const pitch = (L + 3) / 8
+      const piece = (i: number, j: number) => {
+        const len = pitch * (j - i + 1) - 3
+        const off = -(L + 3) / 2 + (pitch * (i + j + 1)) / 2
+        return long ? { s: s + off, t, ls: len, lt } : { s, t: t + off, ls, lt: len }
+      }
+      if (fits(s, t, ls, lt)) return push(s, t, ls, lt)
+      let run = -1
+      for (let q = 0; q <= 8; q++) {
+        const p = q < 8 ? piece(q, q) : null
+        const ok = p ? fits(p.s, p.t, p.ls, p.lt) : false
+        if (ok && run < 0) run = q
+        if (!ok && run >= 0) {
+          const r = piece(run, q - 1)
+          push(r.s, r.t, r.ls, r.lt)
+          run = -1
+        }
+      }
+    }
+    const push = (s: number, t: number, ls: number, lt: number) => {
+      const [x, z] = world(s, t)
+      out.push({ x, z, w: ls, d: lt, a })
+    }
+    const rows = Math.max(1, Math.floor((F.w - BORDER * 2) / B))
+    const t0 = -(rows * B) / 2
+    const extra = Math.ceil(F.over / B)
+    for (let i = -extra; i * B < F.len + F.over; i++)
+      for (let j = -extra; j < rows + extra; j++) {
+        const along = (i + j) % 2 === 0
+        for (const q of [0, 1]) {
+          if (along) put(i * B + B / 2, t0 + j * B + 16 + q * 32, B - 3, 29)
+          else put(i * B + 16 + q * 32, t0 + j * B + B / 2, 29, B - 3)
+        }
+      }
+  })
+  return out
 }
 
 export function Walks() {
   const brick = useMemo(() => new RoundedBoxGeometry(1, 1, 1, 2, 0.12), [])
-  const bricks = useMemo(() => SET.walks.flatMap(walkBricks), [])
+  const bricks = useMemo(() => [...borderBricks(), ...seamBricks(), ...weaveBricks()].filter((b) => inIsland(b.x, b.z, 30)), [])
   const mesh = useRef<InstancedMesh>(null)
   useLayoutEffect(() => {
     const m = mesh.current!
     const rand = rng(21)
     bricks.forEach((b, i) => {
       const h = 20 + rand() * 3
-      _o.position.set(b.x, 14 + h / 2 + (rand() - 0.5) * 1.5, b.z)
+      _o.position.set(b.x, 4 + h / 2 + (rand() - 0.5) * 1.5, b.z)
       _o.rotation.set((rand() - 0.5) * 0.03, b.a + (rand() - 0.5) * 0.04, (rand() - 0.5) * 0.03)
       _o.scale.set(b.w, h, b.d)
       _o.updateMatrix()
@@ -343,30 +484,7 @@ export function Walks() {
     m.instanceMatrix.needsUpdate = true
     if (m.instanceColor) m.instanceColor.needsUpdate = true
   }, [bricks])
-  // the mortar bed under each walk's bricks, cut to the island (each a hair higher than the last: no fighting where they cross)
-  const beds = useMemo(
-    () =>
-      SET.walks.map((wk, k) => {
-        const { x0, x1, z0, z1 } = SET.island
-        const clamp = ([x, z]: [number, number]): [number, number] => [Math.min(x1 - 24, Math.max(x0 + 24, x)), Math.min(z1 - 24, Math.max(z0 + 24, z))]
-        const [ax, az] = clamp(wk.a)
-        const [bx, bz] = clamp(wk.b)
-        const len = Math.hypot(bx - ax, bz - az)
-        const g = new BoxGeometry(len + wk.w * (k > 3 ? 0.4 : 0), 16, wk.w + 8)
-        g.rotateY(Math.atan2(-(bz - az), bx - ax))
-        g.translate((ax + bx) / 2, 12 + k * 0.3, (az + bz) / 2)
-        return g
-      }),
-    [],
-  )
-  return (
-    <group>
-      {beds.map((g, k) => (
-        <mesh key={k} geometry={g} material={MORTAR} receiveShadow />
-      ))}
-      <instancedMesh ref={mesh} args={[brick, BRICK, bricks.length]} castShadow receiveShadow />
-    </group>
-  )
+  return <instancedMesh ref={mesh} args={[brick, BRICK, bricks.length]} castShadow receiveShadow />
 }
 
 // ---- the petals
@@ -405,7 +523,7 @@ export function Petals() {
       const x = tx + Math.cos(a) * r + (rand() < 0.2 ? (rand() - 0.3) * 900 : 0)
       const z = tz + Math.sin(a) * r * 0.85
       if (!inIsland(x, z, 30)) continue
-      const y = onWalk(x, z, 0) ? 37.5 : 7 + rand() * 12
+      const y = onWalk(x, z, 0) ? 26.5 : 7 + rand() * 12
       _o.position.set(x, y, z)
       _o.rotation.set((rand() - 0.5) * 0.5, rand() * Math.PI * 2, (rand() - 0.5) * 0.5)
       _o.scale.setScalar(0.9 + rand() * 0.6)
