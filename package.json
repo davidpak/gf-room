@@ -10,7 +10,8 @@
     "blender:room": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" -b --python blender/build_room.py",
     "blender:desk": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" -b --python blender/build_desk.py",
     "blender:keypad": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" -b --python blender/build_keypad.py",
-    "photos": "node scripts/photos.mjs"
+    "photos": "node scripts/photos.mjs",
+    "civic": "node --max-old-space-size=8192 scripts/civic.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
@@ -28,6 +29,7 @@
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "@xmldom/xmldom": "^0.9.12",
     "exifr": "^7.1.3",
     "heic-convert": "^2.1.0",
     "sharp": "^0.35.5",

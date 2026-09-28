@@ -14,3 +14,7 @@ blender/bake/*.log
 # her photos: the originals stay local (photos/), and so do the web copies for now (public/photos/)
 photos/
 public/photos/
+
+# the Civic model (Sketchfab, licence to check before it ships): the download and the web copy stay local
+public/reference/2016-honda-civic.zip
+public/models/civic.glb
