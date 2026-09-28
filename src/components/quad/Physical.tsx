@@ -22,8 +22,7 @@ import { PADS, SET } from './set'
  *               island's edge nothing (a bench pushed off falls, and comes back where it started)
  *   solid       the trunks, the lamp posts, the building, the hedge and the bushes
  *   the car     a body the car's own driving moves (kinematic): it pushes what it drives into. Its
- *               trunk's a well: whatever's put in it, or on the car anywhere (the roof), and settles there
- *               rides along with it (held to it, kinematic) till it's picked up again or flown home
+ *               trunk's a well: whatever's put in it and settles there rides along with it (held to it, kinematic) till it's picked up again or flown home
  */
 const LAWN = 4
 const PAVING = 25
@@ -124,7 +123,7 @@ export function propObstacles(): Obstacle[] {
     _q.set(q.x, q.y, q.z, q.w)
     for (const along of f.along) {
       _p.set(along, 0, 0).applyQuaternion(_q)
-      out.push({ kind: 'circle', x: t.x + _p.x, z: t.z + _p.z, r: f.r })
+      out.push({ kind: 'circle', x: t.x + _p.x, z: t.z + _p.z, r: f.r, soft: true })
     }
   }
   return out
@@ -182,7 +181,10 @@ function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id
     const w = CAR_WELL
     const com = body.worldCom()
     _p.set(com.x - c.x, com.y - (c.y ?? 0), com.z - c.z).applyQuaternion(_q.copy(carQ).invert())
-    if (Math.abs(_p.x) > CAR_HALF.w + 20 || Math.abs(_p.z) > CAR_HALF.l + 20 || _p.y < w.floor - 30 || _p.y > CAR_HALF.h + 260) return
+    // (in the trunk's well only: not up on the hood or roof, where the car's own moving tips it off, nor
+    // resting against its side, pushed there)
+    const inWell = Math.abs(_p.x) < w.x + 10 && _p.z > w.z0 - 10 && _p.z < w.z1 + 10 && _p.y > w.floor - 20 && _p.y < CAR_HALF.h + 260
+    if (!inWell) return
     const t = body.translation()
     const o = body.rotation()
     const inv = _q.copy(carQ).invert()

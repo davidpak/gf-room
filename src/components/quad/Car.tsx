@@ -20,7 +20,7 @@ import { TOY } from '../civic/spec'
  * `state` is shared: where it is and how fast (the polaroids watch it).
  */
 export type CarState = { x: number; z: number; heading: number; v: number; y?: number }
-export type Obstacle = { kind: 'circle'; x: number; z: number; r: number } | { kind: 'box'; x: number; z: number; w: number; d: number }
+export type Obstacle = { kind: 'circle'; x: number; z: number; r: number; /** a loose thing (./Physical): felt late, so the car's body meets it first and shoves it */ soft?: boolean } | { kind: 'box'; x: number; z: number; w: number; d: number }
 
 // (the Civic at the toy's scale: its length, width and height; its wheels' radius, base and track)
 const K = TOY.k
@@ -48,6 +48,8 @@ export const CAR_SHAPE = {
   well: { x: WELL.x * K, z0: WELL.z0 * K, z1: WELL.z1 * K, floor: WELL.floor * K, rim: WELL.rim * K },
 }
 const WHEEL = { r: TYRE_R * K, base: 2697 * K, track: 1584 * K }
+/** how far into a loose thing the car may press before it's stopped (its body shoves it first) */
+const SOFT = 95
 const BUMP = { along: [-1.6, 0, 1.6].map((k) => k * 1000 * TOY.k), r: 1000 * TOY.k } // (for bumping into things: three circles down its length)
 /** how high the ground is under a wheel: the lawn, or up on the bricks (a short ramp over the edge) */
 const LAWN_Y = 5
@@ -152,7 +154,9 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
           if (o.kind === 'circle') {
             dx = cx - o.x
             dz = cz - o.z
-            min = o.r + BUMP.r
+            // (a loose thing: the car's body touches it before this does, so the car shoves it; only one
+            // that can't give, pinned, stops the car, a little into it)
+            min = o.soft ? Math.max(BUMP.r * 0.6, o.r + BUMP.r - SOFT) : o.r + BUMP.r
           } else {
             dx = cx - Math.max(o.x - o.w / 2, Math.min(cx, o.x + o.w / 2))
             dz = cz - Math.max(o.z - o.d / 2, Math.min(cz, o.z + o.d / 2))
