@@ -41,7 +41,7 @@ function openingOf(o: Object3D | null) {
 const MATS: Record<string, Material> = {
   Carro_Pintura: bruno({ color: '#26272f', shade: '#3b3758', sheen: 0.3 }), // (Crystal Black Pearl, lifted a touch, glossy)
   Carro_Plastico: bruno({ color: '#1c1c22', shade: '#2e2b44' }),
-  Carro_Interno: bruno({ color: '#4a4652', shade: '#c9b3c4', lit: 0.8 }), // (inside: one soft even tone, no blotches of shade)
+  Carro_Interno: bruno({ color: '#4d4955', shade: '#f0d4c8', lit: 0.9, warm: 0.4 }), // (inside: one soft even tone: its shade near its light, so no blotches)
   Carro_Espelhos: bruno({ color: '#b7c1d4', sheen: 0.5 }),
   Carro_Vidros: bruno({ color: '#5d6d92', transparent: true, opacity: 0.55, depthWrite: false, sheen: 0.7 }),
   Carro_Cromado: bruno({ color: '#e2e5ec', shade: '#a6a3bb', emissive: '#ffffff', emissiveIntensity: 0.1, sheen: 0.4 }),

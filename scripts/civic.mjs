@@ -58,7 +58,7 @@ function partOf(b, mat) {
   const left = b.max.x < 2 * mid - OUT
   if ((right || left) && b.min.y > 0.24) {
     const s = right ? 'r' : 'l' // (model +x is the car's… see below: flipped to car x after)
-    if (b.min.z > -2.72 && b.max.z < -1.48) return `door_f${s}`
+    if (b.min.z > -2.8 && b.max.z < -1.48) return `door_f${s}` // (its card reaches a little past its skin)
     if (b.min.z > -3.64 && b.max.z < -2.63 && b.min.y > 0.26) return `door_r${s}`
   }
   if (b.min.x > 0.6 && b.max.x < 1.925 && (b.min.y > 0.735 || (mat === 'Carro_Pintura' && b.min.y > 0.6)) && b.max.z < -4.25 && b.min.z > -4.7 && !(LAMPS.test(mat) && b.min.y < 0.93)) return 'trunk'

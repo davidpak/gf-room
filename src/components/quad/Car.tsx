@@ -74,7 +74,12 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
   const body = useRef<Group>(null)
   const chassis = useRef<Group>(null)
   const wheels = useRef<{ node: Object3D; front: boolean }[]>([])
-  const onWheels = useCallback((w: { node: Object3D; front: boolean }[]) => void (wheels.current = w), [])
+  // the wheels: out of the leaning, pitching chassis onto the car itself (they stay on the ground as the
+  // body leans into a turn or dips under the brakes, not tipping into it)
+  const onWheels = useCallback((w: { node: Object3D; front: boolean }[]) => {
+    wheels.current = w
+    for (const { node } of w) body.current?.attach(node)
+  }, [])
   const sim = useRef({ steer: 0, pitch: 0, roll: 0, spin: 0, bob: 0, wheels: [LAWN_Y, LAWN_Y, LAWN_Y, LAWN_Y] })
   const zoom = useRef(1)
   const camera = useThree((s) => s.camera) as PerspectiveCamera
@@ -189,7 +194,8 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
       const x = (lx * WHEEL.track) / 2
       const z = (lz * WHEEL.base) / 2
       const g = groundAt(s.x + x * ch + z * sh, s.z - x * sh + z * ch)
-      m.wheels[k] += (g - m.wheels[k]) * Math.min(1, dt * 18)
+      // (up onto the bricks at once: a tyre never sinks into the edge; down off them, eased)
+      m.wheels[k] = Math.max(g, m.wheels[k] + (g - m.wheels[k]) * Math.min(1, dt * 30))
     })
     const [fl, fr, bl, br] = m.wheels
     const b = body.current
