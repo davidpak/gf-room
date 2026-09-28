@@ -82,81 +82,234 @@ export function LookControls() {
 
 // ---- a polaroid
 const HAND = "'Gaegu', 'Nunito', cursive"
-const BACK = bruno({ color: '#f4f0e8' })
-/** its face: the white card, the photo in its square-ish window, a wider margin under it */
+const INK = 'rgba(58,70,122,0.86)' // (a blue ballpoint)
+const BACK = bruno({ color: '#f1ece2' })
+/** a little number from a photo's id, the same every time (which doodle, how askew the writing sits) */
+const hashOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
+
+/** the print, as instant film would have it: the blacks lifted a little, the shadows a touch cool, the
+ *  highlights warm, a soft vignette, a fine grain (gentle: still their photo) */
+function develop(g: CanvasRenderingContext2D, x0: number, y0: number, w: number, h: number, seed: number) {
+  const img = g.getImageData(x0, y0, w, h)
+  const d = img.data
+  let s = seed
+  const rand = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296)
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4
+      const u = x / w - 0.5
+      const v = y / h - 0.5
+      const vig = 1 - 0.34 * (u * u + v * v) * 1.6
+      const grain = (rand() - 0.5) * 10
+      let [r, gg, b] = [d[i], d[i + 1], d[i + 2]]
+      const l = (0.3 * r + 0.59 * gg + 0.11 * b) / 255
+      r = 14 + r * 0.93 + l * l * 8
+      gg = 12 + gg * 0.93 + l * l * 3
+      b = 20 + b * 0.9 + (1 - l) * 7 - l * l * 6
+      d[i] = r * vig + grain
+      d[i + 1] = gg * vig + grain
+      d[i + 2] = b * vig + grain
+    }
+  g.putImageData(img, x0, y0)
+}
+
+/** a small pen doodle for a photo with no date to write under it: a heart, a blossom or a star */
+function doodle(g: CanvasRenderingContext2D, x: number, y: number, r: number, kind: number) {
+  g.save()
+  g.translate(x, y)
+  g.strokeStyle = INK
+  g.lineWidth = r * 0.16
+  g.lineCap = 'round'
+  g.lineJoin = 'round'
+  g.beginPath()
+  if (kind === 0) {
+    // a heart, drawn in one go
+    g.moveTo(0, r * 0.75)
+    g.bezierCurveTo(-r * 1.3, -r * 0.1, -r * 0.55, -r * 1.05, 0, -r * 0.35)
+    g.bezierCurveTo(r * 0.55, -r * 1.05, r * 1.3, -r * 0.1, 0, r * 0.75)
+  } else if (kind === 1) {
+    // a blossom: five loops round a dot
+    for (let p = 0; p < 5; p++) {
+      const a = (p / 5) * Math.PI * 2 - Math.PI / 2
+      g.moveTo(0, 0)
+      g.quadraticCurveTo(Math.cos(a - 0.45) * r * 1.2, Math.sin(a - 0.45) * r * 1.2, Math.cos(a) * r, Math.sin(a) * r)
+      g.quadraticCurveTo(Math.cos(a + 0.45) * r * 1.2, Math.sin(a + 0.45) * r * 1.2, 0, 0)
+    }
+  } else {
+    // a little five-point star
+    for (let p = 0; p <= 5; p++) {
+      const a = ((p * 2) / 5) * Math.PI * 2 - Math.PI / 2
+      p ? g.lineTo(Math.cos(a) * r, Math.sin(a) * r) : g.moveTo(Math.cos(a) * r, Math.sin(a) * r)
+    }
+  }
+  g.stroke()
+  g.restore()
+}
+
+/** its face: cream card with a paper grain, the print in its window (developed), the wider margin under
+ *  it with the day written in pen, or a doodle when there's no day */
 function useFace(p: Photo) {
   const [face, setFace] = useState<{ mat: Material; aspect: number } | null>(null)
   useEffect(() => {
     let live = true
     const img = new Image()
-    img.onload = () => {
-      if (!live) return
-      const W = 320
-      const side = 18
-      const iw = W - 2 * side
-      const ih = Math.round(iw / Math.max(0.72, Math.min(1.33, p.w / p.h)))
-      const H = side + ih + 62
-      const c = document.createElement('canvas')
-      c.width = W
-      c.height = H
-      const g = c.getContext('2d')!
-      g.fillStyle = '#fbf8f2'
-      g.fillRect(0, 0, W, H)
-      const k = Math.max(iw / img.width, ih / img.height)
-      g.save()
-      g.beginPath()
-      g.rect(side, side, iw, ih)
-      g.clip()
-      g.drawImage(img, side + (iw - img.width * k) / 2, side + (ih - img.height * k) / 2, img.width * k, img.height * k)
-      g.restore()
-      // (a faint inner shadow round the window, as the print sits a hair under the card)
-      g.strokeStyle = 'rgba(90,70,80,0.18)'
-      g.lineWidth = 2
-      g.strokeRect(side, side, iw, ih)
-      const t = new CanvasTexture(c)
-      t.colorSpace = SRGBColorSpace
-      t.anisotropy = 8
-      // (a little of its own light, so a print keeps its colours in the evening glow)
-      setFace({ mat: bruno({ map: t, shade: '#b9a8d6', warm: 0.3, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.32 }), aspect: H / W })
-    }
-    img.src = p.thumb
+    img.onload = () =>
+      document.fonts.load(`700 40px 'Gaegu'`).finally(() => {
+        if (!live) return
+        const W = 512
+        const side = 28
+        const iw = W - 2 * side
+        const ih = Math.round(iw / Math.max(0.72, Math.min(1.33, p.w / p.h)))
+        const H = side + ih + 104
+        const c = document.createElement('canvas')
+        c.width = W
+        c.height = H
+        const g = c.getContext('2d')!
+        const seed = hashOf(p.id)
+        let s = seed
+        const rand = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296)
+        // the card: cream, a grain, a few fibres, a hair darker at its edges where it's been handled
+        g.fillStyle = '#fbf7ee'
+        g.fillRect(0, 0, W, H)
+        for (let i = 0; i < W * H * 0.05; i++) {
+          g.fillStyle = rand() < 0.5 ? 'rgba(120,100,80,0.06)' : 'rgba(255,255,255,0.5)'
+          g.fillRect(rand() * W, rand() * H, 1.2, 1.2)
+        }
+        g.strokeStyle = 'rgba(150,130,110,0.08)'
+        g.lineWidth = 1
+        for (let i = 0; i < 30; i++) {
+          const x = rand() * W
+          const y = rand() * H
+          const a = rand() * Math.PI
+          g.beginPath()
+          g.moveTo(x, y)
+          g.quadraticCurveTo(x + Math.cos(a) * 8, y + Math.sin(a) * 8 + 3, x + Math.cos(a) * 16, y + Math.sin(a) * 16)
+          g.stroke()
+        }
+        const edge = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75)
+        edge.addColorStop(0, 'rgba(160,130,100,0)')
+        edge.addColorStop(1, 'rgba(160,130,100,0.1)')
+        g.fillStyle = edge
+        g.fillRect(0, 0, W, H)
+        // the print, developed
+        const k = Math.max(iw / img.width, ih / img.height)
+        g.save()
+        g.beginPath()
+        g.rect(side, side, iw, ih)
+        g.clip()
+        g.drawImage(img, side + (iw - img.width * k) / 2, side + (ih - img.height * k) / 2, img.width * k, img.height * k)
+        g.restore()
+        develop(g, side, side, iw, ih, seed)
+        // (the print sits a hair under the card: a soft shadow along its top and left edges)
+        const sh = g.createLinearGradient(0, side, 0, side + 6)
+        sh.addColorStop(0, 'rgba(60,40,40,0.28)')
+        sh.addColorStop(1, 'rgba(60,40,40,0)')
+        g.fillStyle = sh
+        g.fillRect(side, side, iw, 6)
+        const sv = g.createLinearGradient(side, 0, side + 5, 0)
+        sv.addColorStop(0, 'rgba(60,40,40,0.2)')
+        sv.addColorStop(1, 'rgba(60,40,40,0)')
+        g.fillStyle = sv
+        g.fillRect(side, side, 5, ih)
+        // the margin: the day in pen, a little askew, or a doodle
+        const day = dayOf(p)
+        const my = side + ih + 104 / 2 + 4
+        g.save()
+        g.translate(W / 2 + ((seed % 7) - 3) * 4, my)
+        g.rotate((((seed >> 3) % 9) - 4) * 0.008)
+        if (day) {
+          g.fillStyle = INK
+          g.font = `700 40px ${HAND}`
+          g.textAlign = 'center'
+          g.textBaseline = 'middle'
+          g.fillText(day, 0, 0)
+        } else doodle(g, ((seed >> 5) % 2 ? 1 : -1) * (W / 2 - side - 34), 0, 17, (seed >> 7) % 3)
+        g.restore()
+        const t = new CanvasTexture(c)
+        t.colorSpace = SRGBColorSpace
+        t.anisotropy = 8
+        // (a little of its own light, so a print keeps its colours in the evening glow)
+        setFace({ mat: bruno({ map: t, shade: '#b9a8d6', warm: 0.3, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.32 }), aspect: H / W })
+      })
+    img.src = p.src // (the full photo: it holds up close)
     return () => void (live = false)
   }, [p])
   return face
 }
 
+/** the card's shape: a thin board with a slight curl, as a handled print has: cupped a touch across
+ *  its width, its bottom corners lifting */
+function cardGeometry(w: number, h: number) {
+  const g = new BoxGeometry(w, h, 2.5, 8, 10, 1)
+  const pos = g.attributes.position
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) / (w / 2)
+    const y = pos.getY(i) / (h / 2)
+    const lift = Math.max(0, Math.abs(x) - 0.55) * Math.max(0, -y - 0.45) * w * 0.05
+    pos.setZ(i, pos.getZ(i) + x * x * w * 0.012 + lift)
+  }
+  g.computeVertexNormals()
+  return g
+}
+
 /** a polaroid `w` wide, its top edge at its origin (it hangs or is pinned from there; `stand`: its
  *  bottom edge, it stands on a ledge). `group` holds its and its neighbours' meshes (the camera steps
- *  along them), `k` is its place there; a click on it goes to `spot` (./look clickSpot) */
+ *  along them), `k` is its place there; a click on it goes to `spot` (./look clickSpot). Pointed at,
+ *  it lifts toward you a touch */
 function Polaroid({ p, w, pin, stand, group, k, spot }: { p: Photo; w: number; pin?: 'peg' | 'pin'; stand?: boolean; group: { current: (Mesh | null)[] }; k: number; spot: Spot }) {
   const face = useFace(p)
   const h = w * (face?.aspect ?? 1.2)
-  const geo = useMemo(() => new BoxGeometry(w, h, 2.5), [w, h])
+  const geo = useMemo(() => cardGeometry(w, h), [w, h])
   const mats = useMemo(() => (face ? [BACK, BACK, BACK, BACK, face.mat, BACK] : BACK), [face])
   const down = (e: ThreeEvent<PointerEvent>) => e.stopPropagation() // (a click on it is for looking, not the hand)
   const click = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     clickSpot(spot, k)
   }
+  const hover = useRef(0)
+  const over = useRef(false)
+  const lift = useRef<Group>(null)
+  useFrame((_, dt) => {
+    hover.current += ((over.current ? 1 : 0) - hover.current) * Math.min(1, dt * 10)
+    const l = lift.current
+    if (!l) return
+    const e = hover.current
+    l.position.z = e * w * 0.06
+    l.rotation.set(-e * 0.06, 0, e * 0.03 * (k % 2 ? 1 : -1))
+  })
   return (
     <group>
-      <mesh
-        ref={(m) => void (group.current[k] = m)}
-        geometry={geo}
-        material={mats}
-        position={[0, stand ? h / 2 : -h / 2, 0]}
-        castShadow
-        receiveShadow
-        onPointerDown={down}
-        onClick={click}
-        onPointerOver={(e) => (e.stopPropagation(), (document.body.style.cursor = 'pointer'))}
-        onPointerOut={() => (document.body.style.cursor = '')}
-      />
+      <group ref={lift}>
+        <mesh
+          ref={(m) => void (group.current[k] = m)}
+          geometry={geo}
+          material={mats}
+          position={[0, stand ? h / 2 : -h / 2, 0]}
+          castShadow
+          receiveShadow
+          onPointerDown={down}
+          onClick={click}
+          onPointerOver={(e) => {
+            e.stopPropagation()
+            over.current = true
+            document.body.style.cursor = 'pointer'
+          }}
+          onPointerOut={() => {
+            over.current = false
+            document.body.style.cursor = ''
+          }}
+        />
+      </group>
       {pin === 'peg' && (
-        // a wooden clothes peg over the line
-        <mesh material={PEG} position={[0, 2, 3]}>
-          <boxGeometry args={[9, 26, 7]} />
-        </mesh>
+        // a wooden clothes peg over the line: its two halves, the little steel spring round them
+        <group position={[0, 3, 2.5]}>
+          {[-1, 1].map((s) => (
+            <mesh key={s} geometry={PEG_HALF} material={PEG} position={[0, 0, s * 2.4]} rotation={[s * 0.06, 0, 0]} castShadow />
+          ))}
+          <mesh material={SPRING} position={[0, 3, 0]} rotation={[0, Math.PI / 2, 0]}>
+            <torusGeometry args={[3.6, 0.9, 6, 12]} />
+          </mesh>
+        </group>
       )}
       {pin === 'pin' && (
         // a push pin, pink
@@ -167,7 +320,9 @@ function Polaroid({ p, w, pin, stand, group, k, spot }: { p: Photo; w: number; p
     </group>
   )
 }
-const PEG = bruno({ color: '#d9b58a' })
+const PEG_HALF = new RoundedBoxGeometry(8, 30, 4.2, 2, 1.4)
+const PEG = bruno({ color: '#dcb88c' })
+const SPRING = bruno({ color: '#b7bcc6' })
 const PIN = bruno({ color: '#f08fae' })
 
 // ---- the bench photo: on a little easel beside the bench it was taken on
