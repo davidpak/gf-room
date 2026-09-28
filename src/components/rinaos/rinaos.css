@@ -1159,13 +1159,7 @@
   display: block;
 }
 .ros-saver.leaving {
-  animation: ros-saver-up 0.65s cubic-bezier(0.65, 0, 0.35, 1) forwards;
-}
-@keyframes ros-saver-up {
-  to {
-    transform: translateY(-100%);
-    opacity: 0.6;
-  }
+  animation: ros-fade-out 0.55s ease-out forwards;
 }
 /* the boot: dark, the hearts ring in, a thin bar fills, then it fades to the hello */
 .ros-boot {

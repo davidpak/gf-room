@@ -59,12 +59,21 @@ export function RinaOS({ embedded, hold }: { embedded?: { onExit: () => void }; 
   const [phase, setPhase] = useState<Phase>(hold ?? (embedded ? 'saver' : 'boot')) // (hold: stay in one, to look at it)
   const [entering, setEntering] = useState(false)
   const booted = useRef(false)
-  const start = () => setPhase(booted.current ? 'wake' : 'boot')
-  const toDesk = () => {
-    booted.current = true
-    setPhase('desk')
+  /** the desktop coming in (the menu bar, the dock, the window) */
+  const enter = () => {
     setEntering(true)
     window.setTimeout(() => setEntering(false), 1000)
+  }
+  // waking: the screensaver fades as the desktop comes in under it, together (one fade)
+  const start = () => {
+    if (!booted.current) return setPhase('boot')
+    setPhase('wake')
+    enter()
+  }
+  const toDesk = (entered = false) => {
+    booted.current = true
+    setPhase('desk')
+    if (!entered) enter()
   }
   useEffect(() => {
     if (!embedded) return
@@ -77,7 +86,7 @@ export function RinaOS({ embedded, hold }: { embedded?: { onExit: () => void }; 
     return () => window.clearTimeout(t)
   }, [using]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const next: Partial<Record<Phase, [number, () => void]>> = { boot: [1650, () => setPhase('hello')], hello: [1250, toDesk], wake: [650, toDesk] }
+    const next: Partial<Record<Phase, [number, () => void]>> = { boot: [1650, () => setPhase('hello')], hello: [1250, () => toDesk()], wake: [550, () => toDesk(true)] }
     const n = next[phase]
     if (!n || hold) return
     const t = window.setTimeout(n[1], n[0])
