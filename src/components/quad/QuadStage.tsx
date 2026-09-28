@@ -4,9 +4,7 @@ import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, Fog, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, shared } from './bruno'
 import { CherryTree } from './CherryTree'
-import { Grass, Island, Petals, Walk } from './Ground'
-import { Bench, LampPost } from './Furniture'
-import { SET } from './set'
+import { Island } from './Ground'
 
 /**
  * The Quad, built up piece by piece (Bruno Simon's folio-2025 is the template). The first set piece
@@ -56,13 +54,10 @@ function Scene() {
         shadow-bias={-0.0004}
         shadow-normalBias={1.2}
       />
+      {/* one piece at a time: the tree first (the grass, the walk, the petals, the bench and the lamp
+          come back in once it's right) */}
       <Island />
-      <Grass />
-      <Walk />
-      <Petals />
-      <CherryTree seed={3} position={[SET.tree[0], 0, SET.tree[1]]} rotation={0.4} />
-      <Bench position={[SET.bench.x, 0, SET.bench.z]} rotation={-0.12} />
-      <LampPost position={[SET.lamp.x, 0, SET.lamp.z]} />
+      <CherryTree seed={3} position={[0, 0, 0]} rotation={0.4} />
     </>
   )
 }
@@ -71,7 +66,7 @@ export function QuadStage() {
   return (
     <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 20, far: 30000, position: [2100, 1650, 2900] }}>
       <Scene />
-      <OrbitControls target={[0, 320, 0]} enableDamping dampingFactor={0.07} minDistance={600} maxDistance={9000} maxPolarAngle={1.42} />
+      <OrbitControls target={[0, 420, 0]} enableDamping dampingFactor={0.07} minDistance={600} maxDistance={9000} maxPolarAngle={1.42} />
     </Canvas>
   )
 }

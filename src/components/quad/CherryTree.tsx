@@ -81,7 +81,35 @@ function tube(l: Limb, rand: () => number, pos: number[], nor: number[], col: nu
     for (let j = 0; j < RAD; j++) {
       const a = base + i * (RAD + 1) + j
       const b = a + RAD + 1
-      idx.push(a, b, a + 1, b, b + 1, a + 1)
+      idx.push(a, a + 1, b, b, a + 1, b + 1) // (wound so the faces look out: along × around is outward)
+    }
+}
+
+/** a knot of bark: a lumpy, squashed ball (where the limbs fork, closing the trunk's top) */
+function knot(c: Vector3, r: number, rand: () => number, pos: number[], nor: number[], col: number[], idx: number[]) {
+  const W = 12
+  const H = 8
+  const base = pos.length / 3
+  const ph = rand() * 6.28
+  const k = new Color()
+  for (let i = 0; i <= H; i++) {
+    const v = i / H
+    const th = v * Math.PI
+    for (let j = 0; j <= W; j++) {
+      const a = (j / W) * Math.PI * 2
+      const n = new Vector3(Math.sin(th) * Math.cos(a), Math.cos(th), Math.sin(th) * Math.sin(a))
+      const rr = r * (1 + 0.08 * Math.sin(a * 3 + ph) * Math.sin(th))
+      pos.push(c.x + n.x * rr, c.y + n.y * rr * 0.7, c.z + n.z * rr)
+      nor.push(n.x, n.y, n.z)
+      k.copy(BARK_DARK).lerp(BARK_LIGHT, Math.max(0, n.y) * 0.55 + 0.1)
+      col.push(k.r, k.g, k.b)
+    }
+  }
+  for (let i = 0; i < H; i++)
+    for (let j = 0; j < W; j++) {
+      const a = base + i * (W + 1) + j
+      const b = a + W + 1
+      idx.push(a, a + 1, b, b, a + 1, b + 1) // (outward, like the tubes)
     }
 }
 
@@ -228,7 +256,7 @@ function buildTree(seed: number) {
     const lift = 330 + rand() * 120
     // up out of the fork, arching outward, levelling off (the umbrella)
     const pts = [
-      fork.clone().addScaledVector(out, 10),
+      fork.clone().addScaledVector(out, -8).setY(fork.y - 70), // (from inside the trunk: no seam where they leave it)
       fork.clone().addScaledVector(out, reach * 0.22).setY(fork.y + lift * 0.45),
       fork.clone().addScaledVector(out, reach * 0.58).setY(fork.y + lift * 0.85),
       fork.clone().addScaledVector(out, reach).setY(fork.y + lift),
@@ -252,6 +280,7 @@ function buildTree(seed: number) {
   const tc: number[] = []
   const ti: number[] = []
   for (const l of limbs) tube(l, rand, tp, tn, tc, ti)
+  knot(fork, 80, rand, tp, tn, tc, ti)
   const trunk = new BufferGeometry()
   trunk.setAttribute('position', new Float32BufferAttribute(tp, 3))
   trunk.setAttribute('normal', new Float32BufferAttribute(tn, 3))
