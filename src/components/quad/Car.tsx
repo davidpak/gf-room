@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import { Vector3, type DirectionalLight, type Group, type PerspectiveCamera } from 'three'
-import { BOUNDS, QUAD } from './layout'
+import { SET, inIsland } from './set'
+import { LOOK, brunoify, shared } from './bruno'
 
 /**
  * Their little car (a toy, mint with a cream roof), driven like Bruno Simon's: W / ↑ go, S / ↓ brake
@@ -37,6 +38,7 @@ export function Car({ state, obstacles, paused }: { state: { current: CarState }
   const fronts = useRef<(Group | null)[]>([])
   const sim = useRef({ steer: 0, pitch: 0, roll: 0, spin: 0, bob: 0 })
   const zoom = useRef(1)
+  useLayoutEffect(() => void (body.current && brunoify(body.current)), []) // (in the Quad's light)
   const camera = useThree((s) => s.camera) as PerspectiveCamera
 
   useEffect(() => {
@@ -69,7 +71,7 @@ export function Car({ state, obstacles, paused }: { state: { current: CarState }
     const s = state.current
     const m = sim.current
     const k = (n: string) => !paused && keys.has(n)
-    if (k('reset')) Object.assign(s, { x: QUAD.start.x, z: QUAD.start.z, heading: QUAD.start.heading, v: 0 })
+    if (k('reset')) Object.assign(s, { x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
     // the push forward, the brakes, the drag
     const throttle = (k('up') ? 1 : 0) - (k('down') ? 1 : 0)
     let a = 0
@@ -114,9 +116,12 @@ export function Car({ state, obstacles, paused }: { state: { current: CarState }
         }
       }
     }
-    if (Math.abs(nx) > BOUNDS.x) (nx = Math.sign(nx) * BOUNDS.x), (hit = 1)
-    if (nz < BOUNDS.zMin) (nz = BOUNDS.zMin), (hit = 1)
-    if (nz > BOUNDS.zMax) (nz = BOUNDS.zMax), (hit = 1)
+    // the island's edge: it stops there (no driving off)
+    if (!inIsland(nx, nz, 170)) {
+      nx = s.x
+      nz = s.z
+      hit = 1
+    }
     if (hit) s.v *= 1 - Math.min(1, 6 * dt) // (a bump soaks up the speed)
     s.x = nx
     s.z = nz
@@ -143,10 +148,14 @@ export function Car({ state, obstacles, paused }: { state: { current: CarState }
     camAt.current.lerp(target, first.current ? 1 : Math.min(1, dt * 4))
     first.current = false
     const z = zoom.current
-    camera.position.set(camAt.current.x + 1300 * z, 2300 * z, camAt.current.z + 2600 * z)
-    camera.lookAt(camAt.current.x, 60, camAt.current.z)
+    // Bruno's camera: high, from the front and a little to the side, always the same way round
+    camera.position.set(camAt.current.x + 1500 * z, 3300 * z, camAt.current.z + 3900 * z)
+    camera.lookAt(camAt.current.x, 80, camAt.current.z - 150)
+    // the see-through: the trees open round the line from the camera to the car
+    shared.cam.value.copy(camera.position)
+    shared.car.value.set(s.x, 150, s.z)
     if (sun) {
-      sun.position.set(camAt.current.x + 1800, 3800, camAt.current.z + 1200)
+      sun.position.copy(LOOK.sun).multiplyScalar(4000).add(camAt.current)
       sun.target.position.set(camAt.current.x, 0, camAt.current.z)
       sun.target.updateMatrixWorld()
     }

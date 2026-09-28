@@ -1,16 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, Fog, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, shared } from './bruno'
 import { CherryTree } from './CherryTree'
-import { Island } from './Ground'
-import './quad.css'
+import { Grass, Island, Petals, Walk } from './Ground'
+import { Bench, LampPost } from './Furniture'
+import { Car, type CarState, type Obstacle } from './Car'
+import { SET } from './set'
 
 /**
- * The Quad, built up piece by piece (Bruno Simon's folio-2025 is the template). The first set piece
- * (./set): an island of lawn, a stretch of brick walk, a cherry in bloom, a bench under it and a lamp
- * post, in a warm spring evening. Drag to look round it, scroll to come closer.
+ * A stretch of the Quad (./set), in a warm spring evening (Bruno Simon's folio-2025 is the
+ * template): the brick walk through the lawn, cherries along it, lamp posts, benches, petals. Their
+ * little car drives it (./Car: WASD / arrows, Space, R), the camera following Bruno's way; trees
+ * between the camera and the car open up so it's never lost.
  */
 function sky() {
   const c = document.createElement('canvas')
@@ -31,51 +33,63 @@ function Clock() {
   return null
 }
 
-function Scene({ seed }: { seed: number }) {
+function Scene({ car }: { car: { current: CarState } }) {
   const background = useMemo(sky, [])
-  const fog = useMemo(() => new Fog(LOOK.fog, 5500, 14000), [])
-  const sun = LOOK.sun.clone().multiplyScalar(3200)
+  const fog = useMemo(() => new Fog(LOOK.fog, 7000, 18000), [])
+  // what the car bumps into: the trunks, the lamps, the benches
+  const obstacles = useMemo<Obstacle[]>(
+    () => [
+      ...SET.trees.map((t) => ({ kind: 'circle' as const, x: t.x, z: t.z, r: 110 })),
+      ...SET.lamps.map((l) => ({ kind: 'circle' as const, x: l.x, z: l.z, r: 50 })),
+      ...SET.benches.map((b) => ({ kind: 'box' as const, x: b.x, z: b.z, w: 460, d: 160 })),
+    ],
+    [],
+  )
   return (
     <>
       <primitive attach="background" object={background} />
       <primitive attach="fog" object={fog} />
       <Clock />
+      {/* the sun: its shadow follows the car (./Car moves it) */}
       <directionalLight
-        position={sun.toArray()}
+        name="sun"
         color={LOOK.light}
         intensity={LOOK.intensity}
         castShadow
         shadow-mapSize={[4096, 4096]}
-        shadow-camera-left={-1800}
-        shadow-camera-right={1800}
-        shadow-camera-top={1800}
-        shadow-camera-bottom={-1800}
+        shadow-camera-left={-3200}
+        shadow-camera-right={3200}
+        shadow-camera-top={3200}
+        shadow-camera-bottom={-3200}
         shadow-camera-near={200}
-        shadow-camera-far={7000}
+        shadow-camera-far={9000}
         shadow-bias={-0.0004}
-        shadow-normalBias={1.2}
+        shadow-normalBias={1.5}
       />
-      {/* one piece at a time: the trees first (the grass, the walk, the petals, the bench and the lamp
-          come back in once they're right). Three, each grown from its own seed, a row like the Quad's */}
       <Island />
-      <CherryTree seed={seed} position={[-850, 0, -120]} />
-      <CherryTree seed={seed + 1} position={[80, 0, 180]} />
-      <CherryTree seed={seed + 2} position={[950, 0, -80]} />
+      <Grass />
+      <Walk />
+      <Petals />
+      {SET.trees.map((t, i) => (
+        <CherryTree key={i} model={t.model} position={[t.x, 0, t.z]} rotation={t.rot} />
+      ))}
+      {SET.lamps.map((l, i) => (
+        <LampPost key={i} slot={i} position={[l.x, 0, l.z]} />
+      ))}
+      {SET.benches.map((b, i) => (
+        <Bench key={i} position={[b.x, 0, b.z]} rotation={b.rot} />
+      ))}
+      <Car state={car} obstacles={obstacles} />
     </>
   )
 }
 
 export function QuadStage() {
-  const [seed, setSeed] = useState(3)
+  const car = useRef<CarState>({ x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
+  if (import.meta.env.DEV) Object.assign(window, { __quadCar: car }) // (for trying it from the console)
   return (
-    <>
-    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 20, far: 30000, position: [2100, 1650, 2900] }}>
-      <Scene seed={seed} />
-      <OrbitControls target={[0, 420, 0]} enableDamping dampingFactor={0.07} minDistance={600} maxDistance={9000} maxPolarAngle={1.42} />
+    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 50, far: 40000, position: [0, 3300, 3900] }}>
+      <Scene car={car} />
     </Canvas>
-      <button className="quad-regrow" onClick={() => setSeed((s) => s + 3)}>
-        grow new trees
-      </button>
-    </>
   )
 }

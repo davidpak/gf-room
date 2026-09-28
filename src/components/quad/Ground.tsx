@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { BufferGeometry, CanvasTexture, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, InstancedMesh, Object3D, RepeatWrapping, SRGBColorSpace, Shape } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from './bruno'
-import { SET, halfWidthAt, inIsland, onWalk } from './set'
+import { SET, halfWidthAt, inIsland, keepClear, onWalk } from './set'
 
 /**
  * The ground of the set piece (./set): an island of earth with a grass lip, a mown lawn on it (soft
@@ -179,20 +179,22 @@ function tuftSpots() {
       out.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r])
     }
   }
-  ring(SET.tree[0], SET.tree[1], 105, 190, 34)
-  ring(SET.lamp.x, SET.lamp.z, 48, 95, 12)
-  for (const lx of [-180, 180]) for (const lz of [-55, 50]) ring(SET.bench.x + lx, SET.bench.z + lz, 8, 40, 3)
+  for (const t of SET.trees) ring(t.x, t.z, 120, 210, 30)
+  for (const l of SET.lamps) ring(l.x, l.z, 48, 95, 10)
+  for (const b of SET.benches)
+    for (const lx of [-180, 180])
+      for (const lz of [-55, 50]) ring(b.x + Math.cos(b.rot) * lx + Math.sin(b.rot) * lz, b.z - Math.sin(b.rot) * lx + Math.cos(b.rot) * lz, 8, 40, 3)
   for (let x = -SET.island.w / 2; x < SET.island.w / 2; x += 55 + rand() * 90) {
     for (const side of [-1, 1]) if (rand() < 0.75) out.push([x, SET.walk.z + side * (SET.walk.w / 2 + 16 + rand() * 30)])
   }
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0; i < 520; i++) {
     const a = rand() * Math.PI * 2
     const z = Math.sin(a) * (SET.island.d / 2 - 40 - rand() * 50)
     const hw = halfWidthAt(z, 40 + rand() * 50)
     out.push([Math.sign(Math.cos(a)) * hw * Math.min(1, Math.abs(Math.cos(a)) * 3), z])
   }
-  for (let i = 0; i < 60; i++) out.push([(rand() - 0.5) * SET.island.w, (rand() - 0.5) * SET.island.d])
-  return out.filter(([x, z]) => inIsland(x, z, 28) && !onWalk(x, z, 10))
+  for (let i = 0; i < 160; i++) out.push([(rand() - 0.5) * SET.island.w, (rand() - 0.5) * SET.island.d])
+  return out.filter(([x, z]) => inIsland(x, z, 28) && !onWalk(x, z, 10) && !keepClear.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r * 0.8))
 }
 
 export function Grass() {
@@ -203,7 +205,7 @@ export function Grass() {
   const clovers = useMemo(() => {
     const rand = rng(17)
     const out: [number, number][] = []
-    while (out.length < 160) {
+    while (out.length < 420) {
       const x = (rand() - 0.5) * SET.island.w
       const z = (rand() - 0.5) * SET.island.d
       if (inIsland(x, z, 40) && !onWalk(x, z, 30)) out.push([x, z])
@@ -331,11 +333,12 @@ export function Petals() {
   useLayoutEffect(() => {
     const m = fallen.current!
     const rand = rng(33)
-    const [tx, tz] = SET.tree
     let i = 0
     while (i < N) {
-      // mostly under the canopy, thinning out past it; some blown along the walk
-      const r = Math.pow(rand(), 0.6) * 1050
+      // under every canopy, thinning out past it; some blown along the walk
+      const tree = SET.trees[i % SET.trees.length]
+      const [tx, tz] = [tree.x, tree.z]
+      const r = Math.pow(rand(), 0.6) * 1100
       const a = rand() * Math.PI * 2
       const x = tx + Math.cos(a) * r + (rand() < 0.2 ? (rand() - 0.3) * 900 : 0)
       const z = tz + Math.sin(a) * r * 0.85
@@ -357,15 +360,15 @@ export function Petals() {
   }, [N])
   const drift = useMemo(() => {
     const rand = rng(44)
-    return Array.from({ length: SET.petals.falling }, () => ({ a: rand() * 6.28, r: rand() * 700, speed: 70 + rand() * 60, phase: rand() * 30, spin: 1 + rand() * 2 }))
+    return Array.from({ length: SET.petals.falling }, (_, k) => ({ tree: SET.trees[k % SET.trees.length], a: rand() * 6.28, r: rand() * 700, speed: 70 + rand() * 60, phase: rand() * 30, spin: 1 + rand() * 2 }))
   }, [])
   useFrame(({ clock }) => {
     const f = falling.current
     if (!f) return
     const t = clock.elapsedTime
-    const [tx, tz] = SET.tree
     drift.forEach((p, k) => {
-      const H = 900
+      const [tx, tz] = [p.tree.x, p.tree.z]
+      const H = 1100
       const y = H - ((t * p.speed + p.phase * 60) % (H - 30))
       const fall = 1 - y / H
       _o.position.set(tx + Math.cos(p.a) * p.r + Math.sin(t * 0.8 + p.phase) * 50 + fall * 260, y, tz + Math.sin(p.a) * p.r + Math.cos(t * 0.6 + p.phase) * 40 + fall * 120)

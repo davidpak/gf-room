@@ -1,19 +1,33 @@
 /**
- * The Quad's first set piece (toy scale, mm; +X east, +Z toward you): an island of lawn with a
- * stretch of brick walk across its front, a cherry tree behind the walk, a bench under it facing the
- * walk, a lamp post beside the bench. Everything else on the Quad grows from these.
+ * A stretch of the Quad (toy scale, mm; +X east, +Z toward the camera): an island of lawn with the
+ * brick walk running through it, a row of cherries along its far side and one on the near side
+ * (spaced, so you can always see what's going on), lamp posts along the walk, benches facing it.
+ * Everything else on the Quad grows from these.
  */
 export const SET = {
-  island: { w: 2800, d: 1900, corner: 700, t: 150 },
-  walk: { z: 430, w: 480 }, // its middle line, its width
-  tree: [-420, -260] as [number, number],
-  bench: { x: 300, z: 70 },
-  lamp: { x: 700, z: 90 },
-  petals: { fallen: 1300, falling: 70 },
-  // where no grass grows: the trunk's foot, the bench's feet, the lamp's base (x, z, r)
-  keepClear: [] as [number, number, number][],
+  island: { w: 7600, d: 4600, corner: 1300, t: 160 },
+  walk: { z: 0, w: 720 }, // its middle line, its width
+  trees: [
+    { x: -2650, z: -1300, model: 0, rot: 0.3 },
+    { x: -700, z: -1350, model: 1, rot: 2.1 },
+    { x: 1300, z: -1250, model: 2, rot: 4.0 },
+    { x: 3000, z: -1300, model: 3, rot: 1.2 },
+    { x: 2350, z: 1600, model: 3, rot: 2.6 }, // (one on the near side, off to the right: the view stays open)
+  ],
+  lamps: [
+    { x: -1650, z: -520 },
+    { x: 350, z: -520 },
+    { x: 2250, z: -520 },
+    { x: -300, z: 540 },
+  ],
+  benches: [
+    { x: -650, z: -600, rot: 0 },
+    { x: 1300, z: -600, rot: 0 },
+    { x: 900, z: 640, rot: Math.PI },
+  ],
+  start: { x: -3100, z: 0, heading: Math.PI / 2 },
+  petals: { fallen: 3200, falling: 150 },
 }
-SET.keepClear.push([SET.tree[0], SET.tree[1], 120], [SET.lamp.x, SET.lamp.z, 60])
 
 /** the island's half width at depth z, `inset` in from its edge (its corners are rounded) */
 export function halfWidthAt(z: number, inset = 0) {
@@ -28,3 +42,5 @@ export function halfWidthAt(z: number, inset = 0) {
 }
 export const inIsland = (x: number, z: number, inset = 0) => Math.abs(z) < SET.island.d / 2 - inset && Math.abs(x) < halfWidthAt(z, inset)
 export const onWalk = (x: number, z: number, pad = 0) => Math.abs(z - SET.walk.z) < SET.walk.w / 2 + pad
+/** where tufts and petals keep off: the trunks' feet, the lamps' bases (x, z, r) */
+export const keepClear: [number, number, number][] = [...SET.trees.map((t) => [t.x, t.z, 130] as [number, number, number]), ...SET.lamps.map((l) => [l.x, l.z, 60] as [number, number, number])]

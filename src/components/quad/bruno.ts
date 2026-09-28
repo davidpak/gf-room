@@ -10,6 +10,9 @@ import { Color, MeshLambertMaterial, Vector3, type MeshLambertMaterialParameters
  *   bounce  a violet glow up from the ground on faces turned down, low down
  *   lamps   warm pools round the lamp posts, on whatever's near them
  *
+ *   see-through  (materials with SEE_THROUGH: the trees) whatever is between the camera and the car
+ *           dissolves in a soft round hole, dithered, so the car is never lost behind a tree (Bruno's)
+ *
  * No tone mapping (the Canvas is `flat`); the fog mixes in last. Every material on the page comes from
  * `bruno()` so it all sits in the one light. Foliage can have its own shadow colour (a rosier one:
  * light through petals), and a sway (wind in the vertices).
@@ -30,6 +33,9 @@ export const shared = {
   lamps: { value: [new Vector3(1e9, 0, 0), new Vector3(1e9, 0, 0), new Vector3(1e9, 0, 0), new Vector3(1e9, 0, 0)] },
   lampRange: { value: 900 },
   time: { value: 0 },
+  car: { value: new Vector3(1e9, 0, 0) }, // (the car and the camera, world: for the see-through)
+  cam: { value: new Vector3(0, 0, 0) },
+  seeR: { value: 420 },
 }
 
 type Opts = MeshLambertMaterialParameters & {
@@ -59,6 +65,9 @@ export function bruno(o: Opts = {}) {
     uLamps: shared.lamps,
     uLampRange: shared.lampRange,
     uTime: shared.time,
+    uCar: shared.car,
+    uCam: shared.cam,
+    uSeeR: shared.seeR,
   }
   m.onBeforeCompile = (s: WebGLProgramParametersWithUniforms) => {
     Object.assign(s.uniforms, u)
@@ -116,8 +125,36 @@ uniform vec3 uLamp;
 uniform float uWarm;
 uniform vec3 uLamps[4];
 uniform float uLampRange;
+uniform vec3 uCar;
+uniform vec3 uCam;
+uniform float uSeeR;
 varying vec3 vWPos;
-varying vec3 vWNormal;`,
+varying vec3 vWNormal;
+float bayer4(vec2 p) {
+  vec2 q = mod(floor(p), 4.0);
+  int i = int(q.x) + int(q.y) * 4;
+  int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+  return (float(m[i]) + 0.5) / 16.0;
+}`,
+      )
+      .replace(
+        '#include <alphatest_fragment>',
+        `#include <alphatest_fragment>
+#ifdef SEE_THROUGH
+{
+  // between the camera and the car: a soft round hole (dithered: no sorting, still solid elsewhere)
+  vec3 dir = uCar - uCam;
+  float tc = length(dir);
+  dir /= max(tc, 1.0);
+  vec3 rel = vWPos - uCam;
+  float t = dot(rel, dir);
+  if (t < tc - 150.0) {
+    float d = length(rel - dir * t);
+    float keep = smoothstep(uSeeR * 0.55, uSeeR, d);
+    if (keep < bayer4(gl_FragCoord.xy)) discard;
+  }
+}
+#endif`,
       )
       .replace(
         '#include <normal_fragment_begin>',
@@ -154,4 +191,17 @@ varying vec3 vWNormal;`,
   }
   m.customProgramCacheKey = () => `bruno-quad|${sway > 0 ? 'sway' : ''}`
   return m
+}
+
+/** everything under `root` in the Quad's light: its standard materials swapped for bruno ones (the
+ *  same colour and glow), once each */
+const swapped = new WeakMap<object, MeshLambertMaterial>()
+export function brunoify(root: { traverse: (f: (o: unknown) => void) => void }) {
+  root.traverse((o) => {
+    const m = o as { isMesh?: boolean; material?: { type?: string; color?: Color; emissive?: Color; emissiveIntensity?: number } }
+    if (!m.isMesh || !m.material || m.material.type !== 'MeshStandardMaterial') return
+    const src = m.material
+    if (!swapped.has(src)) swapped.set(src, bruno({ color: src.color, emissive: src.emissive, emissiveIntensity: src.emissiveIntensity }))
+    ;(m as { material: unknown }).material = swapped.get(src)
+  })
 }
