@@ -86,7 +86,7 @@ const FIX_MS = 760 // the pulse and sparkles
 
 type Phase = 'in' | 'out' | 'fix'
 
-export function Prompts({ items }: { items: PromptItem[] }) {
+export function Prompts({ items, far = FAR }: { items: PromptItem[]; /** mm: from further away it keeps out of the way */ far?: number }) {
   const group = useRef<Group>(null)
   const camera = useThree((s) => s.camera)
   const [shown, setShown] = useState<{ key: string; phase: Phase } | null>(null)
@@ -123,7 +123,7 @@ export function Prompts({ items }: { items: PromptItem[] }) {
     if (cur && cur.phase !== 'in') return // snapping shut or fixing: its timers finish it
     const wait = k !== null && dismissed.current.has(k) ? HOVER_DELAY : DELAY
     let want = k && (cand.current.t >= wait || cur?.key === k) ? k : null
-    if (want && c && camera.position.distanceTo(c.at(at)) > FAR) want = null
+    if (want && c && camera.position.distanceTo(c.at(at)) > far) want = null
     if (cur && want !== cur.key) {
       set({ key: cur.key, phase: 'out' })
       later(OUT_MS, () => set(null))

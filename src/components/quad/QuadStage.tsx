@@ -1,12 +1,14 @@
 import { useMemo, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { CanvasTexture, Fog, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, shared } from './bruno'
 import { CherryTree } from './CherryTree'
 import { Grass, Island, Petals, Walks } from './Ground'
-import { Bench, LampPost } from './Furniture'
+import { LampPost } from './Furniture'
 import { Building, Hedges } from './Backdrop'
-import { Car, type CarState, type Obstacle } from './Car'
+import { Car, CAR_BODY, type CarState, type Obstacle } from './Car'
+import { CarBody, LiveBenches, QuadColliders } from './Physical'
+import { World } from '../../lib/physics/World'
 import { SET } from './set'
 
 /**
@@ -29,6 +31,13 @@ function sky() {
   return t
 }
 
+/** dev only: the R3F store on window.__r3f() (to step frames from the console) */
+function DevStore() {
+  const get = useThree((s) => s.get)
+  if (import.meta.env.DEV) (window as unknown as { __r3f: typeof get }).__r3f = get
+  return null
+}
+
 function Clock() {
   useFrame(({ clock }) => void (shared.time.value = clock.elapsedTime))
   return null
@@ -37,12 +46,11 @@ function Clock() {
 function Scene({ car }: { car: { current: CarState } }) {
   const background = useMemo(sky, [])
   const fog = useMemo(() => new Fog(LOOK.fog, 7000, 18000), [])
-  // what the car bumps into: the trunks, the lamps, the benches
+  // what the car bumps into: the trunks, the lamps, the building and the hedges (the benches it shoves: ./Physical)
   const obstacles = useMemo<Obstacle[]>(
     () => [
       ...SET.trees.map((t) => ({ kind: 'circle' as const, x: t.x, z: t.z, r: 110 })),
       ...SET.lamps.map((l) => ({ kind: 'circle' as const, x: l.x, z: l.z, r: 50 })),
-      ...SET.benches.map((b) => ({ kind: 'box' as const, x: b.x, z: b.z, w: 460, d: 160 })),
       ...SET.building.blocks.map((b) => ({ kind: 'box' as const, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, w: b.x1 - b.x0, d: b.z1 - b.z0 })),
       ...SET.hedges.map((h) => ({ kind: 'box' as const, x: (h.x0 + h.x1) / 2, z: h.z, w: h.x1 - h.x0, d: h.d })),
       ...SET.bushes.map((b) => ({ kind: 'circle' as const, x: b.x, z: b.z, r: b.r * 0.8 })),
@@ -54,6 +62,7 @@ function Scene({ car }: { car: { current: CarState } }) {
       <primitive attach="background" object={background} />
       <primitive attach="fog" object={fog} />
       <Clock />
+      <DevStore />
       {/* the sun: its shadow follows the car (./Car moves it) */}
       <directionalLight
         name="sun"
@@ -80,9 +89,12 @@ function Scene({ car }: { car: { current: CarState } }) {
       {SET.lamps.map((l, i) => (
         <LampPost key={i} slot={i} position={[l.x, 0, l.z]} />
       ))}
-      {SET.benches.map((b, i) => (
-        <Bench key={i} position={[b.x, 0, b.z]} rotation={b.rot} />
-      ))}
+      {/* the physical side: the benches, a toy for the hand and the car (./Physical) */}
+      <World floorY={-3000}>
+        <QuadColliders />
+        <CarBody state={car} size={CAR_BODY} />
+        <LiveBenches car={car} />
+      </World>
       <Building />
       <Hedges />
       <Car state={car} obstacles={obstacles} />

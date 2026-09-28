@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import { Vector3, type DirectionalLight, type Group, type PerspectiveCamera } from 'three'
 import { SET, inIsland } from './set'
+import { isHolding } from '../../lib/physics/Hand'
 import { LOOK, brunoify, shared } from './bruno'
 
 /**
@@ -19,6 +20,7 @@ export type CarState = { x: number; z: number; heading: number; v: number }
 export type Obstacle = { kind: 'circle'; x: number; z: number; r: number } | { kind: 'box'; x: number; z: number; w: number; d: number }
 
 const BODY = { l: 420, w: 220, h: 110 }
+export const CAR_BODY = BODY
 const WHEEL = { r: 46, w: 34, base: 250, track: 200 }
 const RADIUS = 150 // (for bumping into things)
 const MAX = 2800
@@ -51,7 +53,7 @@ export function Car({ state, obstacles, paused }: { state: { current: CarState }
     }
     const up = (e: KeyboardEvent) => MAP[e.code] && keys.delete(MAP[e.code])
     const blur = () => keys.clear()
-    const wheel = (e: WheelEvent) => (zoom.current = Math.min(1.8, Math.max(0.55, zoom.current * (1 + Math.sign(e.deltaY) * 0.08))))
+    const wheel = (e: WheelEvent) => !isHolding() && (zoom.current = Math.min(1.8, Math.max(0.55, zoom.current * (1 + Math.sign(e.deltaY) * 0.08))))
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     window.addEventListener('blur', blur)

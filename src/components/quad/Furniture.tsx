@@ -43,6 +43,9 @@ function backParts(L: number): Part[] {
   return parts
 }
 
+/** the bench's size, for its colliders: its length, its seat's height */
+export const BENCH = { L: 440, seat: 92 }
+
 export function Bench({ position = [0, 0, 0] as [number, number, number], rotation = 0 }) {
   const L = 440
   const box = useMemo(() => new RoundedBoxGeometry(1, 1, 1, 2, 0.2), [])
@@ -51,7 +54,7 @@ export function Bench({ position = [0, 0, 0] as [number, number, number], rotati
   const mesh = (b: Part, i: number) => <mesh key={i} geometry={box} material={TEAK} position={b.p} scale={b.s} castShadow receiveShadow />
   return (
     <group position={position} rotation={[0, rotation, 0]}>
-      <group position={[0, 25, 0]}>{/* (on the pad's bricks) */}
+      <group>
         {parts.map(mesh)}
         {/* (the back raked back from the seat, about the back posts' tops) */}
         <group position={[0, 92, -50]} rotation={[-0.16, 0, 0]}>
