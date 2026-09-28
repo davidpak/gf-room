@@ -10,7 +10,7 @@ import { Color, MeshLambertMaterial, Vector3, type MeshLambertMaterialParameters
  *   bounce  a violet glow up from the ground on faces turned down, low down
  *   lamps   warm pools round the lamp posts, on whatever's near them
  *
- *   see-through  (materials with SEE_THROUGH: the trees) whatever is between the camera and the car
+ *   see-through  (materials with SEE_THROUGH: the blossom only; trunks stay solid) whatever is between the camera and the car
  *           dissolves in a soft round hole, dithered, so the car is never lost behind a tree (Bruno's)
  *
  * No tone mapping (the Canvas is `flat`); the fog mixes in last. Every material on the page comes from

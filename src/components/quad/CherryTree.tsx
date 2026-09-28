@@ -40,7 +40,6 @@ const BARK_DARK = new Color('#3b2e2e')
 const BARK_LIGHT = new Color('#6b5953')
 const MOSS = new Color('#66703f')
 const BARK = bruno({ vertexColors: true })
-BARK.defines = { ...BARK.defines, SEE_THROUGH: '' }
 
 type Wood = { pts: Vector3[]; r0: number; r1: number; kind: 'trunk' | 'limb' | 'branch' | 'twig' }
 
