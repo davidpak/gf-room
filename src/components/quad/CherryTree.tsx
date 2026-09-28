@@ -1,115 +1,85 @@
 import { useMemo } from 'react'
 import { BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, Color, DoubleSide, Float32BufferAttribute, Matrix4, Quaternion, SRGBColorSpace, Vector3 } from 'three'
 import { bruno } from './bruno'
+import { YOSHINO, growTree, rng, type Branch, type Species } from './grow'
 
 /**
- * A Yoshino cherry on the Quad, in full bloom (the reference photos): a short, thick, dark trunk
- * flaring into roots, forking low into five limbs that arch up and out, each forking again; over it
- * a canopy far wider than it is tall, a cloud of blossom.
+ * A Yoshino cherry on the Quad, in full bloom, grown from its seed (./grow: every seed its own tree,
+ * crooked limbs, elbows, sag, a canopy shaped by its branches). Drawn here:
  *
- *   trunk    tubes along curved limbs, tapering, knobbly (bumps round and along), the bark dark plum-
- *            brown, lighter where it faces up, banded across like cherry bark
- *   canopy   Bruno's foliage (folio-2025 Foliage.js): clusters of small cards, each a clump of five-
+ *   wood     every branch a smooth tube along its path, tapering, knobbly; the trunk's foot flares
+ *            into roots. The bark dark brown-grey, lighter where it faces up, banded across like
+ *            cherry bark, moss green along the tops of the big limbs (the photos)
+ *   blossom  Bruno's foliage (folio-2025 Foliage.js) in each cloud: small cards, each a clump of five-
  *            petal blossoms cut out by its texture, scattered through a squashed ball, denser at the
- *            middle; their normals point out of the cluster (blended with out of the whole canopy),
- *            so each cluster shades as one soft ball, lit pale on top, rose-violet underneath, and the
- *            edges stay crunchy with petals. The wind sways them
- *
- * `seed` makes each tree its own; `scale` its size. Toy scale, mm: about 1500 across, 1050 tall.
+ *            middle, their normals out of the ball (and a little out of the whole canopy), so a cloud
+ *            shades as one soft ball and its edges stay crunchy with petals; they sway in the wind
  */
-export function CherryTree({ seed = 1, scale = 1, position = [0, 0, 0] as [number, number, number], rotation = 0 }: { seed?: number; scale?: number; position?: [number, number, number]; rotation?: number }) {
-  const { trunk, canopy } = useMemo(() => buildTree(seed), [seed])
+export function CherryTree({ seed = 1, species = YOSHINO, position = [0, 0, 0] as [number, number, number], rotation = 0 }: { seed?: number; species?: Species; position?: [number, number, number]; rotation?: number }) {
+  const { wood, blossom } = useMemo(() => buildTree(seed, species), [seed, species])
   return (
-    <group position={position} rotation={[0, rotation, 0]} scale={scale}>
-      <mesh geometry={trunk} material={BARK} castShadow receiveShadow />
-      <mesh geometry={canopy} material={BLOSSOM} castShadow receiveShadow />
+    <group position={position} rotation={[0, rotation, 0]}>
+      <mesh geometry={wood} material={BARK} castShadow receiveShadow />
+      <mesh geometry={blossom} material={BLOSSOM} castShadow receiveShadow />
     </group>
   )
 }
 
-// ---- a repeatable random
-function rng(seed: number) {
-  let s = (seed * 2654435761) >>> 0
-  return () => {
-    s = (s + 0x6d2b79f5) >>> 0
-    let t = s
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
 // ---- the bark
-const BARK_DARK = new Color('#6b4a4e')
-const BARK_LIGHT = new Color('#a88580')
-const BARK = bruno({ vertexColors: true, flatShading: false })
+const BARK_DARK = new Color('#4d3b3c')
+const BARK_LIGHT = new Color('#8c7670')
+const MOSS = new Color('#6f7a45')
+const BARK = bruno({ vertexColors: true })
 
-type Limb = { pts: Vector3[]; r0: number; r1: number; roots?: boolean }
-
-/** a tapering, knobbly tube along a limb, bark-coloured by vertex */
-function tube(l: Limb, rand: () => number, pos: number[], nor: number[], col: number[], idx: number[]) {
-  const curve = new CatmullRomCurve3(l.pts, false, 'centripetal')
-  const SEG = Math.max(6, Math.round(curve.getLength() / 45))
-  const RAD = l.r0 > 40 ? 11 : 8
-  const frames = curve.computeFrenetFrames(SEG, false)
+/** a branch as a smooth, tapering, knobbly tube. Its rings ride frames carried along the path (they
+ *  never flip or twist, however it bends); its faces look out */
+function tube(b: Branch, rand: () => number, pos: number[], nor: number[], col: number[], idx: number[]) {
+  const curve = new CatmullRomCurve3(b.pts, false, 'centripetal')
+  const len = curve.getLength()
+  const SEG = Math.max(4, Math.round(len / (b.depth === 0 ? 30 : 40)))
+  const RAD = b.r0 > 50 ? 14 : b.r0 > 18 ? 10 : b.r0 > 7 ? 7 : 5
   const base = pos.length / 3
-  const bumps = [rand() * 6.28, rand() * 6.28, rand() * 6.28]
+  const ph = [rand() * 6.28, rand() * 6.28, rand() * 6.28]
   const c = new Color()
+  let N = new Vector3()
+  let prevT = new Vector3()
   for (let i = 0; i <= SEG; i++) {
     const t = i / SEG
     const p = curve.getPointAt(t)
-    const N = frames.normals[i]
-    const B = frames.binormals[i]
-    let r = l.r0 + (l.r1 - l.r0) * Math.pow(t, 0.75)
+    const T = curve.getTangentAt(t).normalize()
+    if (i === 0) {
+      N = new Vector3().crossVectors(T, Math.abs(T.y) < 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0)).normalize()
+    } else {
+      // carried: turned only as much as the path turns
+      const axis = new Vector3().crossVectors(prevT, T)
+      const sin = axis.length()
+      if (sin > 1e-6) N.applyAxisAngle(axis.divideScalar(sin), Math.asin(Math.min(1, sin)))
+      N.sub(T.clone().multiplyScalar(N.dot(T))).normalize()
+    }
+    prevT = T
+    const B = new Vector3().crossVectors(T, N)
+    const r = b.r0 + (b.r1 - b.r0) * Math.pow(t, 0.8)
     for (let j = 0; j <= RAD; j++) {
       const a = (j / RAD) * Math.PI * 2
-      // knobbly: bumps round and along; the roots flare out in buttresses at the foot
-      let k = 1 + 0.09 * Math.sin(a * 3 + bumps[0] + t * 7) + 0.06 * Math.sin(a * 5 + bumps[1] - t * 11) + 0.05 * Math.sin(t * 19 + bumps[2])
-      if (l.roots) k += 0.55 * Math.pow(Math.max(0, 1 - t / 0.22), 2) * Math.pow(Math.max(0, Math.cos(a * 2.5 + bumps[0])), 2)
-      const rr = r * k
+      let k = 1 + 0.08 * Math.sin(a * 3 + ph[0] + t * 9) + 0.05 * Math.sin(a * 5 + ph[1] - t * 13) + 0.05 * Math.sin(t * len * 0.03 + ph[2])
+      // the roots: buttresses flaring at the trunk's foot
+      if (b.depth === 0) k += 0.6 * Math.pow(Math.max(0, 1 - t / 0.25), 2.2) * Math.pow(Math.max(0, Math.cos(a * 2.5 + ph[0])), 2)
       const n = new Vector3().addScaledVector(N, Math.cos(a)).addScaledVector(B, Math.sin(a)).normalize()
-      pos.push(p.x + n.x * rr, p.y + n.y * rr, p.z + n.z * rr)
+      pos.push(p.x + n.x * r * k, p.y + n.y * r * k, p.z + n.z * r * k)
       nor.push(n.x, n.y, n.z)
-      // lighter where it faces up; banded across (cherry bark's lenticels); darker low down
-      const up = Math.max(0, n.y) * 0.55
-      const band = Math.sin((p.y + p.x * 0.3) * 0.22 + a * 0.2) > 0.82 ? -0.18 : 0
-      c.copy(BARK_DARK).lerp(BARK_LIGHT, Math.min(1, Math.max(0, up + band + 0.1 + (1 - Math.min(1, p.y / 300)) * -0.1)))
+      // lighter facing up, banded across, moss along the tops of the big limbs, darker at the foot
+      const band = Math.sin(t * len * 0.16 + a * 0.3 + ph[1]) > 0.8 ? -0.2 : 0
+      c.copy(BARK_DARK).lerp(BARK_LIGHT, Math.min(1, Math.max(0, n.y * 0.5 + 0.2 + band - (p.y < 60 ? 0.1 : 0))))
+      const moss = b.r0 > 16 && b.depth > 0 ? Math.max(0, n.y - 0.35) * 1.6 * (0.5 + 0.5 * Math.sin(t * 7 + ph[2])) : 0
+      if (moss > 0) c.lerp(MOSS, Math.min(0.85, moss))
       col.push(c.r, c.g, c.b)
     }
   }
   for (let i = 0; i < SEG; i++)
     for (let j = 0; j < RAD; j++) {
       const a = base + i * (RAD + 1) + j
-      const b = a + RAD + 1
-      idx.push(a, a + 1, b, b, a + 1, b + 1) // (wound so the faces look out: along × around is outward)
-    }
-}
-
-/** a knot of bark: a lumpy, squashed ball (where the limbs fork, closing the trunk's top) */
-function knot(c: Vector3, r: number, rand: () => number, pos: number[], nor: number[], col: number[], idx: number[]) {
-  const W = 12
-  const H = 8
-  const base = pos.length / 3
-  const ph = rand() * 6.28
-  const k = new Color()
-  for (let i = 0; i <= H; i++) {
-    const v = i / H
-    const th = v * Math.PI
-    for (let j = 0; j <= W; j++) {
-      const a = (j / W) * Math.PI * 2
-      const n = new Vector3(Math.sin(th) * Math.cos(a), Math.cos(th), Math.sin(th) * Math.sin(a))
-      const rr = r * (1 + 0.08 * Math.sin(a * 3 + ph) * Math.sin(th))
-      pos.push(c.x + n.x * rr, c.y + n.y * rr * 0.7, c.z + n.z * rr)
-      nor.push(n.x, n.y, n.z)
-      k.copy(BARK_DARK).lerp(BARK_LIGHT, Math.max(0, n.y) * 0.55 + 0.1)
-      col.push(k.r, k.g, k.b)
-    }
-  }
-  for (let i = 0; i < H; i++)
-    for (let j = 0; j < W; j++) {
-      const a = base + i * (W + 1) + j
-      const b = a + W + 1
-      idx.push(a, a + 1, b, b, a + 1, b + 1) // (outward, like the tubes)
+      const b2 = a + RAD + 1
+      idx.push(a, a + 1, b2, b2, a + 1, b2 + 1) // (wound so the faces look out)
     }
 }
 
@@ -240,70 +210,34 @@ function cluster(c: Vector3, R: number, n: number, canopyMid: Vector3, rand: () 
   }
 }
 
-function buildTree(seed: number) {
-  const rand = rng(seed)
-  // the skeleton: the trunk, five limbs forking off it low, each forking again
-  const lean = new Vector3(rand() - 0.5, 0, rand() - 0.5).multiplyScalar(40)
-  const fork = new Vector3(lean.x, 270, lean.z)
-  const limbs: Limb[] = [{ pts: [new Vector3(0, -20, 0), new Vector3(lean.x * 0.3, 120, lean.z * 0.3), fork], r0: 96, r1: 72, roots: true }]
-  const ends: { p: Vector3; r: number }[] = []
-  const LIMBS = 5
-  const a0 = rand() * Math.PI * 2
-  for (let i = 0; i < LIMBS; i++) {
-    const a = a0 + (i / LIMBS) * Math.PI * 2 + (rand() - 0.5) * 0.5
-    const out = new Vector3(Math.cos(a), 0, Math.sin(a))
-    const reach = 520 + rand() * 180
-    const lift = 330 + rand() * 120
-    // up out of the fork, arching outward, levelling off (the umbrella)
-    const pts = [
-      fork.clone().addScaledVector(out, -8).setY(fork.y - 70), // (from inside the trunk: no seam where they leave it)
-      fork.clone().addScaledVector(out, reach * 0.22).setY(fork.y + lift * 0.45),
-      fork.clone().addScaledVector(out, reach * 0.58).setY(fork.y + lift * 0.85),
-      fork.clone().addScaledVector(out, reach).setY(fork.y + lift),
-    ]
-    limbs.push({ pts, r0: 50, r1: 18 })
-    ends.push({ p: pts[3].clone(), r: 250 })
-    // two forks off it, further out and up
-    for (const side of [-1, 1]) {
-      const from = new CatmullRomCurve3(pts).getPointAt(0.45 + rand() * 0.2)
-      const b = a + side * (0.45 + rand() * 0.35)
-      const o2 = new Vector3(Math.cos(b), 0, Math.sin(b))
-      const r2 = 240 + rand() * 160
-      const end = from.clone().addScaledVector(o2, r2).setY(from.y + 90 + rand() * 120)
-      limbs.push({ pts: [from, from.clone().addScaledVector(o2, r2 * 0.5).setY(from.y + 70 + rand() * 60), end], r0: 22, r1: 7 })
-      ends.push({ p: end, r: 190 + rand() * 50 })
-    }
-  }
-  // the trunk and limbs
-  const tp: number[] = []
-  const tn: number[] = []
-  const tc: number[] = []
-  const ti: number[] = []
-  for (const l of limbs) tube(l, rand, tp, tn, tc, ti)
-  knot(fork, 80, rand, tp, tn, tc, ti)
-  const trunk = new BufferGeometry()
-  trunk.setAttribute('position', new Float32BufferAttribute(tp, 3))
-  trunk.setAttribute('normal', new Float32BufferAttribute(tn, 3))
-  trunk.setAttribute('color', new Float32BufferAttribute(tc, 3))
-  trunk.setIndex(ti)
-  // the canopy: a cluster at every branch end, a few more filling the crown
-  const mid = new Vector3(lean.x, fork.y + 380, lean.z)
-  for (let i = 0; i < 5; i++) {
-    const a = rand() * Math.PI * 2
-    const r = 150 + rand() * 250
-    ends.push({ p: new Vector3(mid.x + Math.cos(a) * r, mid.y + 60 + rand() * 120, mid.z + Math.sin(a) * r), r: 240 })
-  }
+function buildTree(seed: number, species: Species) {
+  const tree = growTree(seed, species)
+  const rand = rng(seed * 7 + 3)
+  const wp: number[] = []
+  const wn: number[] = []
+  const wc: number[] = []
+  const wi: number[] = []
+  for (const b of tree.branches) tube(b, rand, wp, wn, wc, wi)
+  const wood = new BufferGeometry()
+  wood.setAttribute('position', new Float32BufferAttribute(wp, 3))
+  wood.setAttribute('normal', new Float32BufferAttribute(wn, 3))
+  wood.setAttribute('color', new Float32BufferAttribute(wc, 3))
+  wood.setIndex(wi)
+  // the blossom: a ball of cards in every cloud; the canopy's middle for the shading
+  const mid = new Vector3()
+  for (const c of tree.clouds) mid.add(c.at)
+  mid.divideScalar(Math.max(1, tree.clouds.length))
   const cp: number[] = []
   const cn: number[] = []
   const cu: number[] = []
   const cc: number[] = []
   const ci: number[] = []
-  for (const e of ends) cluster(e.p.clone().add(new Vector3(0, 40, 0)), e.r, Math.round(e.r * 0.42), mid, rand, cp, cn, cu, cc, ci)
-  const canopy = new BufferGeometry()
-  canopy.setAttribute('position', new Float32BufferAttribute(cp, 3))
-  canopy.setAttribute('normal', new Float32BufferAttribute(cn, 3))
-  canopy.setAttribute('uv', new BufferAttribute(new Float32Array(cu), 2))
-  canopy.setAttribute('color', new Float32BufferAttribute(cc, 3))
-  canopy.setIndex(ci)
-  return { trunk, canopy }
+  for (const c of tree.clouds) cluster(c.at, c.r, Math.round(c.r * 0.34), mid, rand, cp, cn, cu, cc, ci)
+  const blossom = new BufferGeometry()
+  blossom.setAttribute('position', new Float32BufferAttribute(cp, 3))
+  blossom.setAttribute('normal', new Float32BufferAttribute(cn, 3))
+  blossom.setAttribute('uv', new BufferAttribute(new Float32Array(cu), 2))
+  blossom.setAttribute('color', new Float32BufferAttribute(cc, 3))
+  blossom.setIndex(ci)
+  return { wood, blossom }
 }

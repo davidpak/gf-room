@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, Fog, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, shared } from './bruno'
 import { CherryTree } from './CherryTree'
 import { Island } from './Ground'
+import './quad.css'
 
 /**
  * The Quad, built up piece by piece (Bruno Simon's folio-2025 is the template). The first set piece
@@ -30,7 +31,7 @@ function Clock() {
   return null
 }
 
-function Scene() {
+function Scene({ seed }: { seed: number }) {
   const background = useMemo(sky, [])
   const fog = useMemo(() => new Fog(LOOK.fog, 5500, 14000), [])
   const sun = LOOK.sun.clone().multiplyScalar(3200)
@@ -54,19 +55,27 @@ function Scene() {
         shadow-bias={-0.0004}
         shadow-normalBias={1.2}
       />
-      {/* one piece at a time: the tree first (the grass, the walk, the petals, the bench and the lamp
-          come back in once it's right) */}
+      {/* one piece at a time: the trees first (the grass, the walk, the petals, the bench and the lamp
+          come back in once they're right). Three, each grown from its own seed, a row like the Quad's */}
       <Island />
-      <CherryTree seed={3} position={[0, 0, 0]} rotation={0.4} />
+      <CherryTree seed={seed} position={[-850, 0, -120]} />
+      <CherryTree seed={seed + 1} position={[80, 0, 180]} />
+      <CherryTree seed={seed + 2} position={[950, 0, -80]} />
     </>
   )
 }
 
 export function QuadStage() {
+  const [seed, setSeed] = useState(3)
   return (
+    <>
     <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 20, far: 30000, position: [2100, 1650, 2900] }}>
-      <Scene />
+      <Scene seed={seed} />
       <OrbitControls target={[0, 420, 0]} enableDamping dampingFactor={0.07} minDistance={600} maxDistance={9000} maxPolarAngle={1.42} />
     </Canvas>
+      <button className="quad-regrow" onClick={() => setSeed((s) => s + 3)}>
+        grow new trees
+      </button>
+    </>
   )
 }
