@@ -40,7 +40,7 @@ export const SET = {
   // a little toward the camera
   signs: [
     { x: -2980, z: -980, rot: 0.3 },
-    { x: 1300, z: -1120, rot: 0.12 },
+    { x: 1850, z: -540, rot: 0.3 }, // (across the walk from the clothesline, out of the photos' way)
   ],
   // their photos from the Quad (./Photos): the bench photo on an easel by the bench it was taken on; the cherry
   // shoot pegged on clotheslines between the trunks they stood under (the piggybacks with the hall's
