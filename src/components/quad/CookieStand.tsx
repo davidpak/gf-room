@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier'
-import { BufferAttribute, BufferGeometry, CanvasTexture, CylinderGeometry, DoubleSide, LatheGeometry, RepeatWrapping, SRGBColorSpace, Vector2, Vector3, type Group, type Material } from 'three'
+import { BufferAttribute, BufferGeometry, CanvasTexture, CurvePath, CylinderGeometry, DoubleSide, LatheGeometry, LineCurve3, QuadraticBezierCurve3, Quaternion, RepeatWrapping, SRGBColorSpace, TubeGeometry, Vector2, Vector3, type Group, type Material } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { Holdable } from '../../lib/physics/Holdable'
 import { Prompts, type PromptItem } from '../prompt/Prompts'
@@ -37,7 +37,7 @@ const CANOPY = { half: 1500, eave: 2100, peak: 2900, over: 60 }
 const OVEN = { w: 460, h: 280, d: 360, x: -420 } // (on the table, left of middle)
 const OVEN_TOY = 1.5 // (drawn half as big again: it's the star, it has to read from the car)
 const COOKIE = { r: 30, t: 12 } // (toy mm, not real: chunky)
-const MENU = { w: 760, len: 1120, lean: 0.24, at: [1365, 0, 260] as [number, number, number], rot: 0 } // (just past the table's right end, square on)
+const MENU = { w: 760, len: 1120, lean: 0.24, at: [1900, 0, 900] as [number, number, number], rot: 0 } // (just outside the canopy on its right, by the middle walk, square on)
 
 // ---- the cookies there are, and which one's picked
 export const KINDS = [
@@ -485,6 +485,161 @@ function Oven({ baking, onClick }: { baking: { current: number }; onClick: (e: T
   )
 }
 
+// ---- the table: a 6 ft fold-in-half (Lifetime's, say): a white blow-moulded top, 50 thick and rounded,
+// on black steel legs, a pair at each end that run straight down and then splay out to their feet, a bar
+// across each pair up top and one down low, a brace from each end in to the middle under the top
+const STEEL = bruno({ color: '#3a3542', shade: '#221e2b', sheen: 0.35 })
+const PLASTIC = bruno({ color: '#f5f3ef', shade: '#b3a9c2' })
+const TOP_T = 50
+const LEG = { inset: 150, top: 140, foot: 285, knee: 440, ankle: 130, r: 15 } // (z at its top and at its foot; the heights where it bends)
+const UNDER = TABLE.h - TOP_T // (the underside of the top)
+/** a tube through `pts`, its corners bent round */
+function bentTube(pts: Vector3[], r: number, bend: number) {
+  const path = new CurvePath<Vector3>()
+  let from = pts[0]
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i]
+    const into = p.clone().sub(pts[i - 1]).normalize()
+    const out = pts[i + 1].clone().sub(p).normalize()
+    const a = p.clone().addScaledVector(into, -bend)
+    const b = p.clone().addScaledVector(out, bend)
+    path.add(new LineCurve3(from, a))
+    path.add(new QuadraticBezierCurve3(a, p, b))
+    from = b
+  }
+  path.add(new LineCurve3(from, pts[pts.length - 1]))
+  return new TubeGeometry(path, 40, r, 8)
+}
+const LEG_GEO = [1, -1].map((sz) =>
+  bentTube(
+    [new Vector3(0, UNDER - 8, sz * LEG.top), new Vector3(0, LEG.knee, sz * LEG.top), new Vector3(0, LEG.ankle, sz * LEG.foot), new Vector3(0, 30, sz * LEG.foot)],
+    LEG.r,
+    70,
+  ),
+)
+const _q = new Quaternion()
+const _up = new Vector3(0, 1, 0)
+/** a straight steel bar from a to b */
+function Rod({ a, b, r = 10, m = STEEL }: { a: [number, number, number]; b: [number, number, number]; r?: number; m?: Material }) {
+  const A = new Vector3(...a)
+  const d = new Vector3(...b).sub(A)
+  _q.setFromUnitVectors(_up, d.clone().normalize())
+  return <mesh geometry={TUBE} material={m} position={A.addScaledVector(d, 0.5)} quaternion={_q.clone()} scale={[r, d.length(), r]} castShadow />
+}
+const TOP_GEO = new RoundedBoxGeometry(TABLE.w, TOP_T, TABLE.d, 4, 22)
+function FoldingTable() {
+  const lx = TABLE.w / 2 - LEG.inset
+  const lowZ = LEG.top + ((LEG.knee - 180) / (LEG.knee - LEG.ankle)) * (LEG.foot - LEG.top) // (where the legs are at the low bar)
+  return (
+    <group>
+      <mesh geometry={TOP_GEO} material={PLASTIC} position={[0, TABLE.h - TOP_T / 2, 0]} castShadow receiveShadow />
+      {/* the frame under the top: a rail down each long side, the bar each pair of legs swings on */}
+      {[-1, 1].map((sz) => (
+        <Rod key={sz} a={[-TABLE.w / 2 + 60, UNDER - 12, sz * (TABLE.d / 2 - 40)]} b={[TABLE.w / 2 - 60, UNDER - 12, sz * (TABLE.d / 2 - 40)]} r={12} />
+      ))}
+      {[-1, 1].map((sx) => (
+        <group key={sx} position={[sx * lx, 0, 0]}>
+          <Rod a={[0, UNDER - 12, -(TABLE.d / 2 - 40)]} b={[0, UNDER - 12, TABLE.d / 2 - 40]} r={12} />
+          {LEG_GEO.map((g, i) => (
+            <mesh key={i} geometry={g} material={STEEL} castShadow />
+          ))}
+          {/* the bars across the pair: up top by the knees, down low */}
+          <Rod a={[0, LEG.knee + 30, -LEG.top]} b={[0, LEG.knee + 30, LEG.top]} />
+          <Rod a={[0, 180, -lowZ]} b={[0, 180, lowZ]} />
+          {/* their feet: black caps */}
+          {[-1, 1].map((sz) => (
+            <mesh key={sz} geometry={TUBE} material={DARK} position={[0, 18, sz * LEG.foot]} scale={[LEG.r + 4, 36, LEG.r + 4]} />
+          ))}
+        </group>
+      ))}
+      {/* the braces, each end's upper bar in to the middle, and the latch where the top folds */}
+      {[-1, 1].map((sx) => (
+        <Rod key={sx} a={[sx * lx, LEG.knee + 30, 0]} b={[sx * 190, UNDER - 14, 0]} r={9} />
+      ))}
+      <mesh geometry={RBOX} material={STEEL} position={[0, UNDER - 20, 0]} scale={[90, 26, 60]} />
+    </group>
+  )
+}
+
+// ---- the cloth: gingham laid over the top and falling down all round, fitted to the table (a formula,
+// not a simulation): flat on top, rolled over the rounded edge, hanging straight with a soft ripple along
+// its hem, and at each corner the extra cloth falls in a flared fold that hangs lower, like a real one
+const CLOTH = { drop: 250, lift: 3, r: 25, flare: 0.06, fold: 70, ripple: 9, check: 380 }
+function clothGeometry() {
+  const a = TABLE.w / 2 - 20 // (where the top starts to round over)
+  const b = TABLE.d / 2 - 20
+  const L = CLOTH.drop + 20
+  const R = CLOTH.r
+  const arc = (Math.PI * R) / 2
+  const top = TABLE.h + CLOTH.lift - 0.5
+  // where the cloth's rows and columns fall: wide apart across the top, close over the edge and down
+  const axis = (h: number) => {
+    const p: number[] = []
+    for (let x = 0; x < h - 90; x += 90) p.push(x)
+    for (let x = h - 90; x < h + L; x += 10) p.push(x)
+    p.push(h + L)
+    return [...p.slice(1).reverse().map((x) => -x), ...p]
+  }
+  const xs = axis(a)
+  const zs = axis(b)
+  const sstep = (e0: number, e1: number, x: number) => {
+    const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)))
+    return t * t * (3 - 2 * t)
+  }
+  // over the edge and down: how far out, how far down, t along the cloth past the edge
+  const drape = (t: number): [number, number] => {
+    if (t < arc) return [R * Math.sin(t / R), R * (1 - Math.cos(t / R))]
+    const s = t - arc
+    return [R + s * CLOTH.flare, R + s * Math.sqrt(1 - CLOTH.flare * CLOTH.flare)]
+  }
+  const pos: number[] = []
+  const uv: number[] = []
+  for (const z of zs)
+    for (const x of xs) {
+      uv.push(x / CLOTH.check + 0.5, z / CLOTH.check + 0.5)
+      const ex = Math.abs(x) - a
+      const ez = Math.abs(z) - b
+      const sx = Math.sign(x) || 1
+      const sz = Math.sign(z) || 1
+      if (ex <= 0 && ez <= 0) {
+        pos.push(x, top, z)
+        continue
+      }
+      if (ex > 0 && ez > 0) {
+        // a corner: the cloth falls round the corner in a cone, its extra flaring out in a fold
+        const th = Math.atan2(ez, ex)
+        const t = Math.hypot(ex, ez)
+        const [o, d] = drape(t)
+        const fold = CLOTH.fold * Math.sin(2 * th) ** 2 * sstep(arc, L * 1.3, t)
+        const out = o + fold
+        pos.push(sx * (a + out * Math.cos(th)), top - d, sz * (b + out * Math.sin(th)))
+        continue
+      }
+      // a side: straight down, a soft ripple along the hem (none by the corners, where the folds are)
+      const along = ex > 0 ? z : x
+      const t = ex > 0 ? ex : ez
+      const [o, d] = drape(t)
+      const edge = (ex > 0 ? b : a) - Math.abs(along)
+      const s = Math.max(0, t - arc) / L
+      const out = o + CLOTH.ripple * s * s * Math.sin(along / 42 + (ex > 0 ? 1.3 : 0.4) * sx * sz) * sstep(0, 220, edge)
+      if (ex > 0) pos.push(sx * (a + out), top - d, z)
+      else pos.push(x, top - d, sz * (b + out))
+    }
+  const nx = xs.length
+  const idx: number[] = []
+  for (let j = 0; j < zs.length - 1; j++)
+    for (let i = 0; i < nx - 1; i++) {
+      const p = j * nx + i
+      idx.push(p, p + nx, p + 1, p + 1, p + nx, p + nx + 1)
+    }
+  const g = new BufferGeometry()
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3))
+  g.setAttribute('uv', new BufferAttribute(new Float32Array(uv), 2))
+  g.setIndex(idx)
+  g.computeVertexNormals()
+  return g
+}
+
 // ---- the stand
 export function CookieStand({ car }: { car: { current: CarState } }) {
   const at = SET.cookies
@@ -505,7 +660,6 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
     menu.colorSpace = SRGBColorSpace
     menu.anisotropy = 8
     const cloth = gingham()
-    cloth.repeat.set(4, 2)
     return {
       roof: bruno({ map: roof.map, side: DoubleSide, shade: '#b89ac4' }),
       valance: bruno({ map: val.map, alphaMap: val.alpha!, alphaTest: 0.5, side: DoubleSide, shade: '#b89ac4' }),
@@ -516,7 +670,7 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
       menu,
       // (the menu lit a little from within, so it reads in the canopy's shade)
       menuMat: bruno({ map: menu, emissiveMap: menu, emissive: '#ffffff', emissiveIntensity: 0.35, shade: '#6f7699' }),
-      cloth: bruno({ map: cloth, shade: '#b8a2c8' }),
+      cloth: bruno({ map: cloth, shade: '#b8a2c8', side: DoubleSide }),
     }
   }, [])
   // the count onto the plank, the menu onto its board (the font first)
@@ -535,6 +689,7 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
     })
   }, [tex, sel])
   const roof = useMemo(roofGeometry, [])
+  const clothGeo = useMemo(clothGeometry, [])
 
   // ---- baking: a bake takes ~1.6 s; the cookie hops out when the door's down
   const baking = useRef(0)
@@ -591,8 +746,8 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
   const spot = useMemo<Spot>(() => {
     const c = Math.cos(at.rot)
     const s = Math.sin(at.rot)
-    // (a little toward the menu out front, low enough that it's all in, the plank still on top)
-    const centre = place(460, 1680, 320)
+    // (the menu on the right and all, low enough that it's all in, the plank still on top)
+    const centre = place(260, 1560, 420)
     const out = new Vector3(0.22, 0.26, 1).normalize()
     const dir = new Vector3(out.x * c + out.z * s, out.y, -out.x * s + out.z * c)
     return {
@@ -688,16 +843,9 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
                 <mesh key={s} geometry={TUBE} material={DARK} position={[s * 640, 120, 34]} rotation={[Math.PI / 2, 0, 0]} scale={[16, 8, 16]} />
               ))}
             </group>
-            {/* the table: top, legs, the gingham cloth over it hanging down the front and sides */}
-            <Block size={[TABLE.w, 40, TABLE.d]} at={[0, TABLE.h - 20, 0]} m={CREAM} />
-            {[-1, 1].map((s) => (
-              <mesh key={s} geometry={RBOX} material={FRAME} position={[s * (TABLE.w / 2 - 120), TABLE.h / 2, 0]} scale={[30, TABLE.h, TABLE.d - 120]} />
-            ))}
-            <Block size={[TABLE.w + 40, 16, TABLE.d + 40]} at={[0, TABLE.h + 6, 0]} m={tex.cloth} />
-            <Block size={[TABLE.w + 40, 360, 10]} at={[0, TABLE.h - 170, TABLE.d / 2 + 22]} m={tex.cloth} />
-            {[-1, 1].map((s) => (
-              <Block key={s} size={[10, 360, TABLE.d + 40]} at={[s * (TABLE.w / 2 + 22), TABLE.h - 170, 0]} m={tex.cloth} />
-            ))}
+            {/* the table, the gingham cloth over it */}
+            <FoldingTable />
+            <mesh geometry={clothGeo} material={tex.cloth} castShadow receiveShadow />
             {/* the cooling rack */}
             <group position={[330, TABLE.h + 14, 20]}>
               <Block size={[420, 12, 300]} at={[0, 40, 0]} m={CHROME} />
@@ -708,7 +856,7 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
           <group position={[OVEN.x, TABLE.h + 14, -40]} scale={OVEN_TOY}>
             <Oven baking={baking} onClick={bakeClick} />
           </group>
-          {/* the menu: an A-frame chalkboard out front to the right; click a row to pick it */}
+          {/* the menu: an A-frame chalkboard just outside on the right; click a row to pick it */}
           <group position={MENU.at} rotation={[0, MENU.rot, 0]} onPointerOver={pointer} onPointerOut={unpointer}>
             <AFrame w={MENU.w} len={MENU.len} lean={MENU.lean} face={tex.menuMat} onFaceClick={menuClick} />
           </group>
