@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import { Vector3, type DirectionalLight, type Group, type PerspectiveCamera } from 'three'
-import { SET, inIsland } from './set'
+import { SET, inIsland, paveSdf } from './set'
 import { isHolding } from '../../lib/physics/Hand'
 import { LOOK, brunoify, shared } from './bruno'
 
@@ -23,6 +23,13 @@ const BODY = { l: 420, w: 220, h: 110 }
 export const CAR_BODY = BODY
 const WHEEL = { r: 46, w: 34, base: 250, track: 200 }
 const RADIUS = 150 // (for bumping into things)
+/** how high the ground is under a wheel: the lawn, or up on the bricks (a short ramp over the edge) */
+const LAWN_Y = 5
+const BRICK_Y = 25
+const groundAt = (x: number, z: number) => {
+  const t = Math.min(1, Math.max(0, (8 - paveSdf(x, z)) / 16))
+  return LAWN_Y + (BRICK_Y - LAWN_Y) * t * t * (3 - 2 * t)
+}
 const MAX = 2800
 const REVERSE = 1100
 const ACCEL = 3000
@@ -39,7 +46,7 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
   const chassis = useRef<Group>(null)
   const wheels = useRef<(Group | null)[]>([])
   const fronts = useRef<(Group | null)[]>([])
-  const sim = useRef({ steer: 0, pitch: 0, roll: 0, spin: 0, bob: 0 })
+  const sim = useRef({ steer: 0, pitch: 0, roll: 0, spin: 0, bob: 0, wheels: [LAWN_Y, LAWN_Y, LAWN_Y, LAWN_Y] })
   const zoom = useRef(1)
   useLayoutEffect(() => void (body.current && brunoify(body.current)), []) // (in the Quad's light)
   const camera = useThree((s) => s.camera) as PerspectiveCamera
@@ -133,10 +140,26 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     m.roll += (-yaw * s.v / MAX * 0.09 - m.roll) * Math.min(1, dt * 6)
     m.spin += (s.v * dt) / WHEEL.r
     m.bob += dt * (4 + Math.abs(s.v) / 300)
+    // riding the ground: each wheel on what's under it (grass, or up on the bricks), the car raised and
+    // tipped to sit on all four
+    const [ch, sh] = [Math.cos(s.heading), Math.sin(s.heading)]
+    ;[
+      [-1, 1],
+      [1, 1],
+      [-1, -1],
+      [1, -1],
+    ].forEach(([lx, lz], k) => {
+      const x = (lx * WHEEL.track) / 2
+      const z = (lz * WHEEL.base) / 2
+      const g = groundAt(s.x + x * ch + z * sh, s.z - x * sh + z * ch)
+      m.wheels[k] += (g - m.wheels[k]) * Math.min(1, dt * 18)
+    })
+    const [fl, fr, bl, br] = m.wheels
     const b = body.current
     if (b) {
-      b.position.set(s.x, 0, s.z)
-      b.rotation.y = s.heading
+      b.position.set(s.x, (fl + fr + bl + br) / 4, s.z)
+      b.rotation.order = 'YXZ'
+      b.rotation.set(-Math.atan((fl + fr - bl - br) / 2 / WHEEL.base), s.heading, Math.atan((fr + br - fl - bl) / 2 / WHEEL.track))
     }
     const c = chassis.current
     if (c) {
