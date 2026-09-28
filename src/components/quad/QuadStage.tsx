@@ -9,6 +9,8 @@ import { Building, Hedges } from './Backdrop'
 import { Car, CAR_BODY, type CarState, type Obstacle } from './Car'
 import { CarBody, LiveProps, QuadColliders, propObstacles } from './Physical'
 import { World } from '../../lib/physics/World'
+import { PhotoViewer, Photos, boardObstacles, useViewerOpen } from './Photos'
+import './quad.css'
 import { SET } from './set'
 
 /**
@@ -43,7 +45,7 @@ function Clock() {
   return null
 }
 
-function Scene({ car }: { car: { current: CarState } }) {
+function Scene({ car, paused }: { car: { current: CarState }; paused: boolean }) {
   const background = useMemo(sky, [])
   const fog = useMemo(() => new Fog(LOOK.fog, 7000, 18000), [])
   // what the car bumps into: the trunks, the lamps, the building and the hedges (the benches it shoves: ./Physical)
@@ -54,6 +56,7 @@ function Scene({ car }: { car: { current: CarState } }) {
       ...SET.building.blocks.map((b) => ({ kind: 'box' as const, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, w: b.x1 - b.x0, d: b.z1 - b.z0 })),
       ...SET.hedges.map((h) => ({ kind: 'box' as const, x: (h.x0 + h.x1) / 2, z: h.z, w: h.x1 - h.x0, d: h.d })),
       ...SET.bushes.map((b) => ({ kind: 'circle' as const, x: b.x, z: b.z, r: b.r * 0.8 })),
+      ...boardObstacles(),
     ],
     [],
   )
@@ -95,9 +98,10 @@ function Scene({ car }: { car: { current: CarState } }) {
         <CarBody state={car} size={CAR_BODY} />
         <LiveProps car={car} />
       </World>
+      <Photos car={car} />
       <Building />
       <Hedges />
-      <Car state={car} obstacles={obstacles} movers={propObstacles} />
+      <Car state={car} obstacles={obstacles} movers={propObstacles} paused={paused} />
     </>
   )
 }
@@ -105,9 +109,13 @@ function Scene({ car }: { car: { current: CarState } }) {
 export function QuadStage() {
   const car = useRef<CarState>({ x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
   if (import.meta.env.DEV) Object.assign(window, { __quadCar: car }) // (for trying it from the console)
+  const viewing = !!useViewerOpen()
   return (
-    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 50, far: 40000, position: [0, 3300, 3900] }}>
-      <Scene car={car} />
-    </Canvas>
+    <>
+      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 50, far: 40000, position: [0, 3300, 3900] }}>
+        <Scene car={car} paused={viewing} />
+      </Canvas>
+      <PhotoViewer />
+    </>
   )
 }

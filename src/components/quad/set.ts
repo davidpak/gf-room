@@ -42,6 +42,26 @@ export const SET = {
     { x: -2980, z: -980, rot: 0.3 },
     { x: 1300, z: -1120, rot: 0.12 },
   ],
+  // their photos (./Photos): the bench photo on the bench it was taken on; the cherry shoot pegged on
+  // clotheslines between the trunks they stood under (the piggybacks with the hall's gable behind on
+  // one, the rest on the other); everything else on corkboards out on the lawn, oldest first, round from
+  // where the car starts (`n`: how many on each; the last takes the rest)
+  photos: {
+    bench: 1,
+    lines: [
+      { trees: [1, 2] as [number, number], h: 330, names: ['IMG_8165', 'IMG_8166', 'IMG_8167', 'IMG_8168', 'IMG_8169'] },
+      { trees: [3, 4] as [number, number], h: 330, names: ['IMG_1199', 'IMG_8170', 'IMG_8171'] },
+    ],
+    boards: [
+      { x: -3500, z: 1000, rot: 0.3, n: 7 },
+      { x: -3350, z: -150, rot: 0.35, n: 7 },
+      { x: -950, z: 700, rot: 0.25, n: 5 },
+      { x: -400, z: -500, rot: 0.3, n: 8 },
+      { x: 500, z: 1150, rot: 0.2, n: 8 },
+      { x: 2000, z: 700, rot: 0.3, n: 8 },
+      { x: 3150, z: 100, rot: 0.35, n: 4 },
+    ],
+  },
   // the building along the north edge (cut off where the island ends), its wing stepping out; the
   // dark hedge before the wing; bushes at the building's foot
   building: {

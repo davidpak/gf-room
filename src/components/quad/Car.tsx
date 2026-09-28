@@ -155,8 +155,8 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     camera.position.set(camAt.current.x + 1500 * z, 3300 * z, camAt.current.z + 3900 * z)
     camera.lookAt(camAt.current.x, 80, camAt.current.z - 150)
     if (VIEW === 'bench') {
-      // (?view=bench: down low, in front of a bench on the walk)
-      const b = SET.benches[2]
+      // (?view=bench: down low, in front of the bench from their photo)
+      const b = SET.benches[SET.photos.bench]
       camera.position.set(b.x + 380, 230, b.z + 560)
       camera.lookAt(b.x, 110, b.z)
     }
