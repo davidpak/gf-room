@@ -9,7 +9,8 @@ import { Building, Hedges } from './Backdrop'
 import { Car, CAR_BODY, type CarState, type Obstacle } from './Car'
 import { CarBody, LiveProps, QuadColliders, propObstacles } from './Physical'
 import { World } from '../../lib/physics/World'
-import { PhotoViewer, Photos, useViewerOpen } from './Photos'
+import { LookControls, Photos } from './Photos'
+import { lookBack, useLook } from './look'
 import './quad.css'
 import { SET } from './set'
 
@@ -56,6 +57,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
       ...SET.building.blocks.map((b) => ({ kind: 'box' as const, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, w: b.x1 - b.x0, d: b.z1 - b.z0 })),
       ...SET.hedges.map((h) => ({ kind: 'box' as const, x: (h.x0 + h.x1) / 2, z: h.z, w: h.x1 - h.x0, d: h.d })),
       ...SET.bushes.map((b) => ({ kind: 'circle' as const, x: b.x, z: b.z, r: b.r * 0.8 })),
+      { kind: 'circle' as const, x: SET.photos.easel.x, z: SET.photos.easel.z, r: 100 }, // (the bench photo's easel)
     ],
     [],
   )
@@ -108,13 +110,13 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
 export function QuadStage() {
   const car = useRef<CarState>({ x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
   if (import.meta.env.DEV) Object.assign(window, { __quadCar: car }) // (for trying it from the console)
-  const viewing = !!useViewerOpen()
+  const looking = !!useLook()
   return (
     <>
-      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 50, far: 40000, position: [0, 3300, 3900] }}>
-        <Scene car={car} paused={viewing} />
+      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 50, far: 40000, position: [0, 3300, 3900] }} onPointerMissed={() => lookBack()}>
+        <Scene car={car} paused={looking} />
       </Canvas>
-      <PhotoViewer />
+      <LookControls />
     </>
   )
 }

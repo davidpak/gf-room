@@ -6,7 +6,6 @@ import { usePerch } from '../../lib/physics/usePerch'
 import { Prompts } from '../prompt/Prompts'
 import { Bench, BENCH } from './Furniture'
 import { Sign, SIGN } from './Sign'
-import { BenchPhoto } from './Photos'
 import type { CarState, Obstacle } from './Car'
 import { PADS, SET } from './set'
 
@@ -61,6 +60,8 @@ export function QuadColliders() {
       {SET.hedges.map((h, i) => (
         <CuboidCollider key={`h${i}`} args={[(h.x1 - h.x0) / 2, h.h / 2, h.d / 2]} position={[(h.x0 + h.x1) / 2, h.h / 2, h.z]} />
       ))}
+      {/* the bench photo's easel */}
+      <CuboidCollider args={[95, 135, 70]} position={[SET.photos.easel.x, 135, SET.photos.easel.z]} rotation={[0, SET.photos.easel.rot, 0]} />
       {SET.bushes.map((b, i) => (
         <CylinderCollider key={`s${i}`} args={[b.r * 0.6, b.r * 0.8]} position={[b.x, b.r * 0.6, b.z]} />
       ))}
@@ -156,7 +157,6 @@ export function LiveProps({ car }: { car: { current: CarState } }) {
       {SET.benches.map((b, i) => (
         <LiveProp key={`bench${i}`} id={`bench${i}`} label="Put the bench back" at={{ x: b.x, y: PAVING, z: b.z, rot: b.rot }} car={car} lift={330} feelAlong={[-150, 0, 150]} feelR={105}>
           <Bench />
-          {i === SET.photos.bench && <BenchPhoto />}
           {/* its seat and legs a block, its back a slab raked back */}
           <CuboidCollider args={[BENCH.L / 2, BENCH.seat / 2, 62]} position={[0, BENCH.seat / 2, 0]} mass={6} friction={0.7} />
           <CuboidCollider args={[BENCH.L / 2, 75, 9]} position={[0, BENCH.seat + 70, -62]} rotation={[-0.16, 0, 0]} mass={2} friction={0.7} />

@@ -4,6 +4,7 @@ import { RoundedBox } from '@react-three/drei'
 import { Vector3, type DirectionalLight, type Group, type PerspectiveCamera } from 'three'
 import { SET, inIsland, paveSdf } from './set'
 import { isHolding } from '../../lib/physics/Hand'
+import { getLook, lookPose } from './look'
 import { LOOK, brunoify, shared } from './bruno'
 
 /**
@@ -38,6 +39,10 @@ const STEER = 0.6
 const VIEW = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('view') : null
 const C = { body: '#9fdcc8', roof: '#fbeedd', trim: '#f4a9b4', wheel: '#2b2833', hub: '#fbeedd', glass: '#3b4466', light: '#fff4c8' }
 
+const _pos = new Vector3()
+const _at = new Vector3()
+const _tp = new Vector3()
+const _ta = new Vector3()
 const keys = new Set<string>()
 const MAP: Record<string, string> = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'brake', KeyR: 'reset' }
 
@@ -60,7 +65,7 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     }
     const up = (e: KeyboardEvent) => MAP[e.code] && keys.delete(MAP[e.code])
     const blur = () => keys.clear()
-    const wheel = (e: WheelEvent) => !isHolding() && (zoom.current = Math.min(1.8, Math.max(0.55, zoom.current * (1 + Math.sign(e.deltaY) * 0.08))))
+    const wheel = (e: WheelEvent) => !isHolding() && !getLook() && (zoom.current = Math.min(1.8, Math.max(0.55, zoom.current * (1 + Math.sign(e.deltaY) * 0.08))))
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     window.addEventListener('blur', blur)
@@ -74,6 +79,8 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
   }, [])
 
   const camAt = useRef(new Vector3(0, 0, 0))
+  // looking at a photo (./look): where the camera frames it, and how far it has glided there (0..1)
+  const look = useRef({ pos: new Vector3(), at: new Vector3(), has: false, view: 0 })
   const first = useRef(true)
   useFrame(({ scene }, delta) => {
     const sun = scene.getObjectByName('sun') as DirectionalLight | undefined
@@ -175,8 +182,29 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     first.current = false
     const z = zoom.current
     // Bruno's camera: high, from the front and a little to the side, always the same way round
-    camera.position.set(camAt.current.x + 1500 * z, 3300 * z, camAt.current.z + 3900 * z)
-    camera.lookAt(camAt.current.x, 80, camAt.current.z - 150)
+    _pos.set(camAt.current.x + 1500 * z, 3300 * z, camAt.current.z + 3900 * z)
+    _at.set(camAt.current.x, 80, camAt.current.z - 150)
+    // a photo looked at: the camera glides from following the car to square in front of it, and back
+    const lk = look.current
+    const on = lookPose(_tp, _ta, camera.aspect)
+    if (on) {
+      const k = lk.has ? Math.min(1, dt * 5) : 1 // (stepping to the next one: it slides over)
+      lk.pos.lerp(_tp, k)
+      lk.at.lerp(_ta, k)
+      lk.has = true
+    }
+    lk.view += ((on ? 1 : 0) - lk.view) * Math.min(1, dt * 2.4)
+    if (!on && lk.view < 0.002) {
+      lk.view = 0
+      lk.has = false
+    }
+    const e = lk.view * lk.view * (3 - 2 * lk.view)
+    if (lk.has) {
+      _pos.lerp(lk.pos, e)
+      _at.lerp(lk.at, e)
+    }
+    camera.position.copy(_pos)
+    camera.lookAt(_at)
     if (VIEW === 'bench') {
       // (?view=bench: down low, in front of the bench from their photo)
       const b = SET.benches[SET.photos.bench]
@@ -196,7 +224,8 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     }
     // the see-through: the trees open round the line from the camera to the car
     shared.cam.value.copy(camera.position)
-    shared.car.value.set(s.x, 150, s.z)
+    if (lk.has && e > 0.5) shared.car.value.copy(lk.at) // (looking at a photo: the blossom opens in front of it)
+    else shared.car.value.set(s.x, 150, s.z)
     if (sun) {
       sun.position.copy(LOOK.sun).multiplyScalar(4000).add(camAt.current)
       sun.target.position.set(camAt.current.x, 0, camAt.current.z)

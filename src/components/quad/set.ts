@@ -42,11 +42,12 @@ export const SET = {
     { x: -2980, z: -980, rot: 0.3 },
     { x: 1300, z: -1120, rot: 0.12 },
   ],
-  // their photos from the Quad (./Photos): the bench photo on the bench it was taken on; the cherry
+  // their photos from the Quad (./Photos): the bench photo on an easel by the bench it was taken on; the cherry
   // shoot pegged on clotheslines between the trunks they stood under (the piggybacks with the hall's
   // gable behind on one, the rest on the other)
   photos: {
     bench: 1,
+    easel: { x: -1480, z: -2430, rot: 0.25 }, // (the bench photo's, just past that bench's east end)
     lines: [
       { trees: [1, 2] as [number, number], h: 330, names: ['IMG_8165', 'IMG_8166', 'IMG_8167', 'IMG_8168', 'IMG_8169'] },
       { trees: [3, 4] as [number, number], h: 330, names: ['IMG_1199', 'IMG_8170', 'IMG_8171'] },
