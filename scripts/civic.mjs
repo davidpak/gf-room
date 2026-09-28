@@ -111,7 +111,15 @@ for (const [part, byMat] of Object.entries(parts)) {
   const pb = new Box3()
   for (const { p } of Object.values(byMat)) for (let i = 0; i < p.length; i += 3) pb.expandByPoint(_v.set(p[i], p[i + 1], p[i + 2]))
   const pivot = new Vector3()
-  if (part.startsWith('door_')) pivot.set(pb.getCenter(_v).x > 0 ? pb.max.x : pb.min.x, (pb.min.y + pb.max.y) / 2, pb.max.z - 20) // (its front edge, outside)
+  if (part.startsWith('door_')) {
+    // the hinge: on the door's own skin (its paint below the mirror: not the mirror, which stands out from
+    // it), at the skin's front edge, a little inside its surface
+    const skin = new Box3()
+    const p = byMat.Carro_Pintura?.p ?? []
+    for (let i = 0; i < p.length; i += 3) if (p[i + 1] < 900) skin.expandByPoint(_v.set(p[i], p[i + 1], p[i + 2]))
+    const side = skin.getCenter(_v).x > 0 ? 1 : -1
+    pivot.set((side > 0 ? skin.max.x : skin.min.x) - side * 25, (pb.min.y + pb.max.y) / 2, skin.max.z - 30)
+  }
   else if (part === 'trunk') pivot.set(0, pb.max.y, pb.max.z) // (its front edge, on top)
   else if (part.startsWith('wheel_')) pb.getCenter(pivot)
   const node = new Group()

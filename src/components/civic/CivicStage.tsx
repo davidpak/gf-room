@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, bruno } from '../quad/bruno'
-import { Civic } from './Civic'
+import { Civic, openings } from './Civic'
 
 /**
  * David's Civic on its own (gallery first): on a round of lawn in the Quad's evening light, to turn
@@ -52,14 +52,17 @@ function Scene() {
   )
 }
 
-/** ?view=rear: start behind it (the trunk, the plate) */
-const REAR = typeof location !== 'undefined' && new URLSearchParams(location.search).get('view') === 'rear'
+/** ?view=rear: start behind it (the trunk, the plate); ?view=door: close by the driver's door, both its doors open */
+const VIEW = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('view') : null
+const REAR = VIEW === 'rear'
+const DOOR = VIEW === 'door'
+if (DOOR) Object.assign(openings, { door_fr: true, door_rr: true })
 
 export function CivicStage() {
   return (
-    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 10, far: 20000, position: REAR ? [-260, 330, -760] : [620, 420, 780] }}>
+    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 10, far: 20000, position: DOOR ? [430, 190, 330] : REAR ? [-260, 330, -760] : [620, 420, 780] }}>
       <Scene />
-      <OrbitControls target={[0, 80, 0]} enableDamping minDistance={250} maxDistance={3000} maxPolarAngle={Math.PI / 2 - 0.08} />
+      <OrbitControls target={DOOR ? [70, 80, 20] : [0, 80, 0]} enableDamping minDistance={250} maxDistance={3000} maxPolarAngle={Math.PI / 2 - 0.08} />
     </Canvas>
   )
 }
