@@ -10,6 +10,7 @@ import { Car, CAR_SHAPE, type CarState, type Obstacle } from './Car'
 import { CarBody, LiveProps, QuadColliders, propObstacles, setCarWell } from './Physical'
 import { World } from '../../lib/physics/World'
 import { LookControls, Photos } from './Photos'
+import { CookieStand, cookieStandObstacles } from './CookieStand'
 import { lookBack, useLook } from './look'
 import './quad.css'
 import { SET } from './set'
@@ -58,6 +59,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
       ...SET.hedges.map((h) => ({ kind: 'box' as const, x: (h.x0 + h.x1) / 2, z: h.z, w: h.x1 - h.x0, d: h.d })),
       ...SET.bushes.map((b) => ({ kind: 'circle' as const, x: b.x, z: b.z, r: b.r * 0.8 })),
       { kind: 'circle' as const, x: SET.photos.easel.x, z: SET.photos.easel.z, r: 100 }, // (the bench photo's easel)
+      ...cookieStandObstacles(),
     ],
     [],
   )
@@ -98,6 +100,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
         <QuadColliders />
         <CarBody state={car} shape={CAR_SHAPE} />
         <LiveProps car={car} />
+        <CookieStand car={car} />
       </World>
       <Photos car={car} />
       <Building />

@@ -255,6 +255,12 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
       camera.position.set(b.x + 380, 230, b.z + 560)
       camera.lookAt(b.x, 110, b.z)
     }
+    if (VIEW === 'cookies') {
+      // (?view=cookies: the cookie stand, from out front and above)
+      const c = SET.cookies
+      camera.position.set(c.x + 560, 820, c.z + 1250)
+      camera.lookAt(c.x, 300, c.z)
+    }
     if (VIEW === 'shoot') {
       // (?view=shoot: the photo shoot between the middle cherries, from in front and a little above)
       const c = SET.shoot.camera

@@ -25,7 +25,7 @@ import { blip } from '../../lib/sound/thump'
  * Drawn as page elements floating over the world (crisp text in Gaegu, CSS animation), a constant
  * size on screen. Styles: .fix-* in styles.css. Timings after Bruno's (sources/Game/InteractivePoints.js).
  */
-export type PromptIcon = 'plug' | 'port' | 'tidy' | 'home'
+export type PromptIcon = 'plug' | 'port' | 'tidy' | 'home' | 'cookie'
 export type PromptItem = {
   key: string
   label: string
@@ -217,6 +217,12 @@ function Icon({ name }: { name: PromptIcon }) {
           <path d="M5 16c0-5 3-9 7-9s6 3 6 5-2 3-3.5 3S12 14 12 12.5" />
           <path d="M3 13l2 3 3-2" />
           <path d="M19 4l.6 1.4L21 6l-1.4.6L19 8l-.6-1.4L17 6l1.4-.6z" />
+        </g>
+      )}
+      {name === 'cookie' && (
+        <g {...p}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M9 9.5h.01M14.5 8.5h.01M15.5 13.5h.01M10 15h.01M12.5 12h.01" strokeWidth="3" />
         </g>
       )}
       {name === 'home' && (
