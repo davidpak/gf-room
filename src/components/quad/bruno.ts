@@ -18,7 +18,7 @@ export const LOOK = {
   sun: new Vector3(-0.55, 0.72, 0.42).normalize(), // (where the light comes from: low, warm, from the west)
   light: new Color('#ffd7bd'),
   intensity: 1.18,
-  shadow: new Color('#5b3f9e'),
+  shadow: new Color('#9a82cf'), // (a soft lavender: things in shade stay readable)
   bounce: new Color('#9a4f8c'),
   lamp: new Color('#ffb46b'),
   sky: ['#34357a', '#9a6fb3', '#f2a0ae', '#ffcfa3'], // top to horizon

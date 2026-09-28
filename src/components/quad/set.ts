@@ -9,7 +9,7 @@ export const SET = {
   tree: [-420, -260] as [number, number],
   bench: { x: 300, z: 70 },
   lamp: { x: 700, z: 90 },
-  grass: { count: 17000 },
+  grass: { count: 30000 }, // (short and fine: a lawn, not a meadow; the trees are the thing)
   petals: { fallen: 1300, falling: 70 },
   // where no grass grows: the trunk's foot, the bench's feet, the lamp's base (x, z, r)
   keepClear: [] as [number, number, number][],

@@ -165,7 +165,7 @@ const BLOSSOM = bruno({
   alphaTest: 0.5,
   vertexColors: true,
   side: DoubleSide,
-  shade: '#a45896', // (light through petals: rosier than the world's shadow)
+  shade: '#cf86b8', // (light through petals: rosier than the world's shadow)
   sway: 16,
   swayFrom: 250,
 })

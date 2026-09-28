@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
-import { CanvasTexture, Fog, PCFShadowMap, SRGBColorSpace } from 'three'
+import { CanvasTexture, Fog, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, shared } from './bruno'
 import { CherryTree } from './CherryTree'
 import { Grass, Island, Petals, Walk } from './Ground'
@@ -69,7 +69,7 @@ function Scene() {
 
 export function QuadStage() {
   return (
-    <Canvas flat shadows={{ type: PCFShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 20, far: 30000, position: [2100, 1650, 2900] }}>
+    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 20, far: 30000, position: [2100, 1650, 2900] }}>
       <Scene />
       <OrbitControls target={[0, 320, 0]} enableDamping dampingFactor={0.07} minDistance={600} maxDistance={9000} maxPolarAngle={1.42} />
     </Canvas>

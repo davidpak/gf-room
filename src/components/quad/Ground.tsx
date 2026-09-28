@@ -35,7 +35,7 @@ function islandShape(inset = 0, z0 = -Infinity, z1 = Infinity) {
 }
 
 const EARTH = bruno({ vertexColors: true })
-const SOIL = bruno({ color: '#4d7a3f' })
+const SOIL = bruno({ color: '#78a553' }) // (the lawn under the blades: they only add a fine texture over it)
 export function Island() {
   const geo = useMemo(() => {
     const T = SET.island.t
@@ -76,9 +76,9 @@ function bladeGeometry() {
   const nor: number[] = []
   const col: number[] = []
   const idx: number[] = []
-  const root = new Color('#2f5a33')
-  const mid = new Color('#6fa047')
-  const tip = new Color('#e3e37e')
+  const root = new Color('#5f8c4c')
+  const mid = new Color('#86b35c')
+  const tip = new Color('#c4da85')
   for (let i = 0; i <= SEG; i++) {
     const t = i / SEG
     const w = 0.5 * (1 - t) ** 0.9
@@ -101,7 +101,7 @@ function bladeGeometry() {
   g.setIndex(idx)
   return g
 }
-const GRASS = bruno({ vertexColors: true, side: DoubleSide, sway: 110, swayFrom: 0 })
+const GRASS = bruno({ vertexColors: true, side: DoubleSide, sway: 240, swayFrom: 0 })
 GRASS.defines = { ...GRASS.defines, NO_FLIP: '' }
 const TINTS = ['#ffffff', '#f4ffe0', '#e6f7ff', '#fff3d9', '#eaffea']
 
@@ -114,8 +114,8 @@ export function Grass() {
     for (let i = 0; i < SET.grass.count * 1.6 && out.length < SET.grass.count; i++) {
       const x = (rand() - 0.5) * w
       const z = (rand() - 0.5) * d
-      if (!inIsland(x, z, 26) || onWalk(x, z, 14) || SET.keepClear.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r)) continue
-      out.push([x, z, rand() * Math.PI * 2, 32 + rand() * 32, 8 + rand() * 4])
+      if (!inIsland(x, z, 22) || onWalk(x, z, 22) || SET.keepClear.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r)) continue
+      out.push([x, z, rand() * Math.PI * 2, 11 + rand() * 11, 4.5 + rand() * 2.5])
     }
     return out
   }, [])
@@ -231,7 +231,7 @@ export function Petals() {
       const x = tx + Math.cos(a) * r + (rand() < 0.2 ? (rand() - 0.3) * 900 : 0)
       const z = tz + Math.sin(a) * r * 0.85
       if (!inIsland(x, z, 30)) continue
-      const y = onWalk(x, z, 0) ? 37.5 : 20 + rand() * 60
+      const y = onWalk(x, z, 0) ? 37.5 : 7 + rand() * 12
       _o.position.set(x, y, z)
       _o.rotation.set((rand() - 0.5) * 0.5, rand() * Math.PI * 2, (rand() - 0.5) * 0.5)
       _o.scale.setScalar(0.9 + rand() * 0.6)
