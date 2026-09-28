@@ -57,6 +57,11 @@ export function LookControls() {
   useEffect(() => {
     if (!l) return
     const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' && l.spot.keys?.(e)) {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
       if (e.key === 'Escape') lookBack()
       else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') stepLook(1)
       else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') stepLook(-1)
@@ -69,7 +74,8 @@ export function LookControls() {
   }, [l])
   return (
     <div className={'quad-near' + (l ? ' on' : '')}>
-      {l && l.i === null && <>click a photo to look closer · </>}
+      {l && l.i === null && l.spot.hint && <>{l.spot.hint} · </>}
+      {l && l.i === null && !l.spot.hint && <>click a photo to look closer · </>}
       {l && l.i !== null && l.spot.items.length > 1 && (
         <>
           <kbd>←</kbd> <kbd>→</kbd> the others ·{' '}

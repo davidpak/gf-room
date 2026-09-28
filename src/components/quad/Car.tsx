@@ -3,9 +3,10 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3, type DirectionalLight, type Group, type Object3D, type PerspectiveCamera } from 'three'
 import { SET, inIsland, paveSdf } from './set'
 import { isHolding } from '../../lib/physics/Hand'
-import { getLook, lookPose } from './look'
+import { getLook, lookAt, lookPose } from './look'
+import { hardReset, onReset } from './reset'
 import { LOOK, shared } from './bruno'
-import { CivicModel, TYRE_R, WELL, shutDoors } from '../civic/Civic'
+import { CivicModel, TYRE_R, WELL, openings, shutDoors } from '../civic/Civic'
 import { TOY } from '../civic/spec'
 
 /**
@@ -91,8 +92,19 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
       const k = MAP[e.code]
       if (!k) return
       e.preventDefault()
+      if (k === 'reset') {
+        if (!e.repeat) hardReset() // (everything back: see ./reset)
+        return
+      }
       keys.add(k)
     }
+    // the car's part of a hard reset: back at the start, its doors and trunk shut, the camera out of any close look
+    const off = onReset(() => {
+      Object.assign(state.current, { x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
+      shutDoors()
+      openings.trunk = false
+      lookAt(null)
+    })
     const up = (e: KeyboardEvent) => MAP[e.code] && keys.delete(MAP[e.code])
     const blur = () => keys.clear()
     const wheel = (e: WheelEvent) => !isHolding() && !getLook() && (zoom.current = Math.min(1.8, Math.max(0.55, zoom.current * (1 + Math.sign(e.deltaY) * 0.08))))
@@ -101,6 +113,7 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     window.addEventListener('blur', blur)
     window.addEventListener('wheel', wheel, { passive: true })
     return () => {
+      off()
       window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
@@ -118,7 +131,6 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     const s = state.current
     const m = sim.current
     const k = (n: string) => !paused && keys.has(n)
-    if (k('reset')) Object.assign(s, { x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
     // the push forward, the brakes, the drag
     const throttle = (k('up') ? 1 : 0) - (k('down') ? 1 : 0)
     let a = 0

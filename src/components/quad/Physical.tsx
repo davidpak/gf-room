@@ -1,7 +1,8 @@
 import { CuboidCollider, CylinderCollider, RigidBody, useBeforePhysicsStep, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
 import { openings, stowed } from '../civic/Civic'
 import { TOY } from '../civic/spec'
-import { useMemo, useRef, type ReactNode } from 'react'
+import { onReset } from './reset'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
 import { usePerch } from '../../lib/physics/usePerch'
@@ -9,6 +10,7 @@ import { Prompts } from '../prompt/Prompts'
 import { Bench, BENCH } from './Furniture'
 import { Sign, SIGN } from './Sign'
 import { shootProps } from './ShootSet'
+import { cookieSignProp } from './CookieStand'
 import type { CAR_SHAPE, CarState, Obstacle } from './Car'
 import { PADS, SET } from './set'
 
@@ -147,6 +149,25 @@ function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id
   if (import.meta.env.DEV) ((window as unknown as { __props: Record<string, unknown> }).__props ??= {})[id] = perch // (for trying it from the console)
   // riding in the trunk: where it sits in the car's frame
   const ride = useRef<{ p: Vector3; q: Quaternion } | null>(null)
+  // a hard reset (R): straight home, held there as at the start
+  useEffect(
+    () =>
+      onReset(() => {
+        const body = perch.body.current
+        ride.current = null
+        stowed.delete(id)
+        perch.fly.current = null
+        perch.st.current.perched = true
+        if (!body) return
+        // (put there at once: a move, with continuous collision on, would stop at the first thing in the way)
+        body.setBodyType(perch.rapier.RigidBodyType.Fixed, true)
+        body.setTranslation(new Vector3().setFromMatrixPosition(home), true)
+        body.setRotation(new Quaternion().setFromRotationMatrix(home), true)
+        body.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        body.setAngvel({ x: 0, y: 0, z: 0 }, true)
+      }),
+    [id, perch, home],
+  )
   useBeforePhysicsStep(() => {
     const body = perch.body.current
     if (!body) return
@@ -229,7 +250,7 @@ export function LiveProps({ car }: { car: { current: CarState } }) {
         </LiveProp>
       ))}
       {/* the photo shoot's kit (./ShootSet) */}
-      {shootProps().map((p) => (
+      {[...shootProps(), cookieSignProp()].map((p) => (
         <LiveProp key={p.id} id={p.id} label={p.label} at={p.at} car={car} lift={p.lift} feelAlong={p.feelAlong} feelR={p.feelR}>
           {p.node}
           {p.colliders}

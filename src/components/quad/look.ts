@@ -14,7 +14,15 @@ import { Vector3, type BoxGeometry, type Mesh } from 'three'
  * the spot in. The camera itself is ./Car.
  */
 export type LookItem = () => Mesh | null
-export type Spot = { key: string; items: LookItem[]; frame: (pos: Vector3, at: Vector3, aspect: number) => void }
+export type Spot = {
+  key: string
+  items: LookItem[]
+  frame: (pos: Vector3, at: Vector3, aspect: number) => void
+  /** its own keys while it's looked at (true: taken) */
+  keys?: (e: KeyboardEvent) => boolean
+  /** its own hint, instead of the photos' */
+  hint?: string
+}
 export type Look = { spot: Spot; i: number | null }
 
 let look: Look | null = null

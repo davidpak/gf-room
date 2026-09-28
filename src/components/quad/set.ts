@@ -67,7 +67,7 @@ export const SET = {
     laptop: { x: -250, z: -640, rot: 0.1 },
   },
   // the cookie stand (./CookieStand): a canopy over a table on the big lawn east of the V, facing out front
-  cookies: { x: 2150, z: 760, rot: 0 },
+  cookies: { x: 2150, z: 760, rot: 0, sign: { x: 3260, z: 1250, rot: 0.5 } }, // (its sign out on the lawn's corner)
   // the building along the north edge (cut off where the island ends), its wing stepping out; the
   // dark hedge before the wing; bushes at the building's foot
   building: {
