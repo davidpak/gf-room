@@ -53,6 +53,19 @@ export const SET = {
       { trees: [3, 4] as [number, number], h: 330, names: ['IMG_1199', 'IMG_8170', 'IMG_8171'] },
     ],
   },
+  // the photo shoot on the lawn between the middle cherries (between the clotheslines; ./ShootSet): the
+  // camera looking in under the trees at where two people would stand, a softbox and a C-stand's spot
+  // either side aimed there too, apple boxes by the camera, the laptop on the lying one
+  shoot: {
+    camera: { x: -480, z: -760, rot: 0 },
+    softbox: { x: -900, z: -1050, rot: -0.77 },
+    cstand: { x: -60, z: -1000, rot: 0.72 },
+    boxes: [
+      { x: -250, z: -640, rot: 0.25, onEnd: false },
+      { x: -720, z: -620, rot: -0.3, onEnd: true },
+    ],
+    laptop: { x: -250, z: -640, rot: 0.1 },
+  },
   // the building along the north edge (cut off where the island ends), its wing stepping out; the
   // dark hedge before the wing; bushes at the building's foot
   building: {

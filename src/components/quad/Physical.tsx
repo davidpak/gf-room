@@ -8,6 +8,7 @@ import { usePerch } from '../../lib/physics/usePerch'
 import { Prompts } from '../prompt/Prompts'
 import { Bench, BENCH } from './Furniture'
 import { Sign, SIGN } from './Sign'
+import { shootProps } from './ShootSet'
 import type { CAR_SHAPE, CarState, Obstacle } from './Car'
 import { PADS, SET } from './set'
 
@@ -223,6 +224,13 @@ export function LiveProps({ car }: { car: { current: CarState } }) {
           {/* its seat and legs a block, its back a slab raked back */}
           <CuboidCollider args={[BENCH.L / 2, BENCH.seat / 2, 62]} position={[0, BENCH.seat / 2, 0]} mass={6} friction={0.7} />
           <CuboidCollider args={[BENCH.L / 2, 75, 9]} position={[0, BENCH.seat + 70, -62]} rotation={[-0.16, 0, 0]} mass={2} friction={0.7} />
+        </LiveProp>
+      ))}
+      {/* the photo shoot's kit (./ShootSet) */}
+      {shootProps().map((p) => (
+        <LiveProp key={p.id} id={p.id} label={p.label} at={p.at} car={car} lift={p.lift} feelAlong={p.feelAlong} feelR={p.feelR}>
+          {p.node}
+          {p.colliders}
         </LiveProp>
       ))}
       {SET.signs.map((s, i) => (

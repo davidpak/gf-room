@@ -35,8 +35,8 @@ if (typeof window !== 'undefined')
       photos = list
       subs.forEach((f) => f())
     })
-const usePhotos = () => useSyncExternalStore((f) => (subs.add(f), () => void subs.delete(f)), () => photos)
-const byName = (list: Photo[], set: string, names: string[]) => names.map((n) => list.find((p) => p.id === `${set}/${n}`)).filter((p): p is Photo => !!p)
+export const usePhotos = () => useSyncExternalStore((f) => (subs.add(f), () => void subs.delete(f)), () => photos)
+export const byName = (list: Photo[], set: string, names: string[]) => names.map((n) => list.find((p) => p.id === `${set}/${n}`)).filter((p): p is Photo => !!p)
 
 /** the day a photo was taken, as it was in Seattle */
 const dayOf = (p: Photo) => (p.taken ? new Date(p.taken).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', month: 'long', day: 'numeric', year: 'numeric' }).toLowerCase() : '')

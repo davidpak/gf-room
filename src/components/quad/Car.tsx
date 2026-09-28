@@ -251,6 +251,12 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
       camera.position.set(b.x + 380, 230, b.z + 560)
       camera.lookAt(b.x, 110, b.z)
     }
+    if (VIEW === 'shoot') {
+      // (?view=shoot: the photo shoot between the middle cherries, from in front and a little above)
+      const c = SET.shoot.camera
+      camera.position.set(c.x + 700, 640, c.z + 1150)
+      camera.lookAt(c.x - 60, 120, c.z - 250)
+    }
     if (VIEW === 'sign') {
       // (?view=sign: in front of the first lawn sign)
       const g = SET.signs[0]
