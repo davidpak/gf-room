@@ -7,7 +7,7 @@ import { Grass, Island, Petals, Walks } from './Ground'
 import { LampPost } from './Furniture'
 import { Building, Hedges } from './Backdrop'
 import { Car, CAR_BODY, type CarState, type Obstacle } from './Car'
-import { CarBody, LiveBenches, QuadColliders } from './Physical'
+import { CarBody, LiveBenches, QuadColliders, benchObstacles } from './Physical'
 import { World } from '../../lib/physics/World'
 import { SET } from './set'
 
@@ -97,7 +97,7 @@ function Scene({ car }: { car: { current: CarState } }) {
       </World>
       <Building />
       <Hedges />
-      <Car state={car} obstacles={obstacles} />
+      <Car state={car} obstacles={obstacles} movers={benchObstacles} />
     </>
   )
 }

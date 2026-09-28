@@ -5,7 +5,7 @@ import { Holdable } from '../../lib/physics/Holdable'
 import { usePerch } from '../../lib/physics/usePerch'
 import { Prompts } from '../prompt/Prompts'
 import { Bench, BENCH } from './Furniture'
-import type { CarState } from './Car'
+import type { CarState, Obstacle } from './Car'
 import { PADS, SET } from './set'
 
 /**
@@ -66,7 +66,8 @@ export function QuadColliders() {
   )
 }
 
-/** the car as a body: its driving moves it (kinematic), so it shoves whatever it drives into */
+/** the car as a body: its driving moves it (kinematic), so it shoves whatever it drives into. Its
+ *  shape the body and the cabin on it, as drawn (a bench shoved up onto it rests on the roof, not in it) */
 export function CarBody({ state, size }: { state: { current: CarState }; size: { l: number; w: number; h: number } }) {
   const body = useRef<RapierRigidBody>(null)
   const q = useMemo(() => new Quaternion(), [])
@@ -75,12 +76,13 @@ export function CarBody({ state, size }: { state: { current: CarState }; size: {
     const b = body.current
     if (!b) return
     const s = state.current
-    b.setNextKinematicTranslation({ x: s.x, y: 30 + size.h / 2 + 20, z: s.z })
+    b.setNextKinematicTranslation({ x: s.x, y: 0, z: s.z })
     b.setNextKinematicRotation(q.setFromEuler(e.set(0, s.heading, 0)))
   })
   return (
-    <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[state.current.x, 90, state.current.z]}>
-      <CuboidCollider args={[size.w / 2, size.h / 2 + 20, size.l / 2]} friction={0.4} />
+    <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[state.current.x, 0, state.current.z]}>
+      <CuboidCollider args={[size.w / 2, size.h / 2 - 3, size.l / 2]} position={[0, size.h / 2 + 8, 0]} friction={0.4} />
+      <CuboidCollider args={[size.w * 0.43, 46, size.l * 0.25]} position={[0, size.h + 40, -30]} friction={0.4} />
     </RigidBody>
   )
 }
@@ -100,6 +102,7 @@ function LiveBench({ i, car }: { i: number; car: { current: CarState } }) {
     away: 120,
     lift: 330,
   })
+  benches[i] = perch.body
   if (import.meta.env.DEV) ((window as unknown as { __benches: unknown[] }).__benches ??= [])[i] = perch // (for trying it from the console)
   // the car coming at it: it's let go (loose) so the car can shove it
   useBeforePhysicsStep(() => {
@@ -114,7 +117,7 @@ function LiveBench({ i, car }: { i: number; car: { current: CarState } }) {
   })
   return (
     <>
-      <Holdable bodyRef={perch.body} position={[b.x, PAVING, b.z]} rotation={[0, b.rot, 0]} colliders={false} linearDamping={0.4} angularDamping={0.8} hold={{ ...perch.hold, lift: 60 }} sound="none">
+      <Holdable ccd bodyRef={perch.body} position={[b.x, PAVING, b.z]} rotation={[0, b.rot, 0]} colliders={false} linearDamping={0.4} angularDamping={0.8} hold={{ ...perch.hold, lift: 60 }} sound="none">
         <group {...perch.hover.bind}>
           <Bench />
         </group>
@@ -125,6 +128,28 @@ function LiveBench({ i, car }: { i: number; car: { current: CarState } }) {
       <Prompts items={[perch.prompt]} far={9000} />
     </>
   )
+}
+
+const benches: { current: RapierRigidBody | null }[] = []
+/** where the benches are now, for the car to feel (./Car movers): three circles down each one's
+ *  length. The car shoves a bench that gives; one that can't (pinned against a trunk) stops it, rather
+ *  than the car driving through it */
+const _p = new Vector3()
+const _q = new Quaternion()
+export function benchObstacles(): Obstacle[] {
+  const out: Obstacle[] = []
+  for (const r of benches) {
+    const b = r?.current
+    if (!b) continue
+    const t = b.translation()
+    const q = b.rotation()
+    _q.set(q.x, q.y, q.z, q.w)
+    for (const along of [-150, 0, 150]) {
+      _p.set(along, 0, 0).applyQuaternion(_q)
+      out.push({ kind: 'circle', x: t.x + _p.x, z: t.z + _p.z, r: 105 })
+    }
+  }
+  return out
 }
 
 export function LiveBenches({ car }: { car: { current: CarState } }) {

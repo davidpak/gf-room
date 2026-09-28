@@ -34,7 +34,7 @@ const C = { body: '#9fdcc8', roof: '#fbeedd', trim: '#f4a9b4', wheel: '#2b2833',
 const keys = new Set<string>()
 const MAP: Record<string, string> = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'brake', KeyR: 'reset' }
 
-export function Car({ state, obstacles, paused }: { state: { current: CarState }; obstacles: Obstacle[]; paused?: boolean }) {
+export function Car({ state, obstacles, movers, paused }: { state: { current: CarState }; obstacles: Obstacle[]; /** obstacles that move (the benches, where they are now), read every frame */ movers?: () => Obstacle[]; paused?: boolean }) {
   const body = useRef<Group>(null)
   const chassis = useRef<Group>(null)
   const wheels = useRef<(Group | null)[]>([])
@@ -93,7 +93,7 @@ export function Car({ state, obstacles, paused }: { state: { current: CarState }
     let nz = s.z + Math.cos(s.heading) * s.v * dt
     // bumping: out of the trees, the halls, the stands; the edges of the Quad
     let hit = 0
-    for (const o of obstacles) {
+    for (const o of movers ? [...obstacles, ...movers()] : obstacles) {
       if (o.kind === 'circle') {
         const dx = nx - o.x
         const dz = nz - o.z

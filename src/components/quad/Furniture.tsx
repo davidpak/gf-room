@@ -10,7 +10,7 @@ import { bruno, shared } from './bruno'
  * column, a lantern of warm glass under a little roof), which lights the blossom round it.
  */
 /** weathered teak, the one wood all through, gone a light grey-brown */
-const TEAK = bruno({ color: '#aa9c8b' })
+const TEAK = bruno({ color: '#b6a896', shade: '#b09ecb' }) // (its shade a lighter lavender: under the canopy it stays readable)
 
 type Part = { p: [number, number, number]; s: [number, number, number]; r?: number }
 /** the UW bench, all wood (from the photos): square posts, the front ones up to flat arms with a
