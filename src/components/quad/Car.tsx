@@ -160,6 +160,12 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
       camera.position.set(b.x + 380, 230, b.z + 560)
       camera.lookAt(b.x, 110, b.z)
     }
+    if (VIEW === 'sign') {
+      // (?view=sign: in front of the first lawn sign)
+      const g = SET.signs[0]
+      camera.position.set(g.x + 200, 300, g.z + 620)
+      camera.lookAt(g.x, 210, g.z)
+    }
     if (VIEW === 'top') {
       // (?view=top: straight down over the whole island, to hold up against the overhead photo)
       camera.position.set((SET.island.x0 + SET.island.x1) / 2, 15000, (SET.island.z0 + SET.island.z1) / 2 + 1)

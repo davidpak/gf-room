@@ -7,7 +7,7 @@ import { Grass, Island, Petals, Walks } from './Ground'
 import { LampPost } from './Furniture'
 import { Building, Hedges } from './Backdrop'
 import { Car, CAR_BODY, type CarState, type Obstacle } from './Car'
-import { CarBody, LiveBenches, QuadColliders, benchObstacles } from './Physical'
+import { CarBody, LiveProps, QuadColliders, propObstacles } from './Physical'
 import { World } from '../../lib/physics/World'
 import { SET } from './set'
 
@@ -89,15 +89,15 @@ function Scene({ car }: { car: { current: CarState } }) {
       {SET.lamps.map((l, i) => (
         <LampPost key={i} slot={i} position={[l.x, 0, l.z]} />
       ))}
-      {/* the physical side: the benches, a toy for the hand and the car (./Physical) */}
+      {/* the physical side: the benches and signs, toys for the hand and the car (./Physical) */}
       <World floorY={-3000}>
         <QuadColliders />
         <CarBody state={car} size={CAR_BODY} />
-        <LiveBenches car={car} />
+        <LiveProps car={car} />
       </World>
       <Building />
       <Hedges />
-      <Car state={car} obstacles={obstacles} movers={benchObstacles} />
+      <Car state={car} obstacles={obstacles} movers={propObstacles} />
     </>
   )
 }

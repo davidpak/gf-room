@@ -36,6 +36,12 @@ export const SET = {
     { x: 1600, z: -2330 },
   ],
   benches: [-3300, -1900, -500, 900, 2300].map((x) => ({ x, z: -2385, rot: 0 })),
+  // the grounds crew's lawn signs ("don't climb on the trees"), out on the grass before the cherries, turned
+  // a little toward the camera
+  signs: [
+    { x: -2980, z: -980, rot: 0.3 },
+    { x: 1300, z: -1120, rot: 0.12 },
+  ],
   // the building along the north edge (cut off where the island ends), its wing stepping out; the
   // dark hedge before the wing; bushes at the building's foot
   building: {
