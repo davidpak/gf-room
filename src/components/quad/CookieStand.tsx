@@ -56,7 +56,8 @@ const useChoice = () => useSyncExternalStore((f) => (csubs.add(f), () => void cs
 
 // ---- materials
 const FRAME = bruno({ color: '#d7d9df', shade: '#9794ad', sheen: 0.3 })
-const WOOD = bruno({ color: '#b98a5c', shade: '#8d7493' })
+const WOOD = bruno({ color: '#c99a68', shade: '#927796' })
+const HINGE = bruno({ color: '#9a9ca6', shade: '#6d6a86', sheen: 0.4 })
 const MINT = bruno({ color: '#a9dcc8', shade: '#7f8fb8', sheen: 0.35 })
 const CREAM = bruno({ color: '#fbf1e2', shade: '#b5a6c6' })
 const CHROME = bruno({ color: '#e4e6ec', shade: '#a19eb8', sheen: 0.5 })
@@ -131,33 +132,125 @@ function slate(W: number, H: number, draw: (g: CanvasRenderingContext2D) => void
   c.width = W
   c.height = H
   const g = c.getContext('2d')!
-  g.fillStyle = '#2f3a35'
-  g.fillRect(0, 0, W, H)
   let s = 5
   const rand = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296)
-  for (let i = 0; i < W * H * 0.004; i++) {
-    g.fillStyle = `rgba(255,255,255,${rand() * 0.05})`
-    g.fillRect(rand() * W, rand() * H, 2, 2)
+  // the slate: deep green-black, the pale clouds where it's been wiped, fine dust
+  g.fillStyle = '#28332f'
+  g.fillRect(0, 0, W, H)
+  for (let i = 0; i < 14; i++) {
+    const x = rand() * W
+    const y = rand() * H
+    const r = 60 + rand() * 140
+    const gr = g.createRadialGradient(x, y, 0, x, y, r)
+    gr.addColorStop(0, 'rgba(220,230,220,0.07)')
+    gr.addColorStop(1, 'rgba(220,230,220,0)')
+    g.fillStyle = gr
+    g.fillRect(x - r, y - r, r * 2, r * 2)
   }
+  for (let i = 0; i < W * H * 0.006; i++) {
+    g.fillStyle = `rgba(255,255,255,${rand() * 0.06})`
+    g.fillRect(rand() * W, rand() * H, 1.5, 1.5)
+  }
+  // a chalk border round it, a little star in each corner
+  g.strokeStyle = 'rgba(251,247,239,0.7)'
+  g.lineWidth = 4
+  g.setLineDash([22, 9])
+  g.strokeRect(22, 22, W - 44, H - 44)
+  g.setLineDash([])
+  for (const [x, y] of [
+    [22, 22],
+    [W - 22, 22],
+    [22, H - 22],
+    [W - 22, H - 22],
+  ])
+    star(g, x, y, 11)
   g.textBaseline = 'middle'
   draw(g)
+  // the chalk's grain: little gaps knocked out of everything written
+  g.globalCompositeOperation = 'destination-out'
+  for (let i = 0; i < W * H * 0.02; i++) {
+    g.fillStyle = `rgba(0,0,0,${rand() * 0.35})`
+    g.fillRect(rand() * W, rand() * H, 1.5, 1.5)
+  }
+  g.globalCompositeOperation = 'destination-over'
+  g.fillStyle = '#28332f'
+  g.fillRect(0, 0, W, H)
+  g.globalCompositeOperation = 'source-over'
   return c
 }
-/** the sign out on the corner: FREE COOKIES */
+/** a little chalk star (four points) */
+function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, colour = '#fbf7ef') {
+  g.fillStyle = colour
+  g.beginPath()
+  g.moveTo(x, y - r)
+  g.quadraticCurveTo(x, y, x + r, y)
+  g.quadraticCurveTo(x, y, x, y + r)
+  g.quadraticCurveTo(x, y, x - r, y)
+  g.quadraticCurveTo(x, y, x, y - r)
+  g.fill()
+}
+/** written in chalk: the strokes a touch soft at their edges */
+function chalk(g: CanvasRenderingContext2D, text: string, x: number, y: number, colour = '#fbf7ef') {
+  g.fillStyle = colour
+  g.globalAlpha = 0.35
+  g.fillText(text, x + 1.5, y + 1)
+  g.globalAlpha = 0.95
+  g.fillText(text, x, y)
+  g.globalAlpha = 1
+}
+/** a cookie drawn in chalk: its round, its chips */
+function chalkCookie(g: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  g.strokeStyle = '#f2c38f'
+  g.lineWidth = 6
+  g.beginPath()
+  g.arc(x, y, r, 0.2, Math.PI * 2 - 0.1)
+  g.stroke()
+  g.fillStyle = '#fbf7ef'
+  for (const [u, v] of [
+    [-0.4, -0.3],
+    [0.35, -0.4],
+    [0.1, 0.1],
+    [-0.35, 0.35],
+    [0.45, 0.3],
+  ]) {
+    g.beginPath()
+    g.arc(x + u * r, y + v * r, r * 0.11, 0, Math.PI * 2)
+    g.fill()
+  }
+}
+/** the sign out on the lawn: FREE cookies, fresh from the oven, this way */
 function freeCookies() {
   const c = slate(512, 720, (g) => {
     g.textAlign = 'center'
-    g.fillStyle = '#fbf7ef'
-    g.font = `700 118px ${HAND}`
-    g.fillText('free', 256, 150)
-    g.fillText('cookies', 256, 270)
-    g.fillStyle = '#f7b9c9'
-    g.font = `700 120px ${HAND}`
-    g.fillText('♡', 256, 410)
-    g.fillStyle = '#fbf7ef'
-    g.font = `700 56px ${HAND}`
-    g.fillText('fresh from', 256, 530)
-    g.fillText('the oven →', 256, 600)
+    g.font = `700 132px ${HAND}`
+    chalk(g, 'FREE', 256, 128)
+    g.font = `700 112px ${HAND}`
+    chalk(g, 'cookies', 256, 246, '#f7b9c9')
+    // a swash under it
+    g.strokeStyle = '#f7b9c9'
+    g.lineWidth = 5
+    g.beginPath()
+    g.moveTo(108, 314)
+    g.bezierCurveTo(200, 336, 320, 300, 408, 318)
+    g.stroke()
+    chalkCookie(g, 256, 430, 64)
+    star(g, 150, 400, 12, '#f7d68a')
+    star(g, 372, 470, 9, '#f7d68a')
+    star(g, 356, 382, 6)
+    g.font = `700 54px ${HAND}`
+    chalk(g, 'fresh from', 256, 566)
+    chalk(g, 'the oven', 226, 630)
+    // an arrow, this way
+    g.strokeStyle = '#fbf7ef'
+    g.lineWidth = 6
+    g.lineCap = 'round'
+    g.beginPath()
+    g.moveTo(340, 632)
+    g.lineTo(420, 632)
+    g.moveTo(398, 612)
+    g.lineTo(422, 632)
+    g.lineTo(398, 652)
+    g.stroke()
   })
   const t = new CanvasTexture(c)
   t.colorSpace = SRGBColorSpace
@@ -265,18 +358,36 @@ function drawPlank(c: HTMLCanvasElement, n: number) {
 // ---- an A-frame chalkboard (real mm): two boards hinged at the top, their feet apart, a face on each
 export function AFrame({ w, len, lean, face, onFaceClick }: { w: number; len: number; lean: number; face: Material; onFaceClick?: (e: ThreeEvent<MouseEvent>) => void }) {
   const H = len * Math.cos(lean)
+  const stile = 76 // (the side posts, running down into its legs)
+  const top = 90 // (the top rail)
+  const foot = 150 // (how far the legs stand below the bottom rail)
+  const bottom = 80 // (the bottom rail)
+  const panel = { w: w - 2 * stile, h: len - top - foot - bottom }
+  const chainAt = len * 0.62 // (the chains that hold its boards apart, this far down)
   return (
     <group>
       {[1, -1].map((s) => (
         // (front: its foot out toward +z; back: turned round, its foot out toward −z)
         <group key={s} position={[0, H, 0]} rotation={[-s * lean, s > 0 ? 0 : Math.PI, 0]}>
-          <Block size={[w, len, 44]} at={[0, -len / 2, 0]} m={WOOD} />
-          <mesh material={face} position={[0, -len / 2 - 10, 23]} onClick={onFaceClick}>
-            <planeGeometry args={[w - 90, len - 110]} />
+          {[-1, 1].map((x) => (
+            <Block key={x} size={[stile, len, 48]} at={[(x * (w - stile)) / 2, -len / 2, 0]} m={WOOD} />
+          ))}
+          <Block size={[w - 2 * stile + 8, top, 44]} at={[0, -top / 2, 0]} m={WOOD} />
+          <Block size={[w - 2 * stile + 8, bottom, 44]} at={[0, -len + foot + bottom / 2, 0]} m={WOOD} />
+          {/* the slate set in between, a little back from the frame's face */}
+          <Block size={[panel.w + 10, panel.h + 10, 14]} at={[0, -top - panel.h / 2, 4]} m={DARK} />
+          <mesh material={face} position={[0, -top - panel.h / 2, 12]} onClick={onFaceClick}>
+            <planeGeometry args={[panel.w, panel.h]} />
           </mesh>
+          {/* its hinges along the top */}
+          {[-1, 1].map((x) => (
+            <Block key={x} size={[70, 30, 58]} at={[x * (w / 2 - 150), -12, 0]} m={HINGE} />
+          ))}
         </group>
       ))}
-      <mesh geometry={TUBE} material={DARK} position={[0, H + 6, 0]} rotation={[0, 0, Math.PI / 2]} scale={[16, w + 30, 16]} />
+      {[-1, 1].map((x) => (
+        <mesh key={x} geometry={TUBE} material={HINGE} position={[x * (w / 2 - 20), H - chainAt * Math.cos(lean), 0]} rotation={[Math.PI / 2, 0, 0]} scale={[7, 2 * chainAt * Math.sin(lean), 7]} />
+      ))}
     </group>
   )
 }
