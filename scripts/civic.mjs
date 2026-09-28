@@ -8,6 +8,7 @@
  * What it does:
  *   - every piece baked into the car's frame, in real mm: +z forward, +y up, the tyres on the ground at
  *     0, x across (the driver's side +x); scaled up the model's 3.5% to Honda's 4630 mm length
+ *   - the roof's shark-fin antenna left off (David's car hasn't one)
  *   - the sunroof glass painted over (the model is an EX; the LX's roof is solid)
  *   - the tyres left out (thousands of little tread blocks: the site draws its own); the rims kept
  *   - the pieces sorted into parts by where they sit (see ./civic-inspect.mjs): the body; the four doors
@@ -80,6 +81,8 @@ scene.traverse((o) => {
   const nor = g.attributes.normal
   const groups = g.groups.length ? g.groups : [{ start: 0, count: pos.count, materialIndex: 0 }]
   const box = new Box3().setFromObject(o)
+  // the shark-fin antenna on the roof: David's car hasn't one
+  if (box.min.y > 1.28 && box.max.x - box.min.x < 0.1 && box.min.z > -3.7 && box.max.z < -3.4) return
   const nm = new Matrix3().getNormalMatrix(o.matrixWorld)
   for (const gr of groups) {
     let mat = mats[gr.materialIndex ?? 0]?.name ?? 'Carro_Plastico'

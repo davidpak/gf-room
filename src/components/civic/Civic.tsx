@@ -41,7 +41,7 @@ function openingOf(o: Object3D | null) {
 const MATS: Record<string, Material> = {
   Carro_Pintura: bruno({ color: '#26272f', shade: '#3b3758', sheen: 0.3 }), // (Crystal Black Pearl, lifted a touch, glossy)
   Carro_Plastico: bruno({ color: '#1c1c22', shade: '#2e2b44' }),
-  Carro_Interno: bruno({ color: '#3d3b45' }),
+  Carro_Interno: bruno({ color: '#4a4652', shade: '#c9b3c4', lit: 0.8 }), // (inside: one soft even tone, no blotches of shade)
   Carro_Espelhos: bruno({ color: '#b7c1d4', sheen: 0.5 }),
   Carro_Vidros: bruno({ color: '#5d6d92', transparent: true, opacity: 0.55, depthWrite: false, sheen: 0.7 }),
   Carro_Cromado: bruno({ color: '#e2e5ec', shade: '#a6a3bb', emissive: '#ffffff', emissiveIntensity: 0.1, sheen: 0.4 }),
@@ -149,6 +149,8 @@ function plateTexture() {
   return t
 }
 const PLATE = typeof document !== 'undefined' ? bruno({ map: plateTexture(), emissive: '#ffffff', emissiveIntensity: 0.15 }) : DARK
+/** where the rear plate hangs: in the recess low on the lid (real mm, the car's frame) */
+const PLATE_AT = { y: 715, z: -2236 }
 function Plate({ at, back }: { at: [number, number, number]; back?: boolean }) {
   return (
     <mesh material={PLATE} position={at} rotation={[0, back ? Math.PI : 0, 0]}>
@@ -168,8 +170,9 @@ export function CivicModel({ onWheels }: { onWheels?: (w: { node: Object3D; fron
       if (!m.isMesh) return
       const name = (Array.isArray(m.material) ? m.material[0] : m.material).name
       m.material = MATS[name] ?? DARK
-      m.castShadow = true
-      m.receiveShadow = true
+      // (the glass lets the light in, casting no shade; inside's lit evenly, not blotched by the roof's shadow)
+      m.castShadow = name !== 'Carro_Vidros'
+      m.receiveShadow = name !== 'Carro_Interno'
     })
     return c
   }, [scene])
@@ -215,7 +218,7 @@ export function CivicModel({ onWheels }: { onWheels?: (w: { node: Object3D; fron
         <Fragment key={i}>{createPortal(<mesh geometry={TYRE_GEO} material={TYRE} castShadow />, node)}</Fragment>
       ))}
       {/* the plates: the rear on the lid (it lifts with it), the front on the bumper */}
-      {parts.trunk && t && createPortal(<Plate at={[0, 845 - t.y, -2226 - t.z]} back />, parts.trunk)}
+      {parts.trunk && t && createPortal(<Plate at={[0, PLATE_AT.y - t.y, PLATE_AT.z - t.z]} back />, parts.trunk)}
       <Plate at={[0, 430, 2318]} />
       <Well />
     </group>
