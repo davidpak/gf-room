@@ -3,13 +3,14 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { CanvasTexture, Fog, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, shared } from './bruno'
 import { CherryTree } from './CherryTree'
-import { Grass, Island, Petals, Walk } from './Ground'
+import { Grass, Island, Petals, Walks } from './Ground'
 import { Bench, LampPost } from './Furniture'
+import { Building, Hedges } from './Backdrop'
 import { Car, type CarState, type Obstacle } from './Car'
 import { SET } from './set'
 
 /**
- * A stretch of the Quad (./set), in a warm spring evening (Bruno Simon's folio-2025 is the
+ * The Quad's north-west quarter (./set), in a warm spring evening (Bruno Simon's folio-2025 is the
  * template): the brick walk through the lawn, cherries along it, lamp posts, benches, petals. Their
  * little car drives it (./Car: WASD / arrows, Space, R), the camera following Bruno's way; trees
  * between the camera and the car open up so it's never lost.
@@ -42,6 +43,9 @@ function Scene({ car }: { car: { current: CarState } }) {
       ...SET.trees.map((t) => ({ kind: 'circle' as const, x: t.x, z: t.z, r: 110 })),
       ...SET.lamps.map((l) => ({ kind: 'circle' as const, x: l.x, z: l.z, r: 50 })),
       ...SET.benches.map((b) => ({ kind: 'box' as const, x: b.x, z: b.z, w: 460, d: 160 })),
+      ...SET.building.blocks.map((b) => ({ kind: 'box' as const, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, w: b.x1 - b.x0, d: b.z1 - b.z0 })),
+      ...SET.hedges.map((h) => ({ kind: 'box' as const, x: (h.x0 + h.x1) / 2, z: h.z, w: h.x1 - h.x0, d: h.d })),
+      ...SET.bushes.map((b) => ({ kind: 'circle' as const, x: b.x, z: b.z, r: b.r * 0.8 })),
     ],
     [],
   )
@@ -68,10 +72,10 @@ function Scene({ car }: { car: { current: CarState } }) {
       />
       <Island />
       <Grass />
-      <Walk />
+      <Walks />
       <Petals />
       {SET.trees.map((t, i) => (
-        <CherryTree key={i} model={t.model} position={[t.x, 0, t.z]} rotation={t.rot} />
+        <CherryTree key={i} model={t.model} position={[t.x, 0, t.z]} rotation={t.rot} scale={t.scale} />
       ))}
       {SET.lamps.map((l, i) => (
         <LampPost key={i} slot={i} position={[l.x, 0, l.z]} />
@@ -79,6 +83,8 @@ function Scene({ car }: { car: { current: CarState } }) {
       {SET.benches.map((b, i) => (
         <Bench key={i} position={[b.x, 0, b.z]} rotation={b.rot} />
       ))}
+      <Building />
+      <Hedges />
       <Car state={car} obstacles={obstacles} />
     </>
   )

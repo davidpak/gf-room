@@ -1,16 +1,17 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { BufferGeometry, CanvasTexture, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, InstancedMesh, Object3D, RepeatWrapping, SRGBColorSpace, Shape } from 'three'
+import { BufferGeometry, CanvasTexture, BoxGeometry, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, InstancedMesh, Object3D, RepeatWrapping, SRGBColorSpace, Shape } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from './bruno'
-import { SET, halfWidthAt, inIsland, keepClear, onWalk } from './set'
+import { SET, inIsland, keepClear, onWalk, type Walk } from './set'
 
 /**
- * The ground of the set piece (./set): an island of earth with a grass lip, a mown lawn on it (soft
- * mowing stripes, a gentle wash of greens), chunky tufts only where grass gathers (round the tree's
- * foot, the bench's and the lamp's, along the walk and the island's rim), little white clover flowers, a stretch of brick walk across it (UW's red brick, laid in
- * basketweave between a border course, each brick its own shade and a hair proud or sunk), and the
- * cherry petals: lying on the grass and the bricks, and a few still falling.
+ * The ground of the Quad's quarter (./set): an island of earth with a grass lip, a mown lawn on it
+ * (soft mowing stripes, a gentle wash of greens, bare trodden earth under the cherries), chunky tufts
+ * only where grass gathers (round the trees' feet, the benches' and the lamps', along the walks'
+ * edges and the island's rim), little white clover flowers, the brick walks across it (UW's red
+ * brick, laid in basketweave between a border course, each brick its own shade and a hair proud or
+ * sunk), and the cherry petals: lying on the grass and the bricks, and a few still falling.
  */
 const _o = new Object3D()
 const _c = new Color()
@@ -19,26 +20,34 @@ function rng(seed: number) {
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296)
 }
 
-/** the island's outline between depths z0 and z1 (all of it by default), `inset` in from its edge,
- *  as the same rounded rectangle the grass and the bricks keep inside (./set halfWidthAt) */
-function islandShape(inset = 0, z0 = -Infinity, z1 = Infinity) {
-  const D = SET.island.d / 2 - inset
-  const a = Math.max(-D, z0)
-  const b = Math.min(D, z1)
-  const zs: number[] = []
-  for (let i = 0; i <= 48; i++) zs.push(a + ((b - a) * i) / 48)
+/** the island's outline, `inset` in from its edge: a rectangle, its corners rounded (./set inIsland) */
+function islandShape(inset = 0) {
+  const { x0, x1, z0, z1, corner } = SET.island
+  const [a, b, c, d] = [x0 + inset, x1 - inset, z0 + inset, z1 - inset]
+  const r = Math.max(1, corner - inset)
   const s = new Shape()
-  zs.forEach((z, i) => (i ? s.lineTo(halfWidthAt(z, inset), z) : s.moveTo(halfWidthAt(z, inset), z)))
-  for (let i = zs.length - 1; i >= 0; i--) s.lineTo(-halfWidthAt(zs[i], inset), zs[i])
-  s.closePath()
+  s.moveTo(a + r, c)
+  s.lineTo(b - r, c)
+  s.quadraticCurveTo(b, c, b, c + r)
+  s.lineTo(b, d - r)
+  s.quadraticCurveTo(b, d, b - r, d)
+  s.lineTo(a + r, d)
+  s.quadraticCurveTo(a, d, a, d - r)
+  s.lineTo(a, c + r)
+  s.quadraticCurveTo(a, c, a + r, c)
   return s
 }
+const ISLAND_W = SET.island.x1 - SET.island.x0
+const ISLAND_D = SET.island.z1 - SET.island.z0
 
 const EARTH = bruno({ vertexColors: true })
-/** the mown lawn: a wash of greens, soft light and dark stripes where the mower went (1 px = 4 mm) */
+/** the mown lawn: a wash of greens, soft light and dark stripes where the mower went, the grass worn
+ *  to bare earth under the cherries (1 px = 8 mm) */
 function lawnTexture() {
-  const W = 700
-  const H = 475
+  const W = Math.round(ISLAND_W / 8)
+  const H = Math.round(ISLAND_D / 8)
+  const X = (x: number) => (x - SET.island.x0) / 8
+  const Y = (z: number) => (z - SET.island.z0) / 8
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
@@ -63,8 +72,29 @@ function lawnTexture() {
     g.fillStyle = (y / 44) % 2 ? 'rgba(255,255,220,0.07)' : 'rgba(30,70,30,0.06)'
     g.fillRect(0, y, W, 44)
   }
+  // under the cherries: the grass shaded darker, worn through to earth round the trunks
+  for (const t of SET.trees) {
+    const x = X(t.x)
+    const y = Y(t.z)
+    let gr = g.createRadialGradient(x, y, 0, x, y, 120)
+    gr.addColorStop(0, 'rgba(60,96,62,0.35)')
+    gr.addColorStop(1, 'rgba(60,96,62,0)')
+    g.fillStyle = gr
+    g.fillRect(x - 120, y - 120, 240, 240)
+    for (let k = 0; k < 7; k++) {
+      const ex = x + (rand() - 0.5) * 70
+      const ey = y + (rand() - 0.5) * 40
+      const r = 22 + rand() * 30
+      gr = g.createRadialGradient(ex, ey, 0, ex, ey, r)
+      gr.addColorStop(0, 'rgba(122,88,66,0.75)')
+      gr.addColorStop(0.6, 'rgba(122,88,66,0.45)')
+      gr.addColorStop(1, 'rgba(122,88,66,0)')
+      g.fillStyle = gr
+      g.fillRect(ex - r, ey - r, r * 2, r * 2)
+    }
+  }
   // a fine grain
-  for (let i = 0; i < 9000; i++) {
+  for (let i = 0; i < W * H * 0.03; i++) {
     g.fillStyle = rand() < 0.5 ? 'rgba(210,230,140,0.18)' : 'rgba(40,90,40,0.16)'
     g.fillRect(rand() * W, rand() * H, 1.5, 1.5)
   }
@@ -73,8 +103,9 @@ function lawnTexture() {
   t.wrapS = t.wrapT = RepeatWrapping
   t.anisotropy = 8
   // (the lawn's UVs are its outline's coordinates in mm: the picture over the whole island)
-  t.repeat.set(1 / SET.island.w, 1 / SET.island.d)
-  t.offset.set(0.5, 0.5)
+  t.repeat.set(1 / ISLAND_W, 1 / ISLAND_D)
+  t.offset.set(-SET.island.x0 / ISLAND_W, -SET.island.z0 / ISLAND_D)
+  t.flipY = false
   return t
 }
 const SOIL = bruno({ map: typeof document !== 'undefined' ? lawnTexture() : undefined })
@@ -184,16 +215,27 @@ function tuftSpots() {
   for (const b of SET.benches)
     for (const lx of [-180, 180])
       for (const lz of [-55, 50]) ring(b.x + Math.cos(b.rot) * lx + Math.sin(b.rot) * lz, b.z - Math.sin(b.rot) * lx + Math.cos(b.rot) * lz, 8, 40, 3)
-  for (let x = -SET.island.w / 2; x < SET.island.w / 2; x += 55 + rand() * 90) {
-    for (const side of [-1, 1]) if (rand() < 0.75) out.push([x, SET.walk.z + side * (SET.walk.w / 2 + 16 + rand() * 30)])
+  for (const wk of SET.walks) {
+    const [ax, az] = wk.a
+    const len = Math.hypot(wk.b[0] - ax, wk.b[1] - az)
+    const ux = (wk.b[0] - ax) / len
+    const uz = (wk.b[1] - az) / len
+    for (let d = 0; d < len; d += 55 + rand() * 90)
+      for (const side of [-1, 1]) {
+        if (rand() > 0.75) continue
+        const o = side * (wk.w / 2 + 16 + rand() * 30)
+        out.push([ax + ux * d - uz * o, az + uz * d + ux * o])
+      }
   }
-  for (let i = 0; i < 520; i++) {
-    const a = rand() * Math.PI * 2
-    const z = Math.sin(a) * (SET.island.d / 2 - 40 - rand() * 50)
-    const hw = halfWidthAt(z, 40 + rand() * 50)
-    out.push([Math.sign(Math.cos(a)) * hw * Math.min(1, Math.abs(Math.cos(a)) * 3), z])
+  const { x0, x1, z0, z1 } = SET.island
+  for (let i = 0; i < 640; i++) {
+    const inset = 40 + rand() * 50
+    const u = rand()
+    const side = Math.floor(rand() * 4)
+    if (side < 2) out.push([x0 + (x1 - x0) * u, side ? z1 - inset : z0 + inset])
+    else out.push([side === 2 ? x0 + inset : x1 - inset, z0 + (z1 - z0) * u])
   }
-  for (let i = 0; i < 160; i++) out.push([(rand() - 0.5) * SET.island.w, (rand() - 0.5) * SET.island.d])
+  for (let i = 0; i < 220; i++) out.push([x0 + rand() * (x1 - x0), z0 + rand() * (z1 - z0)])
   return out.filter(([x, z]) => inIsland(x, z, 28) && !onWalk(x, z, 10) && !keepClear.some(([cx, cz, r]) => Math.hypot(x - cx, z - cz) < r * 0.8))
 }
 
@@ -205,9 +247,9 @@ export function Grass() {
   const clovers = useMemo(() => {
     const rand = rng(17)
     const out: [number, number][] = []
-    while (out.length < 420) {
-      const x = (rand() - 0.5) * SET.island.w
-      const z = (rand() - 0.5) * SET.island.d
+    while (out.length < 640) {
+      const x = SET.island.x0 + rand() * ISLAND_W
+      const z = SET.island.z0 + rand() * ISLAND_D
       if (inIsland(x, z, 40) && !onWalk(x, z, 30)) out.push([x, z])
     }
     return out
@@ -252,31 +294,39 @@ const CLOVER = bruno({ color: '#fbf6ee' })
 const BRICKS = ['#c8664f', '#b95a47', '#d27a5c', '#a9503f', '#cf8466', '#bd6450', '#d98b6c']
 const BRICK = bruno({})
 const MORTAR = bruno({ color: '#7d5a55' })
-export function Walk() {
-  const W = SET.walk
-  const brick = useMemo(() => new RoundedBoxGeometry(1, 1, 1, 2, 0.12), [])
-  const bricks = useMemo(() => {
-    const out: { x: number; z: number; w: number; d: number; a: number }[] = []
-    const B = 64 // (a brick 64 × 32: a basketweave square is two)
-    const half = W.w / 2
-    const inner = half - 34
-    // the border course, each side: bricks along the edge
-    for (const side of [-1, 1]) for (let x = -SET.island.w / 2; x < SET.island.w / 2; x += B) out.push({ x: x + B / 2, z: W.z + side * (half - 17), w: B - 3, d: 29, a: 0 })
-    // the basketweave between: squares of two bricks, turned alternately
-    for (let i = Math.floor(-SET.island.w / 2 / B); i * B < SET.island.w / 2; i++) {
-      for (let j = 0; j * B < inner * 2 - 4; j++) {
-        const x0 = i * B
-        const z0 = W.z - inner + j * B
-        if (z0 + B > W.z + inner + 2) continue
-        const along = (i + j) % 2 === 0
-        for (const k of [0, 1]) {
-          if (along) out.push({ x: x0 + B / 2, z: z0 + 16 + k * 32, w: B - 3, d: 29, a: 0 })
-          else out.push({ x: x0 + 16 + k * 32, z: z0 + B / 2, w: 29, d: B - 3, a: 0 })
-        }
+/** one walk's bricks, in its own frame: a border course down each edge, basketweave between (a
+ *  brick 64 × 32: a basketweave square is two); none where an earlier walk already lies */
+function walkBricks(wk: Walk, k: number) {
+  const out: { x: number; z: number; w: number; d: number; a: number }[] = []
+  const [ax, az] = wk.a
+  const len = Math.hypot(wk.b[0] - ax, wk.b[1] - az)
+  const ux = (wk.b[0] - ax) / len
+  const uz = (wk.b[1] - az) / len
+  const a = Math.atan2(-uz, ux)
+  const put = (s: number, t: number, w: number, d: number) => out.push({ x: ax + ux * s - uz * t, z: az + uz * s + ux * t, w, d, a })
+  const B = 64
+  const half = wk.w / 2
+  const inner = half - 34
+  for (const side of [-1, 1]) for (let s = 0; s < len; s += B) put(s + B / 2, side * (half - 17), B - 3, 29)
+  const rows = Math.floor((inner * 2) / B)
+  const t0 = -(rows * B) / 2
+  for (let i = 0; i * B < len; i++)
+    for (let j = 0; j < rows; j++) {
+      const along = (i + j) % 2 === 0
+      for (const q of [0, 1]) {
+        if (along) put(i * B + B / 2, t0 + j * B + 16 + q * 32, B - 3, 29)
+        else put(i * B + 16 + q * 32, t0 + j * B + B / 2, 29, B - 3)
       }
     }
-    return out.filter((b) => inIsland(b.x, b.z, 30))
-  }, [W.w, W.z])
+  // (the strip either side of the weave, when the walk isn't a whole number of squares wide: running bond)
+  const gap = inner - rows * (B / 2)
+  if (gap > 12) for (const side of [-1, 1]) for (let s = 0; s < len; s += B) put(s + B / 2, side * (inner - gap / 2), B - 3, gap - 3)
+  return out.filter((b) => inIsland(b.x, b.z, 30) && !onWalk(b.x, b.z, 2, k))
+}
+
+export function Walks() {
+  const brick = useMemo(() => new RoundedBoxGeometry(1, 1, 1, 2, 0.12), [])
+  const bricks = useMemo(() => SET.walks.flatMap(walkBricks), [])
   const mesh = useRef<InstancedMesh>(null)
   useLayoutEffect(() => {
     const m = mesh.current!
@@ -284,7 +334,7 @@ export function Walk() {
     bricks.forEach((b, i) => {
       const h = 20 + rand() * 3
       _o.position.set(b.x, 14 + h / 2 + (rand() - 0.5) * 1.5, b.z)
-      _o.rotation.set((rand() - 0.5) * 0.03, (rand() - 0.5) * 0.04, (rand() - 0.5) * 0.03)
+      _o.rotation.set((rand() - 0.5) * 0.03, b.a + (rand() - 0.5) * 0.04, (rand() - 0.5) * 0.03)
       _o.scale.set(b.w, h, b.d)
       _o.updateMatrix()
       m.setMatrixAt(i, _o.matrix)
@@ -293,15 +343,27 @@ export function Walk() {
     m.instanceMatrix.needsUpdate = true
     if (m.instanceColor) m.instanceColor.needsUpdate = true
   }, [bricks])
-  const bed = useMemo(() => {
-    // the mortar bed under the bricks: the walk's band, cut to the island
-    const g = new ExtrudeGeometry(islandShape(24, W.z - W.w / 2 - 4, W.z + W.w / 2 + 4), { depth: 16, bevelEnabled: false })
-    g.rotateX(Math.PI / 2)
-    return g
-  }, [])
+  // the mortar bed under each walk's bricks, cut to the island (each a hair higher than the last: no fighting where they cross)
+  const beds = useMemo(
+    () =>
+      SET.walks.map((wk, k) => {
+        const { x0, x1, z0, z1 } = SET.island
+        const clamp = ([x, z]: [number, number]): [number, number] => [Math.min(x1 - 24, Math.max(x0 + 24, x)), Math.min(z1 - 24, Math.max(z0 + 24, z))]
+        const [ax, az] = clamp(wk.a)
+        const [bx, bz] = clamp(wk.b)
+        const len = Math.hypot(bx - ax, bz - az)
+        const g = new BoxGeometry(len + wk.w * (k > 3 ? 0.4 : 0), 16, wk.w + 8)
+        g.rotateY(Math.atan2(-(bz - az), bx - ax))
+        g.translate((ax + bx) / 2, 12 + k * 0.3, (az + bz) / 2)
+        return g
+      }),
+    [],
+  )
   return (
     <group>
-      <mesh geometry={bed} material={MORTAR} position={[0, 20, 0]} receiveShadow />
+      {beds.map((g, k) => (
+        <mesh key={k} geometry={g} material={MORTAR} receiveShadow />
+      ))}
       <instancedMesh ref={mesh} args={[brick, BRICK, bricks.length]} castShadow receiveShadow />
     </group>
   )
