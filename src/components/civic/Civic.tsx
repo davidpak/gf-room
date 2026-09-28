@@ -150,7 +150,7 @@ function plateTexture() {
 }
 const PLATE = typeof document !== 'undefined' ? bruno({ map: plateTexture(), emissive: '#ffffff', emissiveIntensity: 0.15 }) : DARK
 /** where the rear plate hangs: in the recess low on the lid (real mm, the car's frame) */
-const PLATE_AT = { y: 715, z: -2236 }
+const PLATE_AT = { y: 748, z: -2236 } // (its bottom edge above the lid's, which comes down to 646)
 function Plate({ at, back }: { at: [number, number, number]; back?: boolean }) {
   return (
     <mesh material={PLATE} position={at} rotation={[0, back ? Math.PI : 0, 0]}>
