@@ -37,7 +37,7 @@ const CANOPY = { half: 1500, eave: 2100, peak: 2900, over: 60 }
 const OVEN = { w: 460, h: 280, d: 360, x: -420 } // (on the table, left of middle)
 const OVEN_TOY = 1.5 // (drawn half as big again: it's the star, it has to read from the car)
 const COOKIE = { r: 30, t: 12 } // (toy mm, not real: chunky)
-const MENU = { w: 760, len: 1120, lean: 0.24, at: [1180, 0, 820] as [number, number, number], rot: -0.3 }
+const MENU = { w: 760, len: 1120, lean: 0.24, at: [1365, 0, 260] as [number, number, number], rot: 0 } // (just past the table's right end, square on)
 
 // ---- the cookies there are, and which one's picked
 export const KINDS = [
@@ -258,18 +258,18 @@ function freeCookies() {
   return t
 }
 /** the menu: the four cookies, the picked one marked, and how to use it (after Bruno's board) */
-const MENU_ROWS = { top: 200, step: 104 }
+const MENU_ROWS = { top: 172, step: 84 }
+const MENU_H = 674 // (512 wide: the slate's 608 × 800)
 function drawMenu(c: HTMLCanvasElement, sel: number) {
-  slate(512, 760, (g) => {
-    g.fillStyle = '#fbf7ef'
+  slate(512, MENU_H, (g) => {
     g.textAlign = 'center'
-    g.font = `700 64px ${HAND}`
-    g.fillText('cookies', 256, 84)
+    g.font = `700 60px ${HAND}`
+    chalk(g, 'cookies', 256, 72)
     g.strokeStyle = '#f7b9c9'
     g.lineWidth = 4
     g.beginPath()
-    g.moveTo(150, 124)
-    g.quadraticCurveTo(256, 136, 362, 122)
+    g.moveTo(160, 108)
+    g.quadraticCurveTo(256, 120, 352, 106)
     g.stroke()
     KINDS.forEach((k, i) => {
       const y = MENU_ROWS.top + i * MENU_ROWS.step
@@ -277,53 +277,47 @@ function drawMenu(c: HTMLCanvasElement, sel: number) {
       // a little cookie drawn beside its name, in its own colours
       g.fillStyle = k.dough
       g.beginPath()
-      g.arc(96, y, 30, 0, Math.PI * 2)
+      g.arc(92, y, 26, 0, Math.PI * 2)
       g.fill()
       for (let j = 0; j < 5; j++) {
         g.fillStyle = k.bits[j % k.bits.length]
         g.beginPath()
-        g.arc(96 + Math.cos(j * 2.4) * 16, y + Math.sin(j * 2.4) * 14, k.bit === 'dust' ? 3 : 6, 0, Math.PI * 2)
+        g.arc(92 + Math.cos(j * 2.4) * 14, y + Math.sin(j * 2.4) * 12, k.bit === 'dust' ? 3 : 5, 0, Math.PI * 2)
         g.fill()
       }
       g.textAlign = 'left'
-      g.font = `700 ${on ? 50 : 44}px ${HAND}`
-      g.fillStyle = on ? '#f7b9c9' : '#fbf7ef'
-      g.fillText(k.name, 146, y + 2)
+      g.font = `700 ${on ? 46 : 40}px ${HAND}`
+      chalk(g, k.name, 134, y + 2, on ? '#f7b9c9' : '#fbf7ef')
       if (on) {
-        g.fillText('→', 18, y + 2)
+        chalk(g, '→', 36, y + 2, '#f7b9c9')
         g.strokeStyle = '#f7b9c9'
         g.lineWidth = 3
         g.beginPath()
-        g.moveTo(146, y + 30)
-        g.lineTo(146 + g.measureText(k.name).width, y + 28)
+        g.moveTo(134, y + 28)
+        g.lineTo(134 + g.measureText(k.name).width, y + 26)
         g.stroke()
       }
     })
     // how to: like Bruno's NEXT → PREV ← … EXIT esc, with the keys boxed
-    const key = (label: string, x: number, y: number, w = 58) => {
+    const key = (label: string, x: number, y: number, w: number) => {
       g.strokeStyle = '#fbf7ef'
       g.lineWidth = 3
-      g.strokeRect(x, y - 22, w, 44)
+      g.strokeRect(x, y - 19, w, 38)
       g.textAlign = 'center'
-      g.font = `700 32px ${HAND}`
-      g.fillStyle = '#fbf7ef'
-      g.fillText(label, x + w / 2, y + 1)
+      g.font = `700 28px ${HAND}`
+      chalk(g, label, x + w / 2, y + 1)
     }
-    g.textAlign = 'left'
-    g.font = `700 40px ${HAND}`
-    g.fillStyle = '#fbf7ef'
-    const rows: [string, string, number?][] = [
-      ['pick', '← →', 90],
-      ['bake', 'enter'],
-      ['back', 'esc'],
+    const rows: [string, string, number][] = [
+      ['pick', '← →', 86],
+      ['bake', 'enter', 92],
+      ['back', 'esc', 70],
     ]
     rows.forEach(([word, k, w], i) => {
-      const y = 628 + i * 52
+      const y = 516 + i * 46
       g.textAlign = 'left'
-      g.font = `700 40px ${HAND}`
-      g.fillStyle = '#fbf7ef'
-      g.fillText(word, 70, y)
-      key(k, 230, y, w ?? 96)
+      g.font = `700 36px ${HAND}`
+      chalk(g, word, 96, y)
+      key(k, 250, y, w)
     })
   }, c)
 }
@@ -598,13 +592,13 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
     const c = Math.cos(at.rot)
     const s = Math.sin(at.rot)
     // (a little toward the menu out front, low enough that it's all in, the plank still on top)
-    const centre = place(420, 1500, 520)
+    const centre = place(460, 1680, 320)
     const out = new Vector3(0.22, 0.26, 1).normalize()
     const dir = new Vector3(out.x * c + out.z * s, out.y, -out.x * s + out.z * c)
     return {
       key: 'cookies',
       items: [],
-      frame: (pos, look, aspect) => frameAround(pos, look, aspect, centre, 640, 760, dir),
+      frame: (pos, look, aspect) => frameAround(pos, look, aspect, centre, 560, 680, dir),
       hint: '← → pick a cookie · enter or the oven to bake',
       keys: (e) => {
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') choose(choice + 1)
@@ -627,7 +621,7 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
   const menuClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     if (getLook()?.spot.key !== 'cookies') clickSpot(spot)
-    const y = (1 - (e.uv?.y ?? 0.5)) * 760
+    const y = (1 - (e.uv?.y ?? 0.5)) * MENU_H
     const row = Math.round((y - MENU_ROWS.top) / MENU_ROWS.step)
     if (row >= 0 && row < KINDS.length) choose(row)
   }
@@ -719,16 +713,10 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
             <AFrame w={MENU.w} len={MENU.len} lean={MENU.lean} face={tex.menuMat} onFaceClick={menuClick} />
           </group>
         </group>
-        {/* the cookies on the rack (just for looks: the oven's are the ones to take), three kinds */}
-        {[
-          [-90, -60, 0],
-          [70, -50, 1],
-          [-10, 70, 3],
-        ].map(([x, z, kind], i) => (
-          <group key={i} position={[(330 + x) * K, (TABLE.h + 14 + 48) * K + COOKIE.t / 2, (20 + z) * K]} rotation={[0, i, 0]}>
-            <Cookie kind={kind} />
-          </group>
-        ))}
+        {/* on the rack: the cookie that's picked on the menu (for looks: the oven's are the ones to take) */}
+        <group position={[330 * K, (TABLE.h + 14 + 48) * K + COOKIE.t / 2, 20 * K]} rotation={[0, 0.4, 0]}>
+          <Cookie kind={sel} />
+        </group>
         {/* what's solid: the legs, the table, the oven, the menu */}
         <RigidBody type="fixed" colliders={false}>
           {[-1, 1].map((sx) => [-1, 1].map((sz) => <CylinderCollider key={`${sx}${sz}`} args={[(eave / 2) * K, 30 * K]} position={[sx * half * K, (eave / 2) * K, sz * half * K]} />))}
