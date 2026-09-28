@@ -23,7 +23,7 @@ export const LOOK = {
   intensity: 1.18,
   shadow: new Color('#9a82cf'), // (a soft lavender: things in shade stay readable)
   bounce: new Color('#9a4f8c'),
-  lamp: new Color('#ffb46b'),
+  lamp: new Color('#ff9c48'),
   sky: ['#34357a', '#9a6fb3', '#f2a0ae', '#ffcfa3'], // top to horizon
   fog: new Color('#e8a7b8'),
 }

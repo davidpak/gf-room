@@ -64,15 +64,15 @@ export function Bench({ position = [0, 0, 0] as [number, number, number], rotati
 
 // ---- the lamp post
 const BLACK = bruno({ color: '#262129' })
-const GLASS = new MeshBasicMaterial({ color: new Color('#ffd79a').multiplyScalar(1.25), toneMapped: false })
+const GLASS = new MeshBasicMaterial({ color: new Color('#ffbb6e').multiplyScalar(1.2), toneMapped: false })
 function halo() {
   const c = document.createElement('canvas')
   c.width = c.height = 128
   const g = c.getContext('2d')!
   const r = g.createRadialGradient(64, 64, 0, 64, 64, 64)
-  r.addColorStop(0, 'rgba(255,214,150,0.85)')
-  r.addColorStop(0.25, 'rgba(255,184,120,0.35)')
-  r.addColorStop(1, 'rgba(255,160,110,0)')
+  r.addColorStop(0, 'rgba(255,196,118,0.85)')
+  r.addColorStop(0.25, 'rgba(255,156,74,0.4)')
+  r.addColorStop(1, 'rgba(255,128,60,0)')
   g.fillStyle = r
   g.fillRect(0, 0, 128, 128)
   return new CanvasTexture(c)
