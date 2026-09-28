@@ -81,6 +81,14 @@ scene.traverse((o) => {
   const nor = g.attributes.normal
   const groups = g.groups.length ? g.groups : [{ start: 0, count: pos.count, materialIndex: 0 }]
   const box = new Box3().setFromObject(o)
+  // loose little bits in the doors' thickness (between the door skin and its inside: dash lights, vent
+  // edges, sill strips, speaker bits): with no door card to sit in they'd float as a door swings, so out
+  {
+    const tris = (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3
+    const inGap = (x) => x > 1.84 && x < 2.02
+    const inGapL = (x) => x < 2 * CX - 1.84 && x > 2 * CX - 2.02
+    if (tris < 40 && (inGap(box.min.x) || inGapL(box.max.x)) && box.min.z > -3.7 && box.max.z < -1.45 && box.max.y < 1.2) return
+  }
   // the shark-fin antenna on the roof: David's car hasn't one
   if (box.min.y > 1.28 && box.max.x - box.min.x < 0.1 && box.min.z > -3.7 && box.max.z < -3.4) return
   const nm = new Matrix3().getNormalMatrix(o.matrixWorld)

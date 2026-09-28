@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo } from 'react'
 import { createPortal, useFrame, type ThreeEvent } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
-import { CanvasTexture, LatheGeometry, SRGBColorSpace, Vector2, type Group, type Material, type Mesh, type Object3D } from 'three'
+import { Box3, CanvasTexture, LatheGeometry, SRGBColorSpace, Vector2, type Group, type Material, type Mesh, type Object3D } from 'three'
 import { bruno } from '../quad/bruno'
 import { CIVIC, TOY } from './spec'
 
@@ -214,6 +214,7 @@ export function CivicModel({ onWheels }: { onWheels?: (w: { node: Object3D; fron
     <group>
       <primitive object={car} onClick={click} onPointerMove={over} onPointerOut={() => (document.body.style.cursor = '')} />
       {/* a tyre on each wheel (it rolls and steers with it) */}
+      {parts.doors.map(({ k, node }) => node && <Fragment key={k}>{createPortal(<DoorCard node={node} />, node)}</Fragment>)}
       {parts.wheels.map(({ node }, i) => (
         <Fragment key={i}>{createPortal(<mesh geometry={TYRE_GEO} material={TYRE} castShadow />, node)}</Fragment>
       ))}
@@ -221,6 +222,45 @@ export function CivicModel({ onWheels }: { onWheels?: (w: { node: Object3D; fron
       {parts.trunk && t && createPortal(<Plate at={[0, PLATE_AT.y - t.y, PLATE_AT.z - t.z]} back />, parts.trunk)}
       <Plate at={[0, 430, 2318]} />
       <Well />
+    </group>
+  )
+}
+
+/** a door's inside, which the model hasn't below its window trim: a card from the sill up to the
+ *  window, an armrest along it and the pull in it, flush with the trim above (in the door's own frame) */
+const CARD = bruno({ color: '#4d4955', shade: '#f0d4c8', lit: 0.9, warm: 0.4 })
+const PULL = bruno({ color: '#2a2830' })
+function DoorCard({ node }: { node: Object3D }) {
+  const d = useMemo(() => {
+    const bb = new Box3()
+    node.traverse((o) => {
+      const m = o as Mesh
+      if (!m.isMesh || m.parent !== node) return
+      m.geometry.computeBoundingBox()
+      bb.union(m.geometry.boundingBox!)
+    })
+    const side = Math.sign(node.position.x) // (+1: the driver's side)
+    const inner = side > 0 ? bb.min.x : bb.max.x // (the door's inside face, the trim's)
+    const y0 = 330 - node.position.y
+    const y1 = 930 - node.position.y
+    const z0 = bb.min.z + 50
+    const z1 = bb.max.z - 70
+    return { side, inner, y0, y1, z0, z1 }
+  }, [node])
+  const { side, inner, y0, y1, z0, z1 } = d
+  const zc = (z0 + z1) / 2
+  const len = z1 - z0
+  return (
+    <group>
+      <mesh material={CARD} position={[inner + side * 22, (y0 + y1) / 2, zc]} receiveShadow>
+        <boxGeometry args={[44, y1 - y0, len]} />
+      </mesh>
+      <mesh material={CARD} position={[inner - side * 30, 700 - node.position.y, zc - len * 0.08]}>
+        <boxGeometry args={[70, 40, len * 0.6]} />
+      </mesh>
+      <mesh material={PULL} position={[inner - side * 4, 760 - node.position.y, zc + len * 0.18]}>
+        <boxGeometry args={[14, 30, len * 0.16]} />
+      </mesh>
     </group>
   )
 }
