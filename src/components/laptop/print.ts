@@ -1,5 +1,6 @@
 import { CanvasTexture, SRGBColorSpace } from 'three'
 import { FN_Z, KB_W, LAPTOP, keyLayout, rowZ, touchBar } from './spec'
+import { drawScreensaver } from '../rinaos/screensaver'
 
 /**
  * What's drawn on the laptop (./spec), each painted onto the surface it's on (nothing laid over
@@ -7,7 +8,8 @@ import { FN_Z, KB_W, LAPTOP, keyLayout, rowZ, touchBar } from './spec'
  *
  *   the lid's back     the case's hearts round the logo
  *   the lid's inside   the black glass, "MacBook Pro" on the chin, the case's lip round it; and, lit
- *                      (an emissive picture on the same face), the screen: her desktop, her notes
+ *                      (an emissive picture on the same face), the screen: RinaOS's screensaver,
+ *                      redrawn live by the laptop (faceTextures' `paint`)
  *   the deck           Space Gray, the trackpad, the speaker grilles, the Touch Bar's glass; lit, the
  *                      Touch Bar's keys
  *   the keys           the pink cover, the legends through it
@@ -139,128 +141,6 @@ export function heartsTexture() {
   t.repeat.set(1 / w, 1 / h)
   t.offset.set(0.5, 0.5) // (its outline is drawn round its middle)
   return t
-}
-
-/** the screen: her desktop, a notes page open (the photos: OneNote, always), 1280 × 800 */
-function screenCanvas() {
-  const [W, H] = [1280, 800]
-  const { c, g } = canvas(W, H)
-  // the wallpaper: a soft pastel wash, blobs of light
-  const bg = g.createLinearGradient(0, 0, W * 0.3, H)
-  bg.addColorStop(0, '#f7c4d4')
-  bg.addColorStop(0.5, '#d5c4f0')
-  bg.addColorStop(1, '#a9dcd6')
-  g.fillStyle = bg
-  g.fillRect(0, 0, W, H)
-  for (const [x, y, r, col] of [
-    [200, 620, 260, '#ffe3ef'],
-    [1100, 180, 300, '#e9f7ff'],
-    [900, 700, 220, '#ffeede'],
-  ] as const) {
-    const rg = g.createRadialGradient(x, y, 0, x, y, r)
-    rg.addColorStop(0, col)
-    rg.addColorStop(1, 'rgba(255,255,255,0)')
-    g.globalAlpha = 0.6
-    g.fillStyle = rg
-    g.fillRect(0, 0, W, H)
-  }
-  g.globalAlpha = 1
-  // the menu bar
-  g.fillStyle = 'rgba(255,255,255,0.55)'
-  g.fillRect(0, 0, W, 26)
-  g.save()
-  g.translate(22, 13)
-  apple(g, 16, '#1d1d1f')
-  g.restore()
-  g.fillStyle = '#1d1d1f'
-  g.font = '600 14px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'
-  g.textBaseline = 'middle'
-  g.fillText('OneNote', 44, 13)
-  g.font = '400 14px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'
-  let x = 118
-  for (const m of ['File', 'Edit', 'View', 'Insert', 'Format', 'Notebooks', 'Window', 'Help']) {
-    g.fillText(m, x, 13)
-    x += g.measureText(m).width + 22
-  }
-  g.textAlign = 'right'
-  g.fillText('Tue 10:20 PM', W - 16, 13)
-  g.textAlign = 'left'
-  // the notes window
-  const wx = 120
-  const wy = 58
-  const ww = 1040
-  const wh = 600
-  g.fillStyle = 'rgba(0,0,0,0.18)'
-  round(g, wx + 4, wy + 10, ww, wh, 12)
-  g.fill()
-  g.fillStyle = '#ffffff'
-  round(g, wx, wy, ww, wh, 12)
-  g.fill()
-  g.save()
-  round(g, wx, wy, ww, wh, 12)
-  g.clip()
-  g.fillStyle = '#7719aa' // OneNote's purple
-  g.fillRect(wx, wy, ww, 70)
-  for (const [i, col] of ['#ff5f57', '#febc2e', '#28c840'].entries()) {
-    g.fillStyle = col
-    g.beginPath()
-    g.arc(wx + 20 + i * 20, wy + 16, 6, 0, Math.PI * 2)
-    g.fill()
-  }
-  g.fillStyle = 'rgba(255,255,255,0.85)'
-  g.font = '500 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'
-  let tx = wx + 20
-  for (const m of ['Home', 'Insert', 'Draw', 'View']) {
-    g.fillText(m, tx, wy + 50)
-    tx += 70
-  }
-  // the sections and pages down the left
-  g.fillStyle = '#f3eef8'
-  g.fillRect(wx, wy + 70, 230, wh - 70)
-  const tabs = ['#d9534f', '#f0ad4e', '#5cb85c', '#5bc0de', '#9b59b6', '#e67ea5']
-  g.font = '400 13px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'
-  for (let i = 0; i < 9; i++) {
-    g.fillStyle = tabs[i % tabs.length]
-    g.fillRect(wx + 14, wy + 92 + i * 30, 5, 18)
-    g.fillStyle = i === 4 ? '#7719aa' : '#555'
-    g.fillText(['Lecture 21', 'Lecture 22', 'Practice', 'Enzymes', 'Glycolysis', 'TCA cycle', 'Lipids', 'Exam 3', 'To do'][i], wx + 28, wy + 102 + i * 30)
-  }
-  // the page: a title and handwritten-ish lines
-  g.fillStyle = '#1d1d1f'
-  g.font = '600 30px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'
-  g.fillText('Glycolysis', wx + 270, wy + 118)
-  g.fillStyle = '#888'
-  g.font = '400 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif'
-  g.fillText('Tuesday, December 9, 2025   10:02 PM', wx + 270, wy + 146)
-  const ink = ['#1a4fb4', '#1a4fb4', '#c0392b', '#1a4fb4', '#27ae60', '#1a4fb4', '#1a4fb4', '#c0392b', '#1a4fb4', '#1a4fb4']
-  for (let i = 0; i < 10; i++) {
-    g.strokeStyle = ink[i]
-    g.lineWidth = 2.2
-    g.beginPath()
-    const y0 = wy + 190 + i * 38
-    const len = 260 + ((i * 137) % 420)
-    const indent = i % 3 === 0 ? 0 : 30
-    for (let s = 0; s <= len; s += 4) {
-      const yy = y0 + Math.sin(s * 0.21 + i) * 3 + Math.sin(s * 0.05 + i * 2) * 2
-      if (s === 0) g.moveTo(wx + 280 + indent + s, yy)
-      else g.lineTo(wx + 280 + indent + s, yy)
-    }
-    g.stroke()
-  }
-  g.restore()
-  // the dock
-  const n = 12
-  const dw = n * 56 + 20
-  g.fillStyle = 'rgba(255,255,255,0.4)'
-  round(g, (W - dw) / 2, H - 76, dw, 66, 18)
-  g.fill()
-  const icons = ['#3d8ef7', '#f5f5f7', '#34c759', '#ff9f0a', '#ff375f', '#7719aa', '#0a84ff', '#1d9bf0', '#ffd60a', '#30d158', '#bf5af2', '#8e8e93']
-  icons.forEach((col, i) => {
-    g.fillStyle = col
-    round(g, (W - dw) / 2 + 14 + i * 56, H - 68, 48, 48, 11)
-    g.fill()
-  })
-  return c
 }
 
 function round(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -395,13 +275,15 @@ export function keysTexture() {
 /** the inside of the lid (SHELL_W × len; the lid's outline runs to +z, drawn round its middle, so
  *  the picture's top is the front edge: the screen's top, open), seen from in front: the case's lip
  *  round the edge, the black glass, the camera, "MacBook Pro" on the chin; `lit`: the screen in
- *  its place, the rest black */
+ *  its place, the rest black (coarser: it's only seen from across the room, and it's redrawn live:
+ *  `paint(t)` draws the screensaver's moment t on it) */
 export function faceTextures() {
   const PX = 4.4
+  const LIT = 2.4
   const W = L.base.w + 2 * L.case.t
   const H = L.lid.len
   const map = canvas(W * PX, H * PX)
-  const lit = canvas(W * PX, H * PX)
+  const lit = canvas(W * LIT, H * LIT)
   let g = map.g
   g.fillStyle = C.rim
   g.fillRect(0, 0, map.c.width, map.c.height)
@@ -425,11 +307,22 @@ export function faceTextures() {
   g = lit.g
   g.fillStyle = '#000000'
   g.fillRect(0, 0, lit.c.width, lit.c.height)
-  g.drawImage(screenCanvas(), dx, dy, L.display.w * PX, L.display.h * PX)
   const out = [texture(map.c), texture(lit.c)].map((t) => {
     t.repeat.set(1 / W, 1 / H)
     t.offset.set(0.5, 0.5)
     return t
   })
-  return { map: out[0], lit: out[1] }
+  const box = { x: ((W - L.display.w) / 2) * LIT, y: L.display.top * LIT, w: L.display.w * LIT, h: L.display.h * LIT }
+  const paint = (t: number) => {
+    g.save()
+    g.translate(box.x, box.y)
+    g.beginPath()
+    g.rect(0, 0, box.w, box.h)
+    g.clip()
+    drawScreensaver(g, box.w, box.h, t)
+    g.restore()
+    out[1].needsUpdate = true
+  }
+  paint(performance.now() / 1000)
+  return { map: out[0], lit: out[1], paint }
 }

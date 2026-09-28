@@ -1141,3 +1141,142 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
   font-size: 12px;
 }
+
+/* ================= starting up (./Boot.tsx) ================= */
+.ros-startup {
+  position: absolute;
+  inset: 0;
+  z-index: 3000;
+}
+.ros-pre .ros-menubar,
+.ros-pre .ros-dock,
+.ros-pre .ros-win {
+  opacity: 0;
+}
+.ros-saver {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.ros-saver.leaving {
+  animation: ros-saver-up 0.65s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+@keyframes ros-saver-up {
+  to {
+    transform: translateY(-100%);
+    opacity: 0.6;
+  }
+}
+/* the boot: dark, the hearts ring in, a thin bar fills, then it fades to the hello */
+.ros-boot {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 60% at 50% 45%, #1d1526, #0c0910);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 46px;
+  animation: ros-fade-out 0.35s ease-in 1.3s forwards;
+}
+.ros-boot-mark {
+  filter: drop-shadow(0 0 18px rgba(245, 170, 174, 0.35));
+  overflow: visible;
+}
+.ros-boot-mark path {
+  transform-box: view-box;
+  transform-origin: 50px 47px;
+  animation: ros-ring 0.7s cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+}
+@keyframes ros-ring {
+  from {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+}
+.ros-boot-bar {
+  width: 190px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+.ros-boot-bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #fdebcb, #f7c2bd);
+  transform-origin: 0 50%;
+  animation: ros-bar 0.95s cubic-bezier(0.45, 0, 0.2, 1) 0.4s both;
+}
+@keyframes ros-bar {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes ros-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+/* the hello: over the wallpaper, in her handwriting */
+.ros-hello {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(40, 20, 55, 0.12);
+  animation: ros-fade-out 0.35s ease-in 0.9s forwards;
+}
+.ros-hello span {
+  font: 700 76px/1 'Gaegu', 'Nunito', cursive;
+  color: #fff;
+  text-shadow: 0 4px 30px rgba(90, 40, 110, 0.35);
+  animation: ros-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.ros-hello svg {
+  margin-top: 6px;
+  animation: ros-pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) 0.45s both;
+}
+@keyframes ros-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+    letter-spacing: 0.06em;
+  }
+}
+@keyframes ros-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.2) rotate(-20deg);
+  }
+}
+/* the desktop comes in: the menu bar down, the dock up, the window forward */
+.ros-enter .ros-menubar {
+  animation: ros-in-down 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.ros-enter .ros-dock {
+  animation: ros-in-up 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s both;
+}
+.ros-enter .ros-win {
+  animation: ros-in-win 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.14s both;
+}
+@keyframes ros-in-down {
+  from {
+    transform: translateY(-100%);
+  }
+}
+@keyframes ros-in-up {
+  from {
+    transform: translate(-50%, 120%);
+  }
+}
+@keyframes ros-in-win {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.965);
+  }
+}

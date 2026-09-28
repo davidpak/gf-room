@@ -138,14 +138,23 @@ export function LaptopModel({ angle, onLid, onScreen, screen, screenRef }: { ang
       rim: new MeshStandardMaterial({ color: C.rim, roughness: 0.5 }),
       // the lid's inside: the black glass round the display, and the screen lit on it while it's on
       face: new MeshStandardMaterial({ map: face.map, emissiveMap: face.lit, emissive: '#ffffff', emissiveIntensity: 0, roughness: 0.22 }),
+      paintScreen: face.paint,
       port: new MeshBasicMaterial({ color: '#0b0b0d', ...DECAL }),
     }
   }, [])
   const lid = useRef<Group>(null)
+  const using = useOsMode()
+  const painted = useRef(0)
   useFrame(() => {
     const l = lid.current
     if (!l) return
     l.rotation.x = -angle.current
+    // the screensaver, live, while the screen's on and nobody's using it (RinaOS covers it then)
+    const t = performance.now() / 1000
+    if (angle.current > 0.5 && !using && t - painted.current > 1 / 24) {
+      painted.current = t
+      mat.paintScreen(t)
+    }
     // on while it's open (it wakes as the lid comes up, sleeps as it comes down)
     const on = Math.min(1, Math.max(0, (angle.current - 0.5) / 0.4))
     mat.face.emissiveIntensity = on * 0.95

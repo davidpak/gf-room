@@ -3,12 +3,14 @@ import { createPortal } from 'react-dom'
 import { AppIcon, Glyph } from './icons'
 import { OneNote } from './onenote/OneNote'
 import { useOsMode } from './mode'
+import { Boot, Hello, Saver } from './Boot'
 import './rinaos.css'
 
 /**
  * RinaOS: her laptop's desktop, 1280 × 800 (the 13-inch's "looks like" size). A menu bar (the
  * apple's menu, the open app's name and menus, the clock), the wallpaper, windows (dragged by their
- * title bars; close, minimise, zoom), the dock. Apps: OneNote; Photos and Music to come.
+ * title bars; close, minimise, zoom), the dock. Apps: OneNote; Photos and Music to come. It starts
+ * up with a boot and a hello (./Boot), wakes from its screensaver after, and goes back to it when left.
  *
  * `embedded`: it's on the laptop's screen in the room. Then it keeps the keys and the pointer to
  * itself (the room's shortcuts stay out of her typing), and Esc, the "Back to the room" chip or a
@@ -20,6 +22,8 @@ const MENU_H = 24
 const DOCK_H = 78
 
 type AppId = 'onenote' | 'photos' | 'music'
+export type Phase = 'saver' | 'boot' | 'hello' | 'wake' | 'desk'
+const IDLE = 120_000 // (ms untouched before the screensaver comes on)
 type Win = { open: boolean; min: boolean; max: boolean; x: number; y: number; w: number; h: number; z: number }
 const APPS: { id: AppId; name: string; ready: boolean; menus: string[] }[] = [
   { id: 'onenote', name: 'OneNote', ready: true, menus: ['File', 'Edit', 'View', 'Insert', 'Format', 'Notebooks', 'Window', 'Help'] },
@@ -27,7 +31,7 @@ const APPS: { id: AppId; name: string; ready: boolean; menus: string[] }[] = [
   { id: 'music', name: 'Music', ready: false, menus: [] },
 ]
 
-export function RinaOS({ embedded }: { embedded?: { onExit: () => void } }) {
+export function RinaOS({ embedded, hold }: { embedded?: { onExit: () => void }; hold?: Phase }) {
   const root = useRef<HTMLDivElement>(null)
   const [wins, setWins] = useState<Record<string, Win>>({
     onenote: { open: true, min: false, max: false, x: 34, y: MENU_H + 12, w: 1212, h: 668, z: 1 },
@@ -48,6 +52,63 @@ export function RinaOS({ embedded }: { embedded?: { onExit: () => void } }) {
     window.addEventListener('keydown', esc)
     return () => window.removeEventListener('keydown', esc)
   }, [using])
+
+  // starting up: the screensaver (on the laptop: what it showed from across the room), then the
+  // first time a boot and a hello, after that just a wake; back to the screensaver when it's left,
+  // or put down. A click or a key skips ahead
+  const [phase, setPhase] = useState<Phase>(hold ?? (embedded ? 'saver' : 'boot')) // (hold: stay in one, to look at it)
+  const [entering, setEntering] = useState(false)
+  const booted = useRef(false)
+  const start = () => setPhase(booted.current ? 'wake' : 'boot')
+  const toDesk = () => {
+    booted.current = true
+    setPhase('desk')
+    setEntering(true)
+    window.setTimeout(() => setEntering(false), 1000)
+  }
+  useEffect(() => {
+    if (!embedded) return
+    if (!using) {
+      setPhase('saver')
+      return
+    }
+    // come up to it: once the camera's there, it wakes
+    const t = window.setTimeout(start, 850)
+    return () => window.clearTimeout(t)
+  }, [using]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const next: Partial<Record<Phase, [number, () => void]>> = { boot: [1650, () => setPhase('hello')], hello: [1250, toDesk], wake: [650, toDesk] }
+    const n = next[phase]
+    if (!n || hold) return
+    const t = window.setTimeout(n[1], n[0])
+    return () => window.clearTimeout(t)
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  // left a while: the screensaver (a touch or a key wakes it)
+  useEffect(() => {
+    const el = root.current
+    if (!el || phase !== 'desk') return
+    let t = window.setTimeout(() => setPhase('saver'), IDLE)
+    const poke = () => {
+      window.clearTimeout(t)
+      t = window.setTimeout(() => setPhase('saver'), IDLE)
+    }
+    const kinds = ['pointerdown', 'pointermove', 'keydown', 'wheel']
+    kinds.forEach((k) => el.addEventListener(k, poke))
+    return () => {
+      window.clearTimeout(t)
+      kinds.forEach((k) => el.removeEventListener(k, poke))
+    }
+  }, [phase])
+  const skip = () => {
+    if (phase === 'boot' || phase === 'hello') toDesk()
+    else if (phase === 'saver' && (using || !embedded)) start()
+  }
+  useEffect(() => {
+    if (phase === 'desk' || phase === 'wake') return
+    const key = () => skip()
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  })
 
   const raise = (id: AppId) => {
     setFront(id)
@@ -70,7 +131,12 @@ export function RinaOS({ embedded }: { embedded?: { onExit: () => void } }) {
   const frontApp = APPS.find((a) => a.id === front && wins[a.id]?.open && !wins[a.id]?.min)
 
   return (
-    <div ref={root} className="ros-root" style={{ width: OS_W, height: OS_H }} onPointerDown={() => setAppleMenu(false)}>
+    <div
+      ref={root}
+      className={`ros-root ${phase === 'saver' || phase === 'boot' || phase === 'hello' ? 'ros-pre' : ''} ${entering ? 'ros-enter' : ''}`}
+      style={{ width: OS_W, height: OS_H }}
+      onPointerDown={() => setAppleMenu(false)}
+    >
       <div className="ros-wall" />
       {/* the menu bar */}
       <div className="ros-menubar" style={{ height: MENU_H }}>
@@ -134,6 +200,14 @@ export function RinaOS({ embedded }: { embedded?: { onExit: () => void } }) {
           </button>
         ))}
       </div>
+      {/* starting up (over everything; a click skips ahead) */}
+      {phase !== 'desk' && (
+        <div className="ros-startup" onPointerDown={(e) => (e.stopPropagation(), skip())}>
+          {phase === 'hello' && <Hello />}
+          {phase === 'boot' && <Boot />}
+          {(phase === 'saver' || phase === 'wake') && <Saver leaving={phase === 'wake'} />}
+        </div>
+      )}
       {embedded &&
         using &&
         createPortal(
