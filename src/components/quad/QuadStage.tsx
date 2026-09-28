@@ -9,7 +9,7 @@ import { Building, Hedges } from './Backdrop'
 import { Car, CAR_BODY, type CarState, type Obstacle } from './Car'
 import { CarBody, LiveProps, QuadColliders, propObstacles } from './Physical'
 import { World } from '../../lib/physics/World'
-import { PhotoViewer, Photos, boardObstacles, useViewerOpen } from './Photos'
+import { PhotoViewer, Photos, useViewerOpen } from './Photos'
 import './quad.css'
 import { SET } from './set'
 
@@ -56,7 +56,6 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
       ...SET.building.blocks.map((b) => ({ kind: 'box' as const, x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2, w: b.x1 - b.x0, d: b.z1 - b.z0 })),
       ...SET.hedges.map((h) => ({ kind: 'box' as const, x: (h.x0 + h.x1) / 2, z: h.z, w: h.x1 - h.x0, d: h.d })),
       ...SET.bushes.map((b) => ({ kind: 'circle' as const, x: b.x, z: b.z, r: b.r * 0.8 })),
-      ...boardObstacles(),
     ],
     [],
   )

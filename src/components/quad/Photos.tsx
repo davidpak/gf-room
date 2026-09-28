@@ -3,7 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { BoxGeometry, CanvasTexture, CatmullRomCurve3, SRGBColorSpace, TubeGeometry, Vector3, type Group, type Material } from 'three'
 import { bruno } from './bruno'
 import { SET } from './set'
-import type { CarState, Obstacle } from './Car'
+import type { CarState } from './Car'
 
 /**
  * Their photos, out on the Quad (built by `npm run photos` into public/photos, see scripts/photos.mjs):
@@ -12,8 +12,9 @@ import type { CarState, Obstacle } from './Car'
  *                       bench's seat (it rides along if the bench is moved: ./Physical)
  *   the cherry shoot    pegged along two clotheslines strung between the trunks they stood under,
  *                       swaying a little, more when the car goes by
- *   the rest            in order, on little corkboards out on the lawn, a stretch of time each,
- *                       its months written on a paper tag
+ *
+ * Only the Quad's own photos are out here; the rest wait for places of their own (a <Board> each
+ * stretch of time, its months on a paper tag, is ready for them).
  *
  * Click a polaroid to look at it properly (the viewer: the photo big, its day under it, arrows through
  * the ones beside it). Photos are drawn into their polaroid's texture (card, photo, no stickers).
@@ -245,7 +246,7 @@ function Clothesline({ from, to, h, photos: ps, car }: { from: number; to: numbe
   )
 }
 
-// ---- the corkboards
+// ---- the corkboards (not on the Quad: kept for their other photos' own places, later)
 export const BOARD = { w: 560, h: 400, low: 140, t: 18 }
 function corkTexture(tag: string) {
   const W = 560
@@ -288,7 +289,7 @@ function corkTexture(tag: string) {
   return t
 }
 const FRAME = bruno({ color: '#8d6445' })
-function Board({ at, photos: ps }: { at: { x: number; z: number; rot: number }; photos: Photo[] }) {
+export function Board({ at, photos: ps }: { at: { x: number; z: number; rot: number }; photos: Photo[] }) {
   const [tag, setTag] = useState('')
   useEffect(() => {
     // (the handwriting's font first, then the tag)
@@ -338,32 +339,13 @@ function Board({ at, photos: ps }: { at: { x: number; z: number; rot: number }; 
   )
 }
 
-/** the boards' photos: everything that isn't the cherry shoot, oldest first, cut into the boards' counts */
-function boardPhotos(list: Photo[]) {
-  const rest = list.filter((p) => p.set !== 'cherry').sort((a, b) => (a.taken ?? '').localeCompare(b.taken ?? ''))
-  const out: Photo[][] = []
-  let k = 0
-  SET.photos.boards.forEach((b, i) => {
-    const n = i === SET.photos.boards.length - 1 ? rest.length - k : b.n
-    out.push(rest.slice(k, k + n))
-    k += n
-  })
-  return out
-}
-
 export function Photos({ car }: { car: { current: CarState } }) {
   const list = usePhotos()
   const lines = useMemo(() => (list ? SET.photos.lines.map((l) => byName(list, 'cherry', l.names)) : []), [list])
-  const boards = useMemo(() => (list ? boardPhotos(list) : []), [list])
   if (!list) return null
   return (
     <>
       {SET.photos.lines.map((l, i) => lines[i].length > 0 && <Clothesline key={i} from={l.trees[0]} to={l.trees[1]} h={l.h} photos={lines[i]} car={car} />)}
-      {SET.photos.boards.map((b, i) => boards[i]?.length > 0 && <Board key={i} at={b} photos={boards[i]} />)}
     </>
   )
 }
-
-/** the boards, for the car to bump into (three circles along each) */
-export const boardObstacles = (): Obstacle[] =>
-  SET.photos.boards.flatMap((b) => [-200, 0, 200].map((along) => ({ kind: 'circle' as const, x: b.x + Math.cos(b.rot) * along, z: b.z - Math.sin(b.rot) * along, r: 70 })))
