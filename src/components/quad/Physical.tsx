@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
 import { usePerch } from '../../lib/physics/usePerch'
-import { Prompts } from '../prompt/Prompts'
+import { Prompts, type PromptItem } from '../prompt/Prompts'
 import { Bench, BENCH } from './Furniture'
 import { Sign, SIGN } from './Sign'
 import { shootProps } from './ShootSet'
@@ -103,7 +103,7 @@ export function CarBody({ state, shape }: { state: { current: CarState }; shape:
 /** where the loose things are now, for the car to feel (./Car movers): circles down each one's
  *  length. The car shoves a thing that gives; one that can't (pinned against a trunk) stops it, rather
  *  than the car driving through it */
-type Feel = { body: { current: RapierRigidBody | null }; along: number[]; r: number }
+type Feel = { body: { current: RapierRigidBody | null }; pts: [number, number][]; r: number }
 const feel = new Map<string, Feel>()
 const _p = new Vector3()
 const _q = new Quaternion()
@@ -123,17 +123,33 @@ export function propObstacles(): Obstacle[] {
     }
     const q = b.rotation()
     _q.set(q.x, q.y, q.z, q.w)
-    for (const along of f.along) {
-      _p.set(along, 0, 0).applyQuaternion(_q)
+    for (const [px, pz] of f.pts) {
+      _p.set(px, 0, pz).applyQuaternion(_q)
       out.push({ kind: 'circle', x: t.x + _p.x, z: t.z + _p.z, r: f.r, soft: true })
     }
   }
   return out
 }
 
+/** the sets of loose things put back together by one prompt (the cookie stand): each member's own
+ *  prompt (is it out of place?) and how to send it home at once */
+const sets = new Map<string, Map<string, { out: () => boolean; home: () => void }>>()
+/** a set's one prompt: there when anything of it is out of place (knocked over, carried off), and it
+ *  puts every piece of it straight back */
+export function setPrompt(set: string, label: string, at: (o: Vector3) => Vector3): PromptItem {
+  return {
+    key: set,
+    label,
+    icon: 'home',
+    at,
+    when: () => [...(sets.get(set)?.values() ?? [])].some((m) => m.out()),
+    run: () => sets.get(set)?.forEach((m) => m.home()),
+  }
+}
+
 /** a loose thing of the Quad's: resting at home (held fast there till something moves it), a toy for
- *  the hand and the car, a prompt to put it back */
-function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id: string; label: string; at: { x: number; y: number; z: number; rot: number }; car: { current: CarState }; lift: number; feelAlong: number[]; feelR: number; children: ReactNode }) {
+ *  the hand and the car, a prompt to put it back (or, one of a `set`, its set's) */
+export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, set, children }: { id: string; label: string; at: { x: number; y: number; z: number; rot: number }; car: { current: CarState }; lift: number; feelAlong?: number[]; feelPts?: [number, number][]; feelR: number; set?: string; children: ReactNode }) {
   const home = useMemo(() => new Matrix4().compose(new Vector3(at.x, at.y, at.z), new Quaternion().setFromEuler(new Euler(0, at.rot, 0)), new Vector3(1, 1, 1)), [at])
   const perch = usePerch({
     key: id,
@@ -145,29 +161,47 @@ function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id
     away: 120,
     lift,
   })
-  feel.set(id, { body: perch.body, along: feelAlong, r: feelR })
+  feel.set(id, { body: perch.body, pts: feelPts ?? (feelAlong ?? [0]).map((a) => [a, 0] as [number, number]), r: feelR })
   if (import.meta.env.DEV) ((window as unknown as { __props: Record<string, unknown> }).__props ??= {})[id] = perch // (for trying it from the console)
   // riding in the trunk: where it sits in the car's frame
   const ride = useRef<{ p: Vector3; q: Quaternion } | null>(null)
-  // a hard reset (R): straight home, held there as at the start
-  useEffect(
-    () =>
-      onReset(() => {
+  // just put back: it stays put till the car's been away (so a reset with the car right there doesn't
+  // knock it straight over again)
+  const settle = useRef(false)
+  // how near the car comes before it's let go: nearer for a big thing (the canopy's legs are well out
+  // from its middle), so the car never meets a piece of it that's still held fast
+  const reach = set ? Math.max(0, Math.max(...(feelPts ?? [[0, 0]]).map(([x, z]) => Math.hypot(x, z))) + feelR - 200) : 0
+  // a hard reset (R), or its set's prompt: straight home, held there as at the start
+  const sendHome = useMemo(
+    () => () => {
         const body = perch.body.current
         ride.current = null
         stowed.delete(id)
         perch.fly.current = null
         perch.st.current.perched = true
+        settle.current = true
         if (!body) return
-        // (put there at once: a move, with continuous collision on, would stop at the first thing in the way)
-        body.setBodyType(perch.rapier.RigidBodyType.Fixed, true)
+        // (put there at once: a move, with continuous collision on, would stop at the first thing in the way.
+        // Moved while kinematic, not fixed: a fixed body sleeps, and a sleeping one's mesh isn't moved to
+        // match it, so it'd stay drawn where it fell. ./usePerch fixes it there once it's still)
+        body.setBodyType(perch.rapier.RigidBodyType.KinematicPositionBased, true)
+        perch.st.current.still = 0
         body.setTranslation(new Vector3().setFromMatrixPosition(home), true)
         body.setRotation(new Quaternion().setFromRotationMatrix(home), true)
-        body.setLinvel({ x: 0, y: 0, z: 0 }, true)
-        body.setAngvel({ x: 0, y: 0, z: 0 }, true)
-      }),
+        body.setNextKinematicTranslation(new Vector3().setFromMatrixPosition(home))
+        body.setNextKinematicRotation(new Quaternion().setFromRotationMatrix(home))
+        body.wakeUp()
+      },
     [id, perch, home],
   )
+  useEffect(() => onReset(sendHome), [sendHome])
+  useEffect(() => {
+    if (!set) return
+    if (!sets.has(set)) sets.set(set, new Map())
+    const members = sets.get(set)!
+    members.set(id, { out: () => perch.prompt.when(), home: sendHome })
+    return () => void members.delete(id)
+  }, [set, id, perch, sendHome])
   useBeforePhysicsStep(() => {
     const body = perch.body.current
     if (!body) return
@@ -175,7 +209,12 @@ function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id
     const c = car.current
     // the car coming at it: it's let go (loose) so the car can shove it
     if (s.perched) {
-      if (Math.hypot(c.x - at.x, c.z - at.z) > 520) return
+      const d = Math.hypot(c.x - at.x, c.z - at.z)
+      if (settle.current) {
+        if (d > 700 + reach) settle.current = false
+        return
+      }
+      if (d > 520 + reach) return
       s.perched = false
       body.setBodyType(perch.rapier.RigidBodyType.Dynamic, true)
       body.wakeUp()
@@ -195,8 +234,9 @@ function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id
       body.setNextKinematicRotation(_q.copy(carQ).multiply(r.q))
       return
     }
-    // settled in or on the car: it rides along from now on
-    if (s.held || perch.fly.current || !body.isDynamic()) return
+    // settled in or on the car: it rides along from now on (not the stand's pieces: a canopy the car's
+    // parked under isn't in its trunk)
+    if (set || s.held || perch.fly.current || !body.isDynamic()) return
     const v = body.linvel()
     if (Math.hypot(v.x, v.y, v.z) > 25) return
     const w = CAR_WELL
@@ -221,7 +261,7 @@ function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id
       <Holdable ccd bodyRef={perch.body} position={[at.x, at.y, at.z]} rotation={[0, at.rot, 0]} colliders={false} linearDamping={0.4} angularDamping={0.8} hold={{ ...perch.hold, lift: 60 }} sound="none">
         <group {...perch.hover.bind}>{children}</group>
       </Holdable>
-      <Prompts items={[perch.prompt]} far={9000} />
+      {!set && <Prompts items={[perch.prompt]} far={9000} />}
     </>
   )
 }
@@ -251,7 +291,7 @@ export function LiveProps({ car }: { car: { current: CarState } }) {
       ))}
       {/* the photo shoot's kit (./ShootSet) */}
       {[...shootProps(), cookieSignProp()].map((p) => (
-        <LiveProp key={p.id} id={p.id} label={p.label} at={p.at} car={car} lift={p.lift} feelAlong={p.feelAlong} feelR={p.feelR}>
+        <LiveProp key={p.id} id={p.id} label={p.label} at={p.at} car={car} lift={p.lift} feelAlong={p.feelAlong} feelR={p.feelR} set={'set' in p ? (p.set as string) : undefined}>
           {p.node}
           {p.colliders}
         </LiveProp>

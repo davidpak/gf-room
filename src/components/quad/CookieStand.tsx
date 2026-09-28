@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier'
-import { BufferAttribute, BufferGeometry, CanvasTexture, CurvePath, CylinderGeometry, DoubleSide, LatheGeometry, LineCurve3, QuadraticBezierCurve3, Quaternion, RepeatWrapping, SRGBColorSpace, TubeGeometry, Vector2, Vector3, type Group, type Material } from 'three'
+import { BackSide, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, CurvePath, CylinderGeometry, DodecahedronGeometry, DoubleSide, LineCurve3, Matrix4, OctahedronGeometry, QuadraticBezierCurve3, Quaternion, RepeatWrapping, RingGeometry, SphereGeometry, SRGBColorSpace, TubeGeometry, Vector3, Euler, type Group, type Material, type Mesh } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { Holdable } from '../../lib/physics/Holdable'
 import { Prompts, type PromptItem } from '../prompt/Prompts'
 import { bruno } from './bruno'
 import { addCookie, useCookieCount } from './cookies'
 import { clickSpot, frameAround, getLook, type Spot } from './look'
 import { onReset } from './reset'
+import { LiveProp, setPrompt } from './Physical'
 import type { CarState, Obstacle } from './Car'
 import { SET } from './set'
 
@@ -34,10 +36,11 @@ import { SET } from './set'
 const K = 0.16
 const TABLE = { w: 1830, d: 760, h: 740 }
 const CANOPY = { half: 1500, eave: 2100, peak: 2900, over: 60 }
-const OVEN = { w: 460, h: 280, d: 360, x: -420 } // (on the table, left of middle)
-const OVEN_TOY = 1.5 // (drawn half as big again: it's the star, it has to read from the car)
+const OVEN = { w: 411, h: 241, d: 330, x: -400 } // (Hamilton Beach's 4-slice, 31146J: 16.2 × 9.5 × 13 in; on the table, left of middle)
+const OVEN_TOY = 1.7 // (drawn bigger: it's the star, and a cookie has to be seen baking in it)
+const BAKE_S = 2.2 // (a bake, start to cookie out)
 const COOKIE = { r: 30, t: 12 } // (toy mm, not real: chunky)
-const MENU = { w: 760, len: 1120, lean: 0.24, at: [1900, 0, 900] as [number, number, number], rot: 0 } // (just outside the canopy on its right, by the middle walk, square on)
+const MENU = { w: 760, len: 1120, lean: 0.24, at: [980, 0, 1150] as [number, number, number], rot: -0.22 } // (under the canopy, in front of the table's right end, turned in toward the middle)
 
 // ---- the cookies there are, and which one's picked
 export const KINDS = [
@@ -53,6 +56,7 @@ const choose = (i: number) => {
   csubs.forEach((f) => f())
 }
 const useChoice = () => useSyncExternalStore((f) => (csubs.add(f), () => void csubs.delete(f)), () => choice)
+if (import.meta.env.DEV && typeof window !== 'undefined') Object.assign(window, { __cookies: { choose } }) // (for trying them from the console)
 
 // ---- materials
 const FRAME = bruno({ color: '#d7d9df', shade: '#9794ad', sheen: 0.3 })
@@ -411,75 +415,369 @@ function roofGeometry() {
   return g
 }
 
-// ---- a cookie of a kind: round, its rim rounded, its bits pressed into its top
-const COOKIE_GEO = (() => {
+// ---- a cookie of a kind, with some care: never quite round (its edge wobbles), domed, golden at its rim
+// and darker under it, the tops of some crinkled and cracked; and what's in it pressed into it (chunks of
+// chocolate, a melted puddle or two, M&Ms like little lentils, some on their edge, cinnamon sugar). Its
+// body and its bits are each one mesh, painted in vertex colours, so a pile of them stays cheap.
+const LOOKS = [
+  { dome: 3.4, crinkle: 0, top: '#f3c583', rim: '#dc9852', under: '#b4733c', crack: '#c98d52', raw: '#f6ddb0' },
+  { dome: 3, crinkle: 0, top: '#f6d39e', rim: '#e2a662', under: '#bd8147', crack: '#d39d62', raw: '#f8e2bb' },
+  { dome: 4, crinkle: 1, top: '#5c3527', rim: '#472719', under: '#301912', crack: '#2a150f', raw: '#7c4c3b' },
+  { dome: 4.6, crinkle: 1, top: '#f2d8a8', rim: '#dca867', under: '#b77e45', crack: '#fbecd0', raw: '#fbeccf' },
+]
+function rng(seed: number) {
+  let s = seed
+  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296)
+}
+const cookieGeos: { body: BufferGeometry; bits: BufferGeometry; bodyM: BufferGeometry; bitsM: BufferGeometry }[] = []
+function cookieGeo(kind: number) {
+  if (cookieGeos[kind]) return cookieGeos[kind]
   const { r, t } = COOKIE
-  const pts: Vector2[] = [new Vector2(0, -t / 2)]
-  for (let i = 0; i <= 8; i++) {
-    const a = -Math.PI / 2 + (i / 8) * Math.PI
-    pts.push(new Vector2(r - t / 2 + (Math.cos(a) * t) / 2, (Math.sin(a) * t) / 2))
-  }
-  pts.push(new Vector2(0, t / 2))
-  return new LatheGeometry(pts, 24)
-})()
-const CANDY = new CylinderGeometry(5.5, 5.5, 3, 12)
-function Cookie({ kind }: { kind: number }) {
+  const L = LOOKS[kind]
   const k = KINDS[kind]
-  const bits = useMemo(
-    () =>
-      Array.from({ length: k.n }, (_, i) => {
-        // spread over its top (a sunflower's spiral), each a little turned
-        const r = Math.sqrt((i + 0.5) / k.n) * COOKIE.r * 0.78
-        const a = i * 2.399
-        return { x: Math.cos(a) * r, z: Math.sin(a) * r, turn: i * 1.7, colour: k.bits[i % k.bits.length] }
-      }),
-    [k],
-  )
+  const rand = rng(17 + kind * 101)
+  const rc = r - t / 2 // (where its top turns down into its rim)
+  const ph = [rand() * 6, rand() * 6, rand() * 6]
+  const wob = (a: number) => 1 + 0.045 * Math.sin(3 * a + ph[0]) + 0.025 * Math.sin(5 * a + ph[1]) + 0.014 * Math.sin(11 * a + ph[2])
+  const dome = (rho: number) => L.dome * Math.max(0, 1 - rho * rho)
+  // the cracks across a crinkled top: where two cells of a scatter of points meet
+  const seeds = Array.from({ length: 9 }, () => {
+    const a = rand() * Math.PI * 2
+    const d = Math.sqrt(rand()) * rc * 0.85
+    return [Math.cos(a) * d, Math.sin(a) * d]
+  })
+  const crackAt = (x: number, z: number) => {
+    let d1 = 1e9
+    let d2 = 1e9
+    for (const [sx, sz] of seeds) {
+      const d = Math.hypot(x - sx, z - sz)
+      if (d < d1) (d2 = d1), (d1 = d)
+      else if (d < d2) d2 = d
+    }
+    return 1 - Math.min(1, (d2 - d1) / 2.2)
+  }
+  const bump = (x: number, z: number) => 0.35 * Math.sin(x * 0.37 + ph[0]) * Math.sin(z * 0.31 + ph[1]) + 0.2 * Math.sin(x * 0.9 + z * 0.7)
+  // its section, from the middle of its top, out, round its rim, and in under it
+  const prof: { px: number; py: number; zone: 0 | 1 | 2; rho: number }[] = []
+  const NT = 16
+  const NR = 10
+  for (let a = 0; a <= NT; a++) prof.push({ px: (rc * a) / NT, py: t / 2, zone: 0, rho: a / NT })
+  for (let b = 1; b < NR; b++) {
+    const ang = Math.PI / 2 - (Math.PI * b) / NR
+    prof.push({ px: rc + (Math.cos(ang) * t) / 2 + (ang < 0 ? 0.6 : 0), py: (Math.sin(ang) * t) / 2, zone: 1, rho: 1 })
+  }
+  for (let a = 3; a >= 0; a--) prof.push({ px: (rc * a) / 3, py: -t / 2, zone: 2, rho: a / 3 })
+  const NS = 72
+  // the same cookie as a ball of dough (a morph target: the oven's spreads from this into the cookie)
+  const P = prof.length
+  const ball = (u: number, a: number) => {
+    const th = Math.min(1, u) * Math.PI
+    const lump = 1 + 0.05 * Math.sin(3 * a + ph[1]) * Math.sin(2 * th + 0.5) + 0.03 * Math.sin(7 * a + 2 * th)
+    const R = 17 * Math.sin(th) * lump
+    return new Vector3(Math.cos(a) * R, Math.max(-t / 2, -t / 2 + 11 + 14 * Math.cos(th) * lump), Math.sin(a) * R)
+  }
+  const ballPos: number[] = []
+  const pos: number[] = []
+  const col: number[] = []
+  const c = new Color()
+  const cTop = new Color(L.top)
+  const cRim = new Color(L.rim)
+  const cUnder = new Color(L.under)
+  const cCrack = new Color(L.crack)
+  const cinnamon = new Color('#9a5a30')
+  for (let pi = 0; pi < P; pi++)
+    for (let j = 0; j < NS; j++) {
+      const p = prof[pi]
+      const a = (j / NS) * Math.PI * 2
+      const R = p.px * wob(a)
+      const x = Math.cos(a) * R
+      const z = Math.sin(a) * R
+      let y = p.py
+      if (p.zone === 0) {
+        y += dome(p.rho) + bump(x, z) * (1 - p.rho * 0.5)
+        c.copy(cTop).lerp(cRim, Math.max(0, (p.rho - 0.55) / 0.45) ** 1.5)
+        if (L.crinkle && p.rho < 0.95) {
+          const cr = crackAt(x, z) ** 2
+          y -= cr * 1.4
+          c.lerp(cCrack, cr * 0.8)
+        }
+      } else if (p.zone === 1) {
+        c.copy(cRim).lerp(cUnder, Math.max(0, -p.py / (t / 2)))
+      } else c.copy(cUnder)
+      // a baked, freckled look; cinnamon sugar on a snickerdoodle
+      const v = 0.94 + rand() * 0.1
+      c.multiplyScalar(v)
+      if (kind === 3 && p.zone !== 2 && rand() < 0.16) c.lerp(cinnamon, 0.55)
+      pos.push(x, y, z)
+      const bp = ball(pi / (P - 1), a)
+      ballPos.push(bp.x, bp.y, bp.z)
+      col.push(c.r, c.g, c.b)
+    }
+  const idx: number[] = []
+  for (let p = 0; p < prof.length - 1; p++)
+    for (let j = 0; j < NS; j++) {
+      const a = p * NS + j
+      const b = p * NS + ((j + 1) % NS)
+      idx.push(a, b, a + NS, b, b + NS, a + NS)
+    }
+  const body = new BufferGeometry()
+  body.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3))
+  body.setAttribute('color', new BufferAttribute(new Float32Array(col), 3))
+  body.setIndex(idx)
+  body.computeVertexNormals()
+  const bodyM = body.clone()
+  {
+    const bn = new BufferGeometry()
+    bn.setAttribute('position', new BufferAttribute(new Float32Array(ballPos), 3))
+    bn.setIndex(idx)
+    bn.computeVertexNormals()
+    bodyM.morphAttributes.position = [bn.attributes.position]
+    bodyM.morphAttributes.normal = [bn.attributes.normal]
+  }
+  const ballBits: number[] = []
+
+  // what's in it, pressed into its top
+  const topY = (x: number, z: number) => t / 2 + dome(Math.min(1, Math.hypot(x, z) / rc))
+  const parts: BufferGeometry[] = []
+  const m = new Matrix4()
+  const q = new Quaternion()
+  const e = new Euler()
+  const put = (g: BufferGeometry, colour: string, at: [number, number, number], size: [number, number, number], rot: [number, number, number]) => {
+    const n = g.index ? g.toNonIndexed() : g.clone()
+    n.deleteAttribute('uv')
+    m.compose(new Vector3(...at), q.setFromEuler(e.set(...rot)), new Vector3(...size))
+    n.applyMatrix4(m)
+    // (on the ball of dough: the same bit, moved to the same spot on it, not stretched)
+    const rho = Math.hypot(at[0], at[2]) / rc
+    const bp = ball((Math.min(rho, 1.1) * NT) / (P - 1), Math.atan2(at[2], at[0]))
+    const dx = bp.x - at[0]
+    const dy = bp.y - topY(at[0], at[2])
+    const dz = bp.z - at[2]
+    const src = n.attributes.position.array
+    for (let i = 0; i < src.length; i += 3) ballBits.push(src[i] + dx, src[i + 1] + dy, src[i + 2] + dz)
+    const cc = new Color(colour)
+    const cols = new Float32Array(n.attributes.position.count * 3)
+    for (let i = 0; i < cols.length; i += 3) {
+      const v = 0.92 + rand() * 0.12
+      cols[i] = cc.r * v
+      cols[i + 1] = cc.g * v
+      cols[i + 2] = cc.b * v
+    }
+    n.setAttribute('color', new BufferAttribute(cols, 3))
+    parts.push(n)
+  }
+  const spot = (i: number, n: number, reach: number) => {
+    const rr = Math.sqrt((i + 0.4 + rand() * 0.3) / n) * rc * reach
+    const a = i * 2.399 + rand() * 0.5
+    return [Math.cos(a) * rr, Math.sin(a) * rr]
+  }
+  if (k.bit === 'chunk') {
+    const CHUNK = new DodecahedronGeometry(1, 0)
+    for (let i = 0; i < k.n + 2; i++) {
+      const [x, z] = i < k.n ? spot(i, k.n, 0.92) : (() => {
+        const a = rand() * 6.28
+        return [Math.cos(a) * rc * 1.02, Math.sin(a) * rc * 1.02] // (one or two out on its rim)
+      })()
+      const colour = k.bits[0] === '#4a2d24' ? (rand() < 0.3 ? '#5c3a2a' : '#3b2219') : rand() < 0.25 ? '#e9dcc4' : '#f6efe3'
+      const sz = 3.6 + rand() * 1.6
+      put(CHUNK, colour, [x, topY(x, z) - 0.7, z], [sz, sz * (0.6 + rand() * 0.2), sz * (0.8 + rand() * 0.3)], [rand() * 3, rand() * 3, rand() * 3])
+    }
+    // a melted puddle or two
+    const PUDDLE = new SphereGeometry(1, 14, 6)
+    for (let i = 0; i < 2; i++) {
+      const [x, z] = spot(i * 3 + 1, 7, 0.7)
+      put(PUDDLE, kind === 0 ? '#4a2b1f' : '#efe4cf', [x + 3, topY(x, z) - 0.1, z - 2], [5 + rand() * 2, 0.9, 4 + rand() * 2], [0, rand() * 3, 0])
+    }
+  } else if (k.bit === 'candy') {
+    const LENTIL = new SphereGeometry(1, 16, 8)
+    for (let i = 0; i < k.n; i++) {
+      const [x, z] = spot(i, k.n, 0.95)
+      const edge = i % 4 === 1 // (some pushed in on their edge)
+      put(LENTIL, k.bits[i % k.bits.length], [x, topY(x, z) + (edge ? 1.2 : 0.4), z], [5.4, 2.5, 5.4], [edge ? 1.2 : (rand() - 0.5) * 0.5, rand() * 3, edge ? 0.3 : (rand() - 0.5) * 0.5])
+    }
+  } else {
+    // cinnamon sugar: specks of cinnamon, glints of sugar
+    const SPECK = new OctahedronGeometry(1, 0)
+    for (let i = 0; i < 46; i++) {
+      const [x, z] = spot(i, 46, 1.0)
+      const sugar = i % 4 === 0
+      put(SPECK, sugar ? '#fff4e2' : i % 3 ? '#a8683d' : '#7e4a2a', [x, topY(x, z) + 0.05, z], sugar ? [0.9, 0.5, 0.9] : [1.3, 0.35, 1.1], [0, rand() * 3, 0])
+    }
+  }
+  const bits = mergeGeometries(parts)!
+  bits.computeVertexNormals()
+  const bitsM = bits.clone()
+  bitsM.morphAttributes.position = [new BufferAttribute(new Float32Array(ballBits), 3)]
+  bitsM.morphAttributes.normal = [bits.attributes.normal.clone()]
+  return (cookieGeos[kind] = { body, bits, bodyM, bitsM })
+}
+const CRUMB = bruno({ vertexColors: true, shade: '#8f7a9c' })
+const CANDY_SHELL = bruno({ vertexColors: true, shade: '#7d6f9e', sheen: 0.35 })
+function Cookie({ kind }: { kind: number }) {
+  const g = cookieGeo(kind)
   return (
     <group>
-      <mesh geometry={COOKIE_GEO} material={matOf(k.dough)} castShadow receiveShadow />
-      {bits.map((b, i) =>
-        k.bit === 'candy' ? (
-          <mesh key={i} geometry={CANDY} material={matOf(b.colour)} position={[b.x, COOKIE.t / 2 + 0.6, b.z]} rotation={[0.15, b.turn, 0.1]} />
-        ) : (
-          <mesh key={i} geometry={RBOX} material={matOf(b.colour)} position={[b.x, COOKIE.t / 2 - (k.bit === 'dust' ? 0.3 : 0), b.z]} rotation={[0.3 * i, b.turn, 0.2]} scale={k.bit === 'dust' ? [3, 1.4, 3] : [7, 6, 6]} />
-        ),
-      )}
+      <mesh geometry={g.body} material={CRUMB} castShadow receiveShadow />
+      <mesh geometry={g.bits} material={KINDS[kind].bit === 'candy' ? CANDY_SHELL : CRUMB} castShadow />
     </group>
   )
 }
 
-// ---- the oven: retro, mint, its door dropping open; `baking` 0..1 through a bake
-function Oven({ baking, onClick }: { baking: { current: number }; onClick: (e: ThreeEvent<MouseEvent>) => void }) {
+// ---- the oven: after Hamilton Beach's 4-slice toaster oven (31146J), in the stand's colours: its wrap
+// (top and sides, vents down them), a frame round its front, the door on the left (a glass window, a
+// steel handle across its top, a steel strip along its bottom), three knobs down the right and the red
+// lamp; inside (lit when it's on) the elements top and bottom, a wire rack, a pan. A bake: a ball of
+// dough on the pan, the elements glowing; it spreads and goes golden; the door drops, the cookie slides
+// out onto it and hops off (the parent throws the real one then, from where this one was)
+const rbs = new Map<string, RoundedBoxGeometry>()
+const rb = (w: number, h: number, d: number, r: number) => {
+  const key = [w, h, d, r].join()
+  if (!rbs.has(key)) rbs.set(key, new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2 - 0.01, h / 2 - 0.01, d / 2 - 0.01)))
+  return rbs.get(key)!
+}
+function Box({ s, at, m, r = 4, rot }: { s: [number, number, number]; at: [number, number, number]; m: Material; r?: number; rot?: [number, number, number] }) {
+  return <mesh geometry={rb(...s, r)} material={m} position={at} rotation={rot} castShadow receiveShadow />
+}
+const GLASS = bruno({ color: '#4c3e52', transparent: true, opacity: 0.3, depthWrite: false })
+const PAN = bruno({ color: '#cfccd6', shade: '#8e89a6', sheen: 0.3 })
+const CAVITY = new BoxGeometry(1, 1, 1)
+const DIAL = new RingGeometry(23, 25.5, 32, 1, -2.4, 4.8)
+/** where things go inside: the cavity, the door, the pan (oven mm, its front +z, its feet at 0) */
+const OV = (() => {
+  const { w, h, d } = OVEN
+  const y0 = 16 // (on its feet)
+  const wall = 14
+  const panel = 92 // (the controls, down its right)
+  const cav = { x0: -w / 2 + wall, x1: w / 2 - panel, y0: y0 + wall, y1: y0 + h - wall, z0: -d / 2 + wall, z1: d / 2 - 6 }
+  const door = { x: (cav.x0 + cav.x1) / 2 + 2, w: cav.x1 - cav.x0 - 4, y: y0 + 22, h: h - 50 }
+  const pan = { y: cav.y0 + 62, z: -10 }
+  return { y0, wall, panel, cav, door, pan }
+})()
+function Oven({ baking, kind, cookie, onClick }: { baking: { current: number }; kind: number; cookie: RefObject<Group | null>; onClick: (e: ThreeEvent<MouseEvent>) => void }) {
   const door = useRef<Group>(null)
-  const glow = useMemo(() => bruno({ color: '#ffb35c', emissive: '#ff9a3c', emissiveIntensity: 0.6, warm: 0 }), []) // (its own: it glows up as it bakes)
+  const dough = useRef<Mesh>(null)
+  const chips = useRef<Mesh>(null)
+  const geo = cookieGeo(kind)
+  // its own materials: they glow as it bakes
+  const mat = useMemo(
+    () => ({
+      inside: bruno({ color: '#8f8298', side: BackSide, emissive: '#ffb56a', emissiveIntensity: 0.12, warm: 0 }),
+      element: bruno({ color: '#6d5560', emissive: '#ff5a24', emissiveIntensity: 0, warm: 0 }),
+      lamp: bruno({ color: '#c8453c', emissive: '#ff4a3c', emissiveIntensity: 0.2, warm: 0 }),
+      dough: bruno({ vertexColors: true, shade: '#8f7a9c', emissive: '#ffffff', emissiveIntensity: 0 }),
+    }),
+    [],
+  )
+  useEffect(() => void mat.dough.emissive.set(LOOKS[kind].raw), [mat, kind])
+  const ease = (x: number) => {
+    const t = Math.min(1, Math.max(0, x))
+    return t * t * (3 - 2 * t)
+  }
   useFrame(() => {
     const b = baking.current
-    // (it glows up, then the door drops open at the middle of the bake and shuts again)
-    glow.emissiveIntensity = 0.6 + Math.sin(Math.min(1, b / 0.55) * Math.PI) * 1.1 + (b > 0 ? 0.3 : 0)
-    const open = b < 0.5 ? 0 : b < 0.62 ? (b - 0.5) / 0.12 : b < 0.85 ? 1 : Math.max(0, 1 - (b - 0.85) / 0.15)
-    if (door.current) door.current.rotation.x = open * 1.25
+    const on = b > 0 ? ease(b / 0.06) * (1 - ease((b - 0.7) / 0.2)) : 0
+    mat.element.emissiveIntensity = on * (1.3 + Math.sin(b * 60) * 0.08)
+    mat.inside.emissiveIntensity = 0.12 + on * 0.75
+    mat.lamp.emissiveIntensity = 0.2 + on * 1.4
+    const open = ease((b - 0.62) / 0.08) * (1 - ease((b - 0.84) / 0.16))
+    if (door.current) door.current.rotation.x = open * 1.45
+    // the cookie: a ball of dough that spreads and bakes, then out onto the door, and it's thrown
+    const c = cookie.current
+    if (!c) return
+    c.visible = b > 0 && b < 0.76
+    if (!c.visible) return
+    const pop = ease(b / 0.06)
+    const k = ease((b - 0.06) / 0.56)
+    const spread = 1 - (1 - k) * (1 - k) // (fast at first, as it melts)
+    c.scale.setScalar(Math.max(0.001, pop) / (K * OVEN_TOY))
+    for (const m of [dough.current, chips.current]) {
+      if (!m) continue
+      if (!m.morphTargetInfluences) m.updateMorphTargets()
+      if (m.morphTargetInfluences) m.morphTargetInfluences[0] = 1 - spread
+    }
+    mat.dough.emissiveIntensity = 0.42 * (1 - k)
+    const out = ease((b - 0.7) / 0.06)
+    c.position.set(OV.door.x, OV.pan.y + 8 + Math.sin(out * Math.PI) * 30 + out * 10, OV.pan.z + out * (OVEN.d / 2 - OV.pan.z + 120)) // (out clear of the oven, over its door)
   })
   const { w, h, d } = OVEN
+  const { y0, wall, panel, cav } = OV
+  const cw = cav.x1 - cav.x0
+  const ch = cav.y1 - cav.y0
+  const cd = cav.z1 - cav.z0
+  const cx = (cav.x0 + cav.x1) / 2
+  const cy = (cav.y0 + cav.y1) / 2
+  const cz = (cav.z0 + cav.z1) / 2
+  const px = w / 2 - panel / 2 // (the controls' middle)
   return (
     <group onClick={onClick} onPointerOver={(e) => (e.stopPropagation(), (document.body.style.cursor = 'pointer'))} onPointerOut={() => (document.body.style.cursor = '')}>
+      {/* its feet */}
       {[-1, 1].map((sx) =>
-        [-1, 1].map((sz) => <mesh key={`${sx}${sz}`} geometry={TUBE} material={DARK} position={[(sx * w) / 2.6, 10, (sz * d) / 2.6]} scale={[14, 20, 14]} />),
+        [-1, 1].map((sz) => <mesh key={sx * 3 + sz} geometry={TUBE} material={DARK} position={[sx * (w / 2 - 40), y0 / 2, sz * (d / 2 - 40)]} scale={[11, y0, 11]} />),
       )}
-      <Block size={[w, h, d]} at={[0, 20 + h / 2, 0]} m={MINT} />
-      {/* the inside, dark and warm, seen with the door down */}
-      <Block size={[w - 150, h - 70, 20]} at={[-40, 20 + h / 2, d / 2 - 8]} m={glow} />
-      {/* the controls: a cream panel, two dials, the red lamp */}
-      <Block size={[100, h - 40, 16]} at={[w / 2 - 60, 20 + h / 2, d / 2 + 4]} m={CREAM} />
-      {[0, 1].map((i) => (
-        <mesh key={i} geometry={TUBE} material={CHROME} position={[w / 2 - 60, 20 + h * 0.66 - i * 90, d / 2 + 16]} rotation={[Math.PI / 2, 0, 0]} scale={[26, 16, 26]} />
+      {/* the wrap: top and sides, the floor, the back; the controls' block down the right */}
+      <Box s={[w, wall + 10, d]} at={[0, y0 + h - (wall + 10) / 2, 0]} m={MINT} r={16} />
+      <Box s={[wall + 10, h, d]} at={[-w / 2 + (wall + 10) / 2, y0 + h / 2, 0]} m={MINT} r={16} />
+      <Box s={[panel + 10, h, d]} at={[w / 2 - (panel + 10) / 2, y0 + h / 2, 0]} m={MINT} r={16} />
+      <Box s={[w - 8, wall, d - 8]} at={[0, y0 + wall / 2, 0]} m={MINT} r={4} />
+      <Box s={[w - 8, h - 8, wall]} at={[0, y0 + h / 2, -d / 2 + wall / 2]} m={MINT} r={4} />
+      {/* the vents down each side */}
+      {[-1, 1].map((sx) =>
+        [0, 1, 2].map((col) =>
+          [0, 1, 2, 3, 4].map((row) => (
+            <mesh key={sx * 100 + col * 10 + row} geometry={RBOX} material={DARK} position={[sx * (w / 2 + 0.5), y0 + h * 0.3 + row * 26, -d / 2 + 50 + col * 42]} scale={[3, 7, 28]} />
+          )),
+        ),
+      )}
+      {/* inside: its walls (lit when it's on), the elements top and bottom, the rack, the pan */}
+      <mesh geometry={CAVITY} material={mat.inside} position={[cx, cy, cz]} scale={[cw, ch, cd]} />
+      {[cav.y1 - 16, cav.y0 + 14].map((y) =>
+        [-1, 1].map((sz) => <mesh key={y * 3 + sz} geometry={TUBE} material={mat.element} position={[cx, y, cz + sz * cd * 0.25]} rotation={[0, 0, Math.PI / 2]} scale={[5, cw - 10, 5]} />),
+      )}
+      {[-2, -1, 0, 1, 2].map((i) => (
+        <mesh key={i} geometry={TUBE} material={CHROME} position={[cx, OV.pan.y - 8, cz + i * (cd / 5.5)]} rotation={[0, 0, Math.PI / 2]} scale={[2.2, cw - 6, 2.2]} />
       ))}
-      <mesh geometry={TUBE} material={LAMP} position={[w / 2 - 60, 20 + h * 0.18, d / 2 + 14]} rotation={[Math.PI / 2, 0, 0]} scale={[8, 6, 8]} />
-      {/* the door, hinged along its bottom: cream frame, the glowing window, the handle */}
-      <group ref={door} position={[-40, 32, d / 2 + 8]}>
-        <Block size={[w - 150, h - 40, 18]} at={[0, (h - 40) / 2, 0]} m={CREAM} />
-        <Block size={[w - 210, h - 110, 8]} at={[0, (h - 40) / 2 - 6, 8]} m={glow} />
-        <Block size={[w - 200, 16, 20]} at={[0, h - 60, 26]} m={CHROME} />
+      <Box s={[cw * 0.82, 7, cd * 0.7]} at={[cx, OV.pan.y - 2, OV.pan.z]} m={PAN} r={3} />
+      {/* the frame round its front */}
+      <Box s={[w, 24, 12]} at={[0, y0 + h - 12, d / 2]} m={MINT} r={5} />
+      <Box s={[w, 22, 12]} at={[0, y0 + 11, d / 2]} m={MINT} r={5} />
+      <Box s={[wall + 6, h, 12]} at={[-w / 2 + (wall + 6) / 2, y0 + h / 2, d / 2]} m={MINT} r={5} />
+      <Box s={[panel + 4, h, 14]} at={[px - 2, y0 + h / 2, d / 2 + 1]} m={MINT} r={8} />
+      {/* its three knobs (temperature, function, timer), each in its printed dial, and the lamp */}
+      {[0.8, 0.53, 0.26].map((f, i) => (
+        <group key={i} position={[px, y0 + h * f, d / 2 + 8]}>
+          <mesh geometry={DIAL} material={matOf('#c98f9c')} position={[0, 0, 0.5]} rotation={[0, 0, i * 0.4]} />
+          <mesh geometry={TUBE} material={DARK} position={[0, 0, 9]} rotation={[Math.PI / 2, 0, 0]} scale={[19, 18, 19]} castShadow />
+          <Box s={[9, 30, 10]} at={[0, 0, 19]} m={CHROME} r={4} rot={[0, 0, 0.5 - i * 0.6]} />
+        </group>
+      ))}
+      <mesh geometry={TUBE} material={mat.lamp} position={[px, y0 + 22, d / 2 + 9]} rotation={[Math.PI / 2, 0, 0]} scale={[6, 4, 6]} />
+      {/* the door, hinged along its bottom: its frame, the window, the steel strip, the handle */}
+      <group ref={door} position={[OV.door.x, OV.door.y, d / 2 + 4]}>
+        {(() => {
+          const { w: dw, h: dh } = OV.door
+          const strip = dh * 0.17
+          return (
+            <>
+              <Box s={[dw, 10, 10]} at={[0, dh - 5, 0]} m={CREAM} r={3} />
+              <Box s={[10, dh, 10]} at={[-dw / 2 + 5, dh / 2, 0]} m={CREAM} r={3} />
+              <Box s={[10, dh, 10]} at={[dw / 2 - 5, dh / 2, 0]} m={CREAM} r={3} />
+              <Box s={[dw, strip, 10]} at={[0, strip / 2, 1]} m={CHROME} r={3} />
+              <Box s={[62, 5, 2]} at={[0, strip / 2, 6.5]} m={DARK} r={1} />
+              <mesh material={GLASS} position={[0, strip + (dh - strip - 10) / 2, 0]}>
+                <planeGeometry args={[dw - 20, dh - strip - 10]} />
+              </mesh>
+              {[-1, 1].map((sx) => (
+                <Box key={sx} s={[12, 14, 22]} at={[sx * dw * 0.4, dh - 26, 11]} m={DARK} r={3} />
+              ))}
+              <Box s={[dw * 0.9, 22, 14]} at={[0, dh - 26, 26]} m={CHROME} r={7} />
+            </>
+          )
+        })()}
+      </group>
+      {/* the cookie baking */}
+      <group ref={cookie} visible={false}>
+        <mesh ref={dough} geometry={geo.bodyM} material={mat.dough} castShadow />
+        <mesh ref={chips} geometry={geo.bitsM} material={KINDS[kind].bit === 'candy' ? CANDY_SHELL : CRUMB} castShadow />
       </group>
     </group>
   )
@@ -693,10 +991,13 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
 
   // ---- baking: a bake takes ~1.6 s; the cookie hops out when the door's down
   const baking = useRef(0)
+  const [bakeKind, setBakeKind] = useState(0)
+  const inOven = useRef<Group>(null)
   const [cookies, setCookies] = useState<{ id: number; kind: number; p: [number, number, number]; v: [number, number, number]; w: [number, number, number]; born: number }[]>([])
   const next = useRef(1)
   const bake = () => {
     if (baking.current > 0) return
+    setBakeKind(choice)
     baking.current = 0.0001
   }
   const place = useMemo(() => {
@@ -707,20 +1008,22 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
   useFrame((_, dt) => {
     if (baking.current <= 0) return
     const before = baking.current
-    baking.current += dt / 1.6
-    if (before < 0.6 && baking.current >= 0.6) {
+    baking.current += dt / BAKE_S
+    if (before < 0.76 && baking.current >= 0.76) {
       // out it pops: from the oven's mouth, forward and up, spinning
-      const mouth = place(OVEN.x - 40 * OVEN_TOY, TABLE.h + (40 + OVEN.h / 2) * OVEN_TOY, -40 + (OVEN.d / 2 + 60) * OVEN_TOY)
+      const mouth = new Vector3()
+      if (inOven.current) inOven.current.getWorldPosition(mouth)
+      else mouth.copy(place(OVEN.x, TABLE.h + OVEN.h * OVEN_TOY, OVEN.d * OVEN_TOY))
       const fwd = new Vector3(Math.sin(at.rot), 0, Math.cos(at.rot))
       const id = next.current++
-      const kind = choice
+      const kind = bakeKind
       setCookies((list) => [
         ...list.slice(-35),
         {
           id,
           kind,
           p: [mouth.x, mouth.y, mouth.z],
-          v: [fwd.x * 340 + (Math.random() - 0.5) * 140, 420, fwd.z * 340 + (Math.random() - 0.5) * 140],
+          v: [fwd.x * 300 + (Math.random() - 0.5) * 120, 400, fwd.z * 300 + (Math.random() - 0.5) * 120],
           w: [(Math.random() - 0.5) * 8, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 8],
           born: performance.now(),
         },
@@ -746,8 +1049,8 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
   const spot = useMemo<Spot>(() => {
     const c = Math.cos(at.rot)
     const s = Math.sin(at.rot)
-    // (the menu on the right and all, low enough that it's all in, the plank still on top)
-    const centre = place(260, 1560, 420)
+    // (the menu in front on the right and all, low enough that it's all in, the plank still on top)
+    const centre = place(160, 1560, 420)
     const out = new Vector3(0.22, 0.26, 1).normalize()
     const dir = new Vector3(out.x * c + out.z * s, out.y, -out.x * s + out.z * c)
     return {
@@ -797,113 +1100,135 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
     [car, at, place],
   )
 
+  // everything back where it goes, when things have gone haywire
+  const putBack = useMemo(() => setPrompt('cookiestand', 'Reset Cookie Stand', (o) => o.copy(place(0, CANOPY.peak + 1150, 0))), [place])
+
   const { half, eave, peak } = CANOPY
   if (!tex) return null
   const pointer = (e: ThreeEvent<PointerEvent>) => (e.stopPropagation(), (document.body.style.cursor = 'pointer'))
   const unpointer = () => (document.body.style.cursor = '')
+  const G = 4 // (the lawn's top)
+  /** a piece's home: at (x, y, z) real mm in the stand's frame, turned `rot` more */
+  const home = (x: number, y: number, z: number, rot = 0) => {
+    const p = place(x, y, z)
+    return { x: p.x, y: p.y + G, z: p.z, rot: at.rot + rot }
+  }
+  const S = K * OVEN_TOY
+  const MH = MENU.len * Math.cos(MENU.lean)
+  const MF = MENU.len * Math.sin(MENU.lean)
+  const lx = TABLE.w / 2 - LEG.inset
   return (
     <>
-      <group position={[at.x, 0, at.z]} rotation={[0, at.rot, 0]}>
-        <group scale={K}>
-          {/* the canopy and the table: a click on any of it and the camera goes in to the stand */}
-          <group onClick={zoom} onPointerOver={pointer} onPointerOut={unpointer}>
-            {/* four legs, the rails round the top, the striped roof, its scalloped valance */}
-            {[-1, 1].map((sx) =>
-              [-1, 1].map((sz) => (
-                <group key={`${sx}${sz}`}>
-                  <mesh geometry={RBOX} material={FRAME} position={[sx * half, eave / 2, sz * half]} scale={[40, eave, 40]} castShadow />
-                  <mesh geometry={RBOX} material={FRAME} position={[sx * half, 30, sz * half]} scale={[120, 20, 120]} castShadow />
-                </group>
-              )),
-            )}
-            {[-1, 1].map((s) => (
-              <group key={s}>
-                <mesh geometry={RBOX} material={FRAME} position={[0, eave - 30, s * half]} scale={[half * 2, 36, 30]} />
-                <mesh geometry={RBOX} material={FRAME} position={[s * half, eave - 30, 0]} scale={[30, 36, half * 2]} />
+      {/* the canopy: four legs, the rails round the top, the striped roof, its scalloped valance, the count
+          on its peak; a click and the camera goes in to the stand */}
+      <LiveProp id="cookiecanopy" label="" set="cookiestand" at={home(0, 0, 0)} car={car} lift={0} feelPts={[-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * half * K, sz * half * K] as [number, number]))} feelR={14}>
+        <group scale={K} onClick={zoom} onPointerOver={pointer} onPointerOut={unpointer}>
+          {[-1, 1].map((sx) =>
+            [-1, 1].map((sz) => (
+              <group key={sx * 3 + sz}>
+                <mesh geometry={RBOX} material={FRAME} position={[sx * half, eave / 2, sz * half]} scale={[40, eave, 40]} castShadow />
+                <mesh geometry={RBOX} material={FRAME} position={[sx * half, 30, sz * half]} scale={[120, 20, 120]} castShadow />
               </group>
-            ))}
-            <mesh geometry={roof} material={tex.roof} castShadow receiveShadow />
-            {[0, 1, 2, 3].map((i) => {
-              const a = (i * Math.PI) / 2
-              const h = half + CANOPY.over
-              return (
-                <mesh key={i} material={tex.valance} position={[Math.sin(a) * h, eave - 130, Math.cos(a) * h]} rotation={[0, a, 0]}>
-                  <planeGeometry args={[h * 2, 260]} />
-                </mesh>
-              )
-            })}
-            {/* the count: a plank on a post up from the peak, facing out front */}
-            <mesh geometry={RBOX} material={FRAME} position={[0, peak + 170, 0]} scale={[40, 340, 40]} />
-            <group position={[0, peak + 440, 30]}>
-              <Block size={[1500, 400, 60]} at={[0, 0, 0]} m={WOOD} />
-              <mesh material={tex.plankMat} position={[0, 0, 31]}>
-                <planeGeometry args={[1440, 360]} />
+            )),
+          )}
+          {[-1, 1].map((s) => (
+            <group key={s}>
+              <mesh geometry={RBOX} material={FRAME} position={[0, eave - 30, s * half]} scale={[half * 2, 36, 30]} />
+              <mesh geometry={RBOX} material={FRAME} position={[s * half, eave - 30, 0]} scale={[30, 36, half * 2]} />
+            </group>
+          ))}
+          <mesh geometry={roof} material={tex.roof} castShadow receiveShadow />
+          {[0, 1, 2, 3].map((i) => {
+            const a = (i * Math.PI) / 2
+            const h = half + CANOPY.over
+            return (
+              <mesh key={i} material={tex.valance} position={[Math.sin(a) * h, eave - 130, Math.cos(a) * h]} rotation={[0, a, 0]}>
+                <planeGeometry args={[h * 2, 260]} />
               </mesh>
-              {[-1, 1].map((s) => (
-                <mesh key={s} geometry={TUBE} material={DARK} position={[s * 640, 120, 34]} rotation={[Math.PI / 2, 0, 0]} scale={[16, 8, 16]} />
-              ))}
-            </group>
-            {/* the table, the gingham cloth over it */}
-            <FoldingTable />
-            <mesh geometry={clothGeo} material={tex.cloth} castShadow receiveShadow />
-            {/* the cooling rack */}
-            <group position={[330, TABLE.h + 14, 20]}>
-              <Block size={[420, 12, 300]} at={[0, 40, 0]} m={CHROME} />
-              {[-1, 1].map((sx) => [-1, 1].map((sz) => <mesh key={`${sx}${sz}`} geometry={TUBE} material={CHROME} position={[sx * 190, 18, sz * 130]} scale={[6, 36, 6]} />))}
-            </group>
-          </group>
-          {/* the oven: a click on it bakes, whether or not you're looking at the stand */}
-          <group position={[OVEN.x, TABLE.h + 14, -40]} scale={OVEN_TOY}>
-            <Oven baking={baking} onClick={bakeClick} />
-          </group>
-          {/* the menu: an A-frame chalkboard just outside on the right; click a row to pick it */}
-          <group position={MENU.at} rotation={[0, MENU.rot, 0]} onPointerOver={pointer} onPointerOut={unpointer}>
-            <AFrame w={MENU.w} len={MENU.len} lean={MENU.lean} face={tex.menuMat} onFaceClick={menuClick} />
+            )
+          })}
+          <mesh geometry={RBOX} material={FRAME} position={[0, peak + 170, 0]} scale={[40, 340, 40]} />
+          <group position={[0, peak + 440, 30]}>
+            <Block size={[1500, 400, 60]} at={[0, 0, 0]} m={WOOD} />
+            <mesh material={tex.plankMat} position={[0, 0, 31]}>
+              <planeGeometry args={[1440, 360]} />
+            </mesh>
+            {[-1, 1].map((s) => (
+              <mesh key={s} geometry={TUBE} material={DARK} position={[s * 640, 120, 34]} rotation={[Math.PI / 2, 0, 0]} scale={[16, 8, 16]} />
+            ))}
           </group>
         </group>
-        {/* on the rack: the cookie that's picked on the menu (for looks: the oven's are the ones to take) */}
-        <group position={[330 * K, (TABLE.h + 14 + 48) * K + COOKIE.t / 2, 20 * K]} rotation={[0, 0.4, 0]}>
+        {/* its legs (weighted at their feet), its roof */}
+        {[-1, 1].map((sx) =>
+          [-1, 1].map((sz) => (
+            <group key={sx * 3 + sz}>
+              <CylinderCollider args={[(eave / 2) * K, 30 * K]} position={[sx * half * K, (eave / 2) * K, sz * half * K]} mass={0.3} friction={0.8} />
+              <CuboidCollider args={[60 * K, 10 * K, 60 * K]} position={[sx * half * K, 30 * K, sz * half * K]} mass={1} friction={0.9} />
+            </group>
+          )),
+        )}
+        <CuboidCollider args={[(half + CANOPY.over) * K, 30 * K, (half + CANOPY.over) * K]} position={[0, (eave + 20) * K, 0]} mass={1.2} friction={0.6} />
+      </LiveProp>
+
+      {/* the table and its cloth */}
+      <LiveProp id="cookietable" label="" set="cookiestand" at={home(0, 0, 0)} car={car} lift={0} feelPts={[-1, 0, 1].map((u) => [u * TABLE.w * 0.33 * K, 0] as [number, number])} feelR={(TABLE.d / 2) * K}>
+        <group scale={K} onClick={zoom} onPointerOver={pointer} onPointerOut={unpointer}>
+          <FoldingTable />
+          <mesh geometry={clothGeo} material={tex.cloth} castShadow receiveShadow />
+        </group>
+        <CuboidCollider args={[(TABLE.w / 2 + 10) * K, (TOP_T / 2) * K, (TABLE.d / 2 + 10) * K]} position={[0, (TABLE.h - TOP_T / 2) * K, 0]} mass={2} friction={0.8} />
+        {[-1, 1].map((sx) => (
+          <CuboidCollider key={sx} args={[14 * K, (UNDER / 2) * K, LEG.foot * K]} position={[sx * lx * K, (UNDER / 2) * K, 0]} mass={0.6} friction={0.9} />
+        ))}
+      </LiveProp>
+
+      {/* the oven: a click on it bakes, whether or not you're looking at the stand */}
+      <LiveProp id="cookieoven" label="" set="cookiestand" at={home(OVEN.x, TABLE.h + 4, -40)} car={car} lift={0} feelPts={[[0, 0]]} feelR={(OVEN.w / 2) * S}>
+        <group scale={S}>
+          <Oven baking={baking} kind={bakeKind} cookie={inOven} onClick={bakeClick} />
+        </group>
+        <CuboidCollider args={[(OVEN.w / 2) * S, ((OVEN.h + OV.y0) / 2) * S, (OVEN.d / 2) * S]} position={[0, ((OVEN.h + OV.y0) / 2) * S, 0]} mass={0.8} friction={0.8} />
+      </LiveProp>
+
+      {/* the cooling rack, the cookie that's picked on the menu on it (for looks: the oven's are the ones to take) */}
+      <LiveProp id="cookierack" label="" set="cookiestand" at={home(330, TABLE.h + 4, 20)} car={car} lift={0} feelPts={[[0, 0]]} feelR={24}>
+        <group scale={K}>
+          <Block size={[420, 12, 300]} at={[0, 40, 0]} m={CHROME} />
+          {[-1, 1].map((sx) => [-1, 1].map((sz) => <mesh key={sx * 3 + sz} geometry={TUBE} material={CHROME} position={[sx * 190, 17, sz * 130]} scale={[6, 34, 6]} />))}
+        </group>
+        <group position={[0, 46 * K + COOKIE.t / 2, 0]} rotation={[0, 0.4, 0]}>
           <Cookie kind={sel} />
         </group>
-        {/* what's solid: the legs, the table, the oven, the menu */}
-        <RigidBody type="fixed" colliders={false}>
-          {[-1, 1].map((sx) => [-1, 1].map((sz) => <CylinderCollider key={`${sx}${sz}`} args={[(eave / 2) * K, 30 * K]} position={[sx * half * K, (eave / 2) * K, sz * half * K]} />))}
-          <CuboidCollider args={[(TABLE.w / 2 + 20) * K, (TABLE.h / 2) * K, (TABLE.d / 2 + 20) * K]} position={[0, (TABLE.h / 2) * K, 0]} />
-          <CuboidCollider args={[(OVEN.w / 2) * OVEN_TOY * K, (OVEN.h / 2 + 20) * OVEN_TOY * K, (OVEN.d / 2) * OVEN_TOY * K]} position={[OVEN.x * K, (TABLE.h + 14 + (OVEN.h / 2 + 20) * OVEN_TOY) * K, -40 * K]} />
-          <CuboidCollider args={[(MENU.w / 2) * K, (MENU.len / 2) * K, 200 * K]} position={[MENU.at[0] * K, (MENU.len / 2) * K, MENU.at[2] * K]} rotation={[0, MENU.rot, 0]} />
-        </RigidBody>
-      </group>
+        <CuboidCollider args={[210 * K, 23 * K, 150 * K]} position={[0, 23 * K, 0]} mass={0.2} friction={0.8} />
+        <CylinderCollider args={[COOKIE.t / 2, COOKIE.r]} position={[0, 46 * K + COOKIE.t / 2, 0]} mass={0.05} friction={0.9} />
+      </LiveProp>
+
+      {/* the menu: an A-frame chalkboard under the canopy, in front on the right; click a row to pick it */}
+      <LiveProp id="cookiemenu" label="" set="cookiestand" at={home(MENU.at[0], 0, MENU.at[2], MENU.rot)} car={car} lift={0} feelPts={[[-0.3 * MENU.w * K, 0], [0.3 * MENU.w * K, 0]]} feelR={30}>
+        <group scale={K} onPointerOver={pointer} onPointerOut={unpointer}>
+          <AFrame w={MENU.w} len={MENU.len} lean={MENU.lean} face={tex.menuMat} onFaceClick={menuClick} />
+        </group>
+        <CuboidCollider args={[(MENU.w / 2) * K, 10 * K, MF * K]} position={[0, 10 * K, 0]} mass={0.6} friction={0.8} />
+        <CuboidCollider args={[(MENU.w / 2) * K, (MH / 2) * K, (MF / 2) * K]} position={[0, (MH / 2) * K, 0]} mass={0.5} friction={0.8} />
+      </LiveProp>
+
       {/* the cookies out of the oven: toys */}
       {cookies.map((c) => (
         <Holdable key={c.id} position={c.p} linearVelocity={c.v} angularVelocity={c.w} colliders={false} linearDamping={0.3} angularDamping={0.6} sound="none">
           <Cookie kind={c.kind} />
-          <CylinderCollider args={[COOKIE.t / 2, COOKIE.r]} mass={0.05} friction={0.9} restitution={0.2} />
+          <CylinderCollider args={[COOKIE.t / 2 + 1.5, COOKIE.r]} position={[0, 1.5, 0]} mass={0.05} friction={0.9} restitution={0.2} />
         </Holdable>
       ))}
-      <Prompts items={[prompt]} far={9000} />
+      <Prompts items={[prompt, putBack]} far={9000} />
     </>
   )
-}
-
-/** what the car bumps into at the stand: the four legs, the table, the menu */
-export function cookieStandObstacles(): Obstacle[] {
-  const at = SET.cookies
-  const c = Math.cos(at.rot)
-  const s = Math.sin(at.rot)
-  const pt = (x: number, z: number) => ({ x: at.x + (x * c + z * s) * K, z: at.z + (-x * s + z * c) * K })
-  const h = CANOPY.half
-  return [
-    ...[-1, 1].flatMap((sx) => [-1, 1].map((sz) => ({ kind: 'circle' as const, ...pt(sx * h, sz * h), r: 12 }))),
-    ...[-1, 0, 1].map((u) => ({ kind: 'circle' as const, ...pt(u * TABLE.w * 0.33, 0), r: (TABLE.d / 2) * K + 10 })),
-    { kind: 'circle' as const, ...pt(MENU.at[0], MENU.at[2]), r: (MENU.w / 2) * K },
-  ]
 }
 
 // ---- the big sign out on the corner of the lawn: a loose thing (./Physical)
 const SIGN_K = 0.24 // (half as big again as the stand's: it has to be seen from across the lawn)
 const SIGN = { w: 900, len: 1320, lean: 0.22 }
 let signFace: Material | null = null
-export function cookieSignProp(): { id: string; label: string; at: { x: number; y: number; z: number; rot: number }; lift: number; feelAlong: number[]; feelR: number; node: ReactNode; colliders: ReactNode } {
+export function cookieSignProp(): { id: string; label: string; at: { x: number; y: number; z: number; rot: number }; lift: number; feelAlong: number[]; feelR: number; set: string; node: ReactNode; colliders: ReactNode } {
   if (!signFace && typeof document !== 'undefined') {
     const t = freeCookies()
     signFace = bruno({ map: t, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.2, shade: '#6f7699' })
@@ -921,6 +1246,7 @@ export function cookieSignProp(): { id: string; label: string; at: { x: number; 
   return {
     id: 'cookiesign',
     label: 'Stand the sign back up',
+    set: 'cookiestand', // (put back with the rest of the stand)
     at: { x: s.x, y: 4, z: s.z, rot: s.rot },
     lift: (H + 200) * SIGN_K,
     feelAlong: [-0.3 * SIGN.w * SIGN_K, 0.3 * SIGN.w * SIGN_K],
