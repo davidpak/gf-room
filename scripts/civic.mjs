@@ -12,7 +12,7 @@
  *   - the tyres left out (thousands of little tread blocks: the site draws its own); the rims kept
  *   - the pieces sorted into parts by where they sit (see ./civic-inspect.mjs): the body; the four doors
  *     (panel, window, card, handle, trim, and the front ones' mirrors); the trunk lid (its deck, lip and
- *     rear panel, the H and CIVIC badges, the tail lights' upper bars); the four wheels' rims
+ *     rear panel down to the bumper, the H and CIVIC badges, the tail lights' upper bars); the four wheels' rims
  *   - each part merged by material, its node placed at its hinge (a door's front edge, the lid's front
  *     edge) or its wheel's centre, so the site only turns the node
  */
@@ -60,7 +60,7 @@ function partOf(b, mat) {
     if (b.min.z > -2.72 && b.max.z < -1.48) return `door_f${s}`
     if (b.min.z > -3.64 && b.max.z < -2.63 && b.min.y > 0.26) return `door_r${s}`
   }
-  if (b.min.x > 0.6 && b.max.x < 1.925 && b.min.y > 0.735 && b.max.z < -4.25 && b.min.z > -4.7 && !(LAMPS.test(mat) && b.min.y < 0.93)) return 'trunk'
+  if (b.min.x > 0.6 && b.max.x < 1.925 && (b.min.y > 0.735 || (mat === 'Carro_Pintura' && b.min.y > 0.6)) && b.max.z < -4.25 && b.min.z > -4.7 && !(LAMPS.test(mat) && b.min.y < 0.93)) return 'trunk'
   if (/Carro_Roda/.test(mat)) {
     const c = b.getCenter(new Vector3())
     return `wheel_${c.z > CZ ? 'f' : 'r'}${c.x > mid ? 'r' : 'l'}`

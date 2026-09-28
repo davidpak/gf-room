@@ -1,14 +1,16 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { Suspense, useCallback, useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { RoundedBox } from '@react-three/drei'
-import { Vector3, type DirectionalLight, type Group, type PerspectiveCamera } from 'three'
+import { Vector3, type DirectionalLight, type Group, type Object3D, type PerspectiveCamera } from 'three'
 import { SET, inIsland, paveSdf } from './set'
 import { isHolding } from '../../lib/physics/Hand'
 import { getLook, lookPose } from './look'
-import { LOOK, brunoify, shared } from './bruno'
+import { LOOK, shared } from './bruno'
+import { CivicModel, TYRE_R, WELL, shutDoors } from '../civic/Civic'
+import { TOY } from '../civic/spec'
 
 /**
- * Their little car (a toy, mint with a cream roof), driven like Bruno Simon's: W / ↑ go, S / ↓ brake
+ * David's car, his black 2016 Civic (../civic/Civic: its doors and trunk open on a click, and the doors
+ * swing shut when it drives off), driven like Bruno Simon's: W / ↑ go, S / ↓ brake
  * and reverse, A D / ← → steer, Space the handbrake, R back to the start. An arcade car on the flat:
  * a bicycle model (it turns about its back wheels, tighter slow), a push forward, drag, bumps off the
  * trees and the halls. Drawn with a little life: it pitches as it speeds up and brakes, leans into
@@ -17,13 +19,36 @@ import { LOOK, brunoify, shared } from './bruno'
  *
  * `state` is shared: where it is and how fast (the polaroids watch it).
  */
-export type CarState = { x: number; z: number; heading: number; v: number }
+export type CarState = { x: number; z: number; heading: number; v: number; y?: number }
 export type Obstacle = { kind: 'circle'; x: number; z: number; r: number } | { kind: 'box'; x: number; z: number; w: number; d: number }
 
-const BODY = { l: 420, w: 220, h: 110 }
-export const CAR_BODY = BODY
-const WHEEL = { r: 46, w: 34, base: 250, track: 200 }
-const RADIUS = 150 // (for bumping into things)
+// (the Civic at the toy's scale: its length, width and height; its wheels' radius, base and track)
+const K = TOY.k
+const BODY = { l: 4630 * K, w: 1826 * K, h: 1457 * K }
+type Box = { half: [number, number, number]; at: [number, number, number] }
+/** a box by its real-mm extents in the car's frame, at the toy's scale */
+const span = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): Box => ({
+  half: [((x1 - x0) / 2) * K, ((y1 - y0) / 2) * K, ((z1 - z0) / 2) * K],
+  at: [((x0 + x1) / 2) * K, ((y0 + y1) / 2) * K, ((z0 + z1) / 2) * K],
+})
+/** the car's shape for the physics (./Physical CarBody): the body below the windows (hollow at the back
+ *  for the trunk's well: its floor, sides and back), the cabin on it; and the trunk lid, there while shut */
+const HW = 913 // (half its width, real mm)
+export const CAR_SHAPE = {
+  parts: [
+    span(-HW, HW, 150, 950, WELL.z1, 2315), // (the body, the front and middle)
+    span(-HW, HW, 150, WELL.floor, -2315, WELL.z1), // (under the trunk's floor)
+    span(WELL.x, HW, WELL.floor, WELL.rim, -2315, WELL.z1), // (its sides)
+    span(-HW, -WELL.x, WELL.floor, WELL.rim, -2315, WELL.z1),
+    span(-WELL.x, WELL.x, WELL.floor, 950, -2315, WELL.z0), // (its back)
+    span(-700, 700, 950, 1440, -1600, 1000), // (the cabin)
+  ],
+  lid: span(-640, 640, WELL.rim, WELL.rim + 60, -2218, -1832),
+  /** the well, for what's put in it (toy mm, the car's frame) */
+  well: { x: WELL.x * K, z0: WELL.z0 * K, z1: WELL.z1 * K, floor: WELL.floor * K, rim: WELL.rim * K },
+}
+const WHEEL = { r: TYRE_R * K, base: 2697 * K, track: 1584 * K }
+const BUMP = { along: [-1.6, 0, 1.6].map((k) => k * 1000 * TOY.k), r: 1000 * TOY.k } // (for bumping into things: three circles down its length)
 /** how high the ground is under a wheel: the lawn, or up on the bricks (a short ramp over the edge) */
 const LAWN_Y = 5
 const BRICK_Y = 25
@@ -37,7 +62,6 @@ const ACCEL = 3000
 const BRAKE = 5200
 const STEER = 0.6
 const VIEW = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('view') : null
-const C = { body: '#9fdcc8', roof: '#fbeedd', trim: '#f4a9b4', wheel: '#2b2833', hub: '#fbeedd', glass: '#3b4466', light: '#fff4c8' }
 
 const _pos = new Vector3()
 const _at = new Vector3()
@@ -49,11 +73,10 @@ const MAP: Record<string, string> = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', A
 export function Car({ state, obstacles, movers, paused }: { state: { current: CarState }; obstacles: Obstacle[]; /** obstacles that move (the benches, where they are now), read every frame */ movers?: () => Obstacle[]; paused?: boolean }) {
   const body = useRef<Group>(null)
   const chassis = useRef<Group>(null)
-  const wheels = useRef<(Group | null)[]>([])
-  const fronts = useRef<(Group | null)[]>([])
+  const wheels = useRef<{ node: Object3D; front: boolean }[]>([])
+  const onWheels = useCallback((w: { node: Object3D; front: boolean }[]) => void (wheels.current = w), [])
   const sim = useRef({ steer: 0, pitch: 0, roll: 0, spin: 0, bob: 0, wheels: [LAWN_Y, LAWN_Y, LAWN_Y, LAWN_Y] })
   const zoom = useRef(1)
-  useLayoutEffect(() => void (body.current && brunoify(body.current)), []) // (in the Quad's light)
   const camera = useThree((s) => s.camera) as PerspectiveCamera
 
   useEffect(() => {
@@ -105,36 +128,43 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     s.heading += yaw * dt
     let nx = s.x + Math.sin(s.heading) * s.v * dt
     let nz = s.z + Math.cos(s.heading) * s.v * dt
-    // bumping: out of the trees, the halls, the stands; the edges of the Quad
+    // bumping: out of the trees, the halls, the stands; the edges of the Quad. The car's a long thing:
+    // three circles down its length, each pushed clear, the car moved by the biggest push
     let hit = 0
-    for (const o of movers ? [...obstacles, ...movers()] : obstacles) {
-      if (o.kind === 'circle') {
-        const dx = nx - o.x
-        const dz = nz - o.z
-        const d = Math.hypot(dx, dz)
-        const min = o.r + RADIUS
-        if (d < min && d > 1e-6) {
-          nx = o.x + (dx / d) * min
-          nz = o.z + (dz / d) * min
-          hit = Math.max(hit, 1)
-        }
-      } else {
-        const px = Math.max(o.x - o.w / 2, Math.min(nx, o.x + o.w / 2))
-        const pz = Math.max(o.z - o.d / 2, Math.min(nz, o.z + o.d / 2))
-        const dx = nx - px
-        const dz = nz - pz
-        const d = Math.hypot(dx, dz)
-        if (d < RADIUS) {
-          if (d > 1e-6) {
-            nx = px + (dx / d) * RADIUS
-            nz = pz + (dz / d) * RADIUS
+    const fx = Math.sin(s.heading)
+    const fz = Math.cos(s.heading)
+    const list = movers ? [...obstacles, ...movers()] : obstacles
+    for (let pass = 0; pass < 2; pass++)
+      for (const along of BUMP.along) {
+        const cx = nx + fx * along
+        const cz = nz + fz * along
+        let px = 0
+        let pz = 0
+        for (const o of list) {
+          let dx: number
+          let dz: number
+          let min: number
+          if (o.kind === 'circle') {
+            dx = cx - o.x
+            dz = cz - o.z
+            min = o.r + BUMP.r
+          } else {
+            dx = cx - Math.max(o.x - o.w / 2, Math.min(cx, o.x + o.w / 2))
+            dz = cz - Math.max(o.z - o.d / 2, Math.min(cz, o.z + o.d / 2))
+            min = BUMP.r
           }
-          hit = 1
+          const d = Math.hypot(dx, dz)
+          if (d < min && d > 1e-6) {
+            const push = min - d
+            if (push * push > px * px + pz * pz) [px, pz] = [(dx / d) * push, (dz / d) * push]
+            hit = 1
+          }
         }
+        nx += px
+        nz += pz
       }
-    }
     // the island's edge: it stops there (no driving off)
-    if (!inIsland(nx, nz, 170)) {
+    if (!inIsland(nx + fx * BODY.l * 0.45, nz + fz * BODY.l * 0.45, 40) || !inIsland(nx - fx * BODY.l * 0.45, nz - fz * BODY.l * 0.45, 40)) {
       nx = s.x
       nz = s.z
       hit = 1
@@ -164,17 +194,21 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     const [fl, fr, bl, br] = m.wheels
     const b = body.current
     if (b) {
-      b.position.set(s.x, (fl + fr + bl + br) / 4, s.z)
+      s.y = (fl + fr + bl + br) / 4
+      b.position.set(s.x, s.y, s.z)
       b.rotation.order = 'YXZ'
       b.rotation.set(-Math.atan((fl + fr - bl - br) / 2 / WHEEL.base), s.heading, Math.atan((fr + br - fl - bl) / 2 / WHEEL.track))
     }
     const c = chassis.current
     if (c) {
       c.rotation.set(m.pitch, 0, m.roll)
-      c.position.y = WHEEL.r + 14 + Math.sin(m.bob) * Math.min(1.5, Math.abs(s.v) / 1000)
+      c.position.y = Math.sin(m.bob) * Math.min(1.5, Math.abs(s.v) / 1000)
     }
-    wheels.current.forEach((w) => w && (w.rotation.x = m.spin))
-    fronts.current.forEach((f) => f && (f.rotation.y = m.steer))
+    for (const { node, front } of wheels.current) {
+      node.rotation.order = 'YXZ'
+      node.rotation.set(m.spin, front ? m.steer : 0, 0)
+    }
+    if (Math.abs(s.v) > 150) shutDoors() // (driving off: the doors swing shut)
     // the camera: from above and behind, always the same way round; the sun's shadow follows
     const target = new Vector3(s.x, 0, s.z)
     if (first.current) camAt.current.copy(target)
@@ -233,48 +267,14 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     }
   })
 
-  const wheel = (i: number, x: number, z: number, front: boolean) => (
-    <group key={i} position={[x, WHEEL.r, z]}>
-      <group ref={(r) => void (front ? (fronts.current[i] = r) : null)}>
-        <group ref={(r) => void (wheels.current[i] = r)}>
-          <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
-            <cylinderGeometry args={[WHEEL.r, WHEEL.r, WHEEL.w, 20]} />
-            <meshStandardMaterial color={C.wheel} roughness={0.8} />
-          </mesh>
-          <mesh rotation={[0, 0, Math.PI / 2]} position={[Math.sign(x) * (WHEEL.w / 2 + 0.5), 0, 0]}>
-            <cylinderGeometry args={[WHEEL.r * 0.5, WHEEL.r * 0.5, 2, 16]} />
-            <meshStandardMaterial color={C.hub} roughness={0.5} />
-          </mesh>
-        </group>
-      </group>
-    </group>
-  )
   return (
     <group ref={body}>
-      {wheel(0, -WHEEL.track / 2, WHEEL.base / 2, true)}
-      {wheel(1, WHEEL.track / 2, WHEEL.base / 2, true)}
-      {wheel(2, -WHEEL.track / 2, -WHEEL.base / 2, false)}
-      {wheel(3, WHEEL.track / 2, -WHEEL.base / 2, false)}
       <group ref={chassis}>
-        {/* the body, the cabin, its glass, a pink stripe, headlights */}
-        <RoundedBox args={[BODY.w, BODY.h, BODY.l]} radius={34} smoothness={4} position={[0, BODY.h / 2, 0]} castShadow receiveShadow>
-          <meshStandardMaterial color={C.body} roughness={0.55} />
-        </RoundedBox>
-        <RoundedBox args={[BODY.w * 0.86, 96, BODY.l * 0.5]} radius={30} smoothness={4} position={[0, BODY.h + 40, -30]} castShadow>
-          <meshStandardMaterial color={C.roof} roughness={0.6} />
-        </RoundedBox>
-        <RoundedBox args={[BODY.w * 0.88, 62, BODY.l * 0.44]} radius={18} smoothness={3} position={[0, BODY.h + 32, -30]}>
-          <meshStandardMaterial color={C.glass} roughness={0.25} />
-        </RoundedBox>
-        <RoundedBox args={[BODY.w + 2, 14, BODY.l * 0.7]} radius={6} smoothness={2} position={[0, BODY.h * 0.52, 10]}>
-          <meshStandardMaterial color={C.trim} roughness={0.6} />
-        </RoundedBox>
-        {[-1, 1].map((sx) => (
-          <mesh key={sx} position={[sx * 70, BODY.h * 0.62, BODY.l / 2 - 2]}>
-            <sphereGeometry args={[17, 16, 12]} />
-            <meshStandardMaterial color={C.light} emissive={C.light} emissiveIntensity={0.6} roughness={0.3} />
-          </mesh>
-        ))}
+        <Suspense fallback={null}>
+          <group scale={K}>
+            <CivicModel onWheels={onWheels} />
+          </group>
+        </Suspense>
       </group>
     </group>
   )

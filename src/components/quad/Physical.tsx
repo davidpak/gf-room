@@ -1,4 +1,6 @@
-import { CuboidCollider, CylinderCollider, RigidBody, useBeforePhysicsStep, type RapierRigidBody } from '@react-three/rapier'
+import { CuboidCollider, CylinderCollider, RigidBody, useBeforePhysicsStep, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
+import { openings, stowed } from '../civic/Civic'
+import { TOY } from '../civic/spec'
 import { useMemo, useRef, type ReactNode } from 'react'
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
@@ -6,7 +8,7 @@ import { usePerch } from '../../lib/physics/usePerch'
 import { Prompts } from '../prompt/Prompts'
 import { Bench, BENCH } from './Furniture'
 import { Sign, SIGN } from './Sign'
-import type { CarState, Obstacle } from './Car'
+import type { CAR_SHAPE, CarState, Obstacle } from './Car'
 import { PADS, SET } from './set'
 
 /**
@@ -18,7 +20,9 @@ import { PADS, SET } from './set'
  *   ground      the lawn (the island's top), the walks and pads a brick's height above it; off the
  *               island's edge nothing (a bench pushed off falls, and comes back where it started)
  *   solid       the trunks, the lamp posts, the building, the hedge and the bushes
- *   the car     a body the car's own driving moves (kinematic): it pushes what it drives into
+ *   the car     a body the car's own driving moves (kinematic): it pushes what it drives into. Its
+ *               trunk's a well: whatever's put in it, or on the car anywhere (the roof), and settles there
+ *               rides along with it (held to it, kinematic) till it's picked up again or flown home
  */
 const LAWN = 4
 const PAVING = 25
@@ -71,21 +75,25 @@ export function QuadColliders() {
 
 /** the car as a body: its driving moves it (kinematic), so it shoves whatever it drives into. Its
  *  shape the body and the cabin on it, as drawn (a bench shoved up onto it rests on the roof, not in it) */
-export function CarBody({ state, size }: { state: { current: CarState }; size: { l: number; w: number; h: number } }) {
+export function CarBody({ state, shape }: { state: { current: CarState }; shape: typeof CAR_SHAPE }) {
   const body = useRef<RapierRigidBody>(null)
   const q = useMemo(() => new Quaternion(), [])
   const e = useMemo(() => new Euler(), [])
+  const lid = useRef<RapierCollider>(null)
   useBeforePhysicsStep(() => {
     const b = body.current
     if (!b) return
     const s = state.current
-    b.setNextKinematicTranslation({ x: s.x, y: 0, z: s.z })
+    b.setNextKinematicTranslation({ x: s.x, y: s.y ?? 0, z: s.z })
     b.setNextKinematicRotation(q.setFromEuler(e.set(0, s.heading, 0)))
+    lid.current?.setEnabled(!openings.trunk) // (the lid's there while it's shut)
   })
   return (
     <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[state.current.x, 0, state.current.z]}>
-      <CuboidCollider args={[size.w / 2, size.h / 2 - 3, size.l / 2]} position={[0, size.h / 2 + 8, 0]} friction={0.4} />
-      <CuboidCollider args={[size.w * 0.43, 46, size.l * 0.25]} position={[0, size.h + 40, -30]} friction={0.4} />
+      {shape.parts.map((p, i) => (
+        <CuboidCollider key={i} args={p.half} position={p.at} friction={0.6} />
+      ))}
+      <CuboidCollider ref={lid} args={shape.lid.half} position={shape.lid.at} friction={0.6} />
     </RigidBody>
   )
 }
@@ -99,10 +107,18 @@ const _p = new Vector3()
 const _q = new Quaternion()
 export function propObstacles(): Obstacle[] {
   const out: Obstacle[] = []
-  for (const f of feel.values()) {
+  const c = carNow.current
+  const [ch, sh] = [Math.cos(c?.heading ?? 0), Math.sin(c?.heading ?? 0)]
+  for (const [id, f] of feel) {
     const b = f.body.current
-    if (!b) continue
+    if (!b || stowed.has(id)) continue
     const t = b.translation()
+    // (in or on the car itself: not something for it to bump into)
+    if (c) {
+      const dx = t.x - c.x
+      const dz = t.z - c.z
+      if (Math.abs(ch * dx - sh * dz) < CAR_HALF.w && Math.abs(sh * dx + ch * dz) < CAR_HALF.l) continue
+    }
     const q = b.rotation()
     _q.set(q.x, q.y, q.z, q.w)
     for (const along of f.along) {
@@ -129,16 +145,52 @@ function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id
   })
   feel.set(id, { body: perch.body, along: feelAlong, r: feelR })
   if (import.meta.env.DEV) ((window as unknown as { __props: Record<string, unknown> }).__props ??= {})[id] = perch // (for trying it from the console)
-  // the car coming at it: it's let go (loose) so the car can shove it
+  // riding in the trunk: where it sits in the car's frame
+  const ride = useRef<{ p: Vector3; q: Quaternion } | null>(null)
   useBeforePhysicsStep(() => {
     const body = perch.body.current
+    if (!body) return
     const s = perch.st.current
-    if (!body || !s.perched) return
     const c = car.current
-    if (Math.hypot(c.x - at.x, c.z - at.z) > 520) return
-    s.perched = false
-    body.setBodyType(perch.rapier.RigidBodyType.Dynamic, true)
-    body.wakeUp()
+    // the car coming at it: it's let go (loose) so the car can shove it
+    if (s.perched) {
+      if (Math.hypot(c.x - at.x, c.z - at.z) > 520) return
+      s.perched = false
+      body.setBodyType(perch.rapier.RigidBodyType.Dynamic, true)
+      body.wakeUp()
+      return
+    }
+    carQ.setFromEuler(carE.set(0, c.heading, 0))
+    const r = ride.current
+    if (r) {
+      // picked up, or flown home: it leaves the trunk
+      if (s.held || perch.fly.current) {
+        ride.current = null
+        stowed.delete(id)
+        return
+      }
+      _p.copy(r.p).applyQuaternion(carQ).add(_v.set(c.x, c.y ?? 0, c.z))
+      body.setNextKinematicTranslation(_p)
+      body.setNextKinematicRotation(_q.copy(carQ).multiply(r.q))
+      return
+    }
+    // settled in or on the car: it rides along from now on
+    if (s.held || perch.fly.current || !body.isDynamic()) return
+    const v = body.linvel()
+    if (Math.hypot(v.x, v.y, v.z) > 25) return
+    const w = CAR_WELL
+    const com = body.worldCom()
+    _p.set(com.x - c.x, com.y - (c.y ?? 0), com.z - c.z).applyQuaternion(_q.copy(carQ).invert())
+    if (Math.abs(_p.x) > CAR_HALF.w + 20 || Math.abs(_p.z) > CAR_HALF.l + 20 || _p.y < w.floor - 30 || _p.y > CAR_HALF.h + 260) return
+    const t = body.translation()
+    const o = body.rotation()
+    const inv = _q.copy(carQ).invert()
+    ride.current = {
+      p: new Vector3(t.x - c.x, t.y - (c.y ?? 0), t.z - c.z).applyQuaternion(inv),
+      q: inv.clone().multiply(new Quaternion(o.x, o.y, o.z, o.w)),
+    }
+    stowed.set(id, _p.z < w.z1 + 30) // (in the trunk, or up on the roof)
+    body.setBodyType(perch.rapier.RigidBodyType.KinematicPositionBased, true)
   })
   return (
     <>
@@ -151,7 +203,18 @@ function LiveProp({ id, label, at, car, lift, feelAlong, feelR, children }: { id
 }
 
 /** the benches on their pads; the lawn signs */
+/** the car, for telling what's in or on it (set by LiveProps) */
+const carNow: { current: CarState | null } = { current: null }
+const CAR_HALF = { w: 1826 * TOY.k * 0.5 + 10, l: 4630 * TOY.k * 0.5 + 10, h: 1457 * TOY.k }
+const carQ = new Quaternion()
+const carE = new Euler()
+const _v = new Vector3()
+/** the trunk's well, in the car's frame (toy mm) */
+let CAR_WELL = { x: 0, z0: 0, z1: 0, floor: 0, rim: 0 }
+export const setCarWell = (w: typeof CAR_WELL) => void (CAR_WELL = w)
+
 export function LiveProps({ car }: { car: { current: CarState } }) {
+  carNow.current = car.current
   return (
     <>
       {SET.benches.map((b, i) => (

@@ -6,8 +6,8 @@ import { CherryTree } from './CherryTree'
 import { Grass, Island, Petals, Walks } from './Ground'
 import { LampPost } from './Furniture'
 import { Building, Hedges } from './Backdrop'
-import { Car, CAR_BODY, type CarState, type Obstacle } from './Car'
-import { CarBody, LiveProps, QuadColliders, propObstacles } from './Physical'
+import { Car, CAR_SHAPE, type CarState, type Obstacle } from './Car'
+import { CarBody, LiveProps, QuadColliders, propObstacles, setCarWell } from './Physical'
 import { World } from '../../lib/physics/World'
 import { LookControls, Photos } from './Photos'
 import { lookBack, useLook } from './look'
@@ -96,7 +96,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
       {/* the physical side: the benches and signs, toys for the hand and the car (./Physical) */}
       <World floorY={-3000}>
         <QuadColliders />
-        <CarBody state={car} size={CAR_BODY} />
+        <CarBody state={car} shape={CAR_SHAPE} />
         <LiveProps car={car} />
       </World>
       <Photos car={car} />
@@ -106,6 +106,8 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
     </>
   )
 }
+
+setCarWell(CAR_SHAPE.well)
 
 export function QuadStage() {
   const car = useRef<CarState>({ x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })

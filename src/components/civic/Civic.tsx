@@ -22,6 +22,14 @@ useGLTF.preload(MODEL)
 export type Opening = 'door_fr' | 'door_fl' | 'door_rr' | 'door_rl' | 'trunk'
 export const openings: Record<Opening, boolean> = { door_fr: false, door_fl: false, door_rr: false, door_rl: false, trunk: false }
 export const shutDoors = () => void (['door_fr', 'door_fl', 'door_rr', 'door_rl'] as const).forEach((k) => (openings[k] = false))
+/** the trunk's well (real mm, the car's frame): between the quarter panels, from under the parcel
+ *  shelf back to the bumper; its floor, and the rim the lid shuts onto */
+export const WELL = { x: 600, z0: -2150, z1: -1400, floor: 560, rim: 1000 }
+/** how high the well's carpeted walls come (under the tail lights and the bumper's top, inside the body) */
+const WALLS = { side: 700, back: 630 }
+/** what's riding on the car (./quad/Physical), and whether it's in the trunk: while anything is, the
+ *  lid won't shut on it */
+export const stowed = new Map<string, boolean>()
 const OPENS: Record<Opening, number> = { door_fr: 1.1, door_fl: 1.1, door_rr: 1.1, door_rl: 1.1, trunk: 1.2 } // (how far each swings, radians)
 /** the part a mesh belongs to (walking up to its node), if it opens */
 function openingOf(o: Object3D | null) {
@@ -194,6 +202,7 @@ export function CivicModel({ onWheels }: { onWheels?: (w: { node: Object3D; fron
     const k = openingOf(e.object)
     if (!k) return
     e.stopPropagation()
+    if (k === 'trunk' && openings.trunk && [...stowed.values()].some(Boolean)) return // (a load's in it: the lid stays up)
     openings[k] = !openings[k]
   }
   const over = (e: ThreeEvent<PointerEvent>) => void (document.body.style.cursor = openingOf(e.object) ? 'pointer' : '')
@@ -208,6 +217,33 @@ export function CivicModel({ onWheels }: { onWheels?: (w: { node: Object3D; fron
       {/* the plates: the rear on the lid (it lifts with it), the front on the bumper */}
       {parts.trunk && t && createPortal(<Plate at={[0, 845 - t.y, -2226 - t.z]} back />, parts.trunk)}
       <Plate at={[0, 430, 2318]} />
+      <Well />
+    </group>
+  )
+}
+
+/** the trunk's well, carpeted: its floor, its sides, its back, and the bulkhead under the parcel shelf */
+const CARPET = bruno({ color: '#34323b' })
+function Well() {
+  const { x, z0, z1, floor, rim } = WELL
+  const zc = (z0 + z1) / 2
+  const len = z1 - z0
+  return (
+    <group>
+      <mesh material={CARPET} position={[0, floor - 10, zc]} receiveShadow>
+        <boxGeometry args={[x * 2, 20, len]} />
+      </mesh>
+      {[-1, 1].map((sx) => (
+        <mesh key={sx} material={CARPET} position={[sx * (x - 10), (floor + WALLS.side) / 2, zc]} receiveShadow>
+          <boxGeometry args={[20, WALLS.side - floor, len]} />
+        </mesh>
+      ))}
+      <mesh material={CARPET} position={[0, (floor + WALLS.back) / 2, z0 + 10]} receiveShadow>
+        <boxGeometry args={[x * 2, WALLS.back - floor, 20]} />
+      </mesh>
+      <mesh material={CARPET} position={[0, (floor + 950) / 2, z1 - 10]} receiveShadow>
+        <boxGeometry args={[x * 2, 950 - floor, 20]} />
+      </mesh>
     </group>
   )
 }
@@ -220,3 +256,5 @@ export function Civic() {
     </group>
   )
 }
+
+if (import.meta.env.DEV && typeof window !== "undefined") Object.assign(window, { __civic: { openings, stowed } }) // (for trying it from the console)

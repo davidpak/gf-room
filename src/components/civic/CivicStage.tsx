@@ -52,9 +52,12 @@ function Scene() {
   )
 }
 
+/** ?view=rear: start behind it (the trunk, the plate) */
+const REAR = typeof location !== 'undefined' && new URLSearchParams(location.search).get('view') === 'rear'
+
 export function CivicStage() {
   return (
-    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 10, far: 20000, position: [620, 420, 780] }}>
+    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 10, far: 20000, position: REAR ? [-260, 330, -760] : [620, 420, 780] }}>
       <Scene />
       <OrbitControls target={[0, 80, 0]} enableDamping minDistance={250} maxDistance={3000} maxPolarAngle={Math.PI / 2 - 0.08} />
     </Canvas>
