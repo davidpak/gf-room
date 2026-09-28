@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, Matrix4, Quaternion, RepeatWrapping, SRGBColorSpace, Shape, Vector3, type Material } from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from './bruno'
 import { SET } from './set'
 
@@ -166,9 +167,11 @@ export function Building() {
   )
 }
 
-// ---- the hedge and the bushes: Bruno's foliage, green (cards of leaves in clusters)
+// ---- the hedge and the bushes: Bruno's foliage, green, made the way the cherries' blossom is (cards
+// through soft round shapes, their normals out of the shape so each reads as one soft mass), round
+// a dark core so there are no holes to see through
 function leafTextures() {
-  const N = 128
+  const N = 256
   const col = document.createElement('canvas')
   const cut = document.createElement('canvas')
   col.width = col.height = cut.width = cut.height = N
@@ -176,35 +179,41 @@ function leafTextures() {
   const a = cut.getContext('2d')!
   a.fillStyle = '#000'
   a.fillRect(0, 0, N, N)
-  g.fillStyle = '#5d8a4c'
+  g.fillStyle = '#6f9f5c'
   g.fillRect(0, 0, N, N)
   const rand = rng(12)
-  for (let i = 0; i < 11; i++) {
-    const r = 18 + rand() * 10
-    const d = rand() ** 0.8 * (N / 2 - r - 4)
+  // a clump of small round leaves (boxwood, laurel), thicker in the middle, ragged at its edge
+  const GREENS = ['#86b86d', '#76a960', '#9ccb7f', '#689a57', '#8fc275', '#7db367']
+  for (let i = 0; i < 70; i++) {
+    const r = 11 + rand() * 9
+    const d = Math.pow(rand(), 0.7) * (N / 2 - r - 6)
     const th = rand() * Math.PI * 2
     const x = N / 2 + Math.cos(th) * d
     const y = N / 2 + Math.sin(th) * d
     const rot = rand() * Math.PI * 2
-    for (const [ctx, fill] of [
-      [a, '#fff'],
-      [g, rand() < 0.5 ? '#6f9d55' : '#557f47'],
-    ] as const) {
+    const fill = GREENS[Math.floor(rand() * GREENS.length)]
+    for (const ctx of [a, g]) {
       ctx.save()
       ctx.translate(x, y)
       ctx.rotate(rot)
-      ctx.fillStyle = fill
+      ctx.fillStyle = ctx === a ? '#fff' : fill
+      // a leaf: round, a soft point
       ctx.beginPath()
       ctx.moveTo(0, -r)
-      ctx.quadraticCurveTo(r * 0.62, 0, 0, r)
-      ctx.quadraticCurveTo(-r * 0.62, 0, 0, -r)
+      ctx.bezierCurveTo(r * 0.8, -r * 0.7, r * 0.75, r * 0.6, 0, r * 0.8)
+      ctx.bezierCurveTo(-r * 0.75, r * 0.6, -r * 0.8, -r * 0.7, 0, -r)
       ctx.fill()
       if (ctx === g) {
-        ctx.strokeStyle = 'rgba(210,235,160,0.35)'
-        ctx.lineWidth = 1.5
+        // lit along one side, a faint vein
+        ctx.fillStyle = 'rgba(235,255,200,0.22)'
         ctx.beginPath()
-        ctx.moveTo(0, -r * 0.8)
-        ctx.lineTo(0, r * 0.8)
+        ctx.ellipse(-r * 0.2, -r * 0.2, r * 0.35, r * 0.55, 0, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.strokeStyle = 'rgba(50,90,50,0.25)'
+        ctx.lineWidth = 1.2
+        ctx.beginPath()
+        ctx.moveTo(0, -r * 0.7)
+        ctx.lineTo(0, r * 0.6)
         ctx.stroke()
       }
       ctx.restore()
@@ -215,12 +224,27 @@ function leafTextures() {
   return { map, alphaMap: new CanvasTexture(cut) }
 }
 const LEAF_TEX = typeof document !== 'undefined' ? leafTextures() : null
-const LEAVES = bruno({ map: LEAF_TEX?.map, alphaMap: LEAF_TEX?.alphaMap, alphaTest: 0.5, vertexColors: true, side: DoubleSide, shade: '#4f5a93', sway: 6, swayFrom: 120 })
+const LEAVES = bruno({ map: LEAF_TEX?.map, alphaMap: LEAF_TEX?.alphaMap, alphaTest: 0.5, vertexColors: true, side: DoubleSide, shade: '#5d6fae', sway: 5, swayFrom: 150 })
 LEAVES.defines = { ...LEAVES.defines, NO_FLIP: '' }
-const GREENS = ['#ffffff', '#e9f5dc', '#dcecd0', '#f2f7e4']
+const CORE = bruno({ color: '#40683f', shade: '#3c4a78' })
 
-/** foliage: a cluster of leaf cards through a squashed ball per (centre, radius) */
-function foliage(balls: { at: Vector3; r: number }[], seed: number) {
+/** a soft shape for the leaves to fill: an ellipsoid (a bush's mound) or a rounded box (the clipped
+ *  hedge); `surface` gives a point in it near its skin, and the way out of it there */
+type Shape3 = { at: Vector3; size: Vector3; box: boolean }
+function surface(s: Shape3, rand: () => number, p: Vector3, n: Vector3) {
+  // a direction, then out to the skin (a superellipsoid: round, or squarish for the hedge)
+  const e = s.box ? 4 : 2
+  n.set(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1).normalize()
+  if (n.y < -0.3) n.y = -n.y * 0.5 // (hardly any underneath: it sits on the ground)
+  const k = Math.pow(Math.pow(Math.abs(n.x), e) + Math.pow(Math.abs(n.y), e) + Math.pow(Math.abs(n.z), e), -1 / e)
+  const depth = 0.72 + 0.28 * (1 - Math.pow(rand(), 2)) // (mostly in the outer shell)
+  p.set(n.x * k * depth * s.size.x, n.y * k * depth * s.size.y, n.z * k * depth * s.size.z).add(s.at)
+  // the way out: the superellipsoid's gradient there
+  n.set(Math.sign(n.x) * Math.pow(Math.abs(n.x * k), e - 1) / s.size.x, Math.sign(n.y) * Math.pow(Math.abs(n.y * k), e - 1) / s.size.y, Math.sign(n.z) * Math.pow(Math.abs(n.z * k), e - 1) / s.size.z).normalize()
+}
+
+/** the leaf cards through the shapes: lighter on top where the sun gets them, cooler underneath */
+function foliage(shapes: Shape3[], seed: number) {
   const rand = rng(seed)
   const pos: number[] = []
   const nor: number[] = []
@@ -230,22 +254,20 @@ function foliage(balls: { at: Vector3; r: number }[], seed: number) {
   const q = new Quaternion()
   const m = new Matrix4()
   const v = new Vector3()
+  const p = new Vector3()
   const out = new Vector3()
   const tint = new Color()
-  for (const { at, r } of balls) {
-    const n = Math.round(r * 0.28)
-    const size = r * 0.62
+  const TOP = new Color('#fbffe6')
+  const LOW = new Color('#b7c9b0')
+  for (const s of shapes) {
+    const area = s.size.x * s.size.z + (s.size.x + s.size.z) * s.size.y * 2
+    const n = Math.round(area / 900)
+    const size = Math.min(s.size.x, s.size.y, s.size.z) * 0.55 + 30
     for (let i = 0; i < n; i++) {
-      const dir = new Vector3(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1).normalize()
-      const p = at.clone().addScaledVector(dir, (1 - Math.pow(rand(), 3)) * r)
-      p.y = Math.max(at.y + (p.y - at.y) * 0.8, 30)
+      surface(s, rand, p, out)
       q.setFromAxisAngle(new Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5).normalize(), rand() * Math.PI * 2)
       m.compose(p, q, new Vector3(size * (0.8 + rand() * 0.4), size * (0.8 + rand() * 0.4), 1))
-      out.copy(p).sub(at).normalize()
-      out.y = out.y * 0.8 + 0.25
-      out.normalize()
-      tint.set(GREENS[Math.floor(rand() * GREENS.length)])
-      if (out.y < 0) tint.multiplyScalar(0.8)
+      tint.copy(LOW).lerp(TOP, Math.min(1, Math.max(0, out.y * 0.7 + 0.45))).multiplyScalar(0.94 + rand() * 0.1)
       const base = pos.length / 3
       ;[
         [-0.5, -0.5],
@@ -254,7 +276,7 @@ function foliage(balls: { at: Vector3; r: number }[], seed: number) {
         [-0.5, 0.5],
       ].forEach(([x, y], k) => {
         v.set(x, y, 0).applyMatrix4(m)
-        pos.push(v.x, v.y, v.z)
+        pos.push(v.x, Math.max(v.y, 6), v.z)
         nor.push(out.x, out.y, out.z)
         uv.push(k === 0 || k === 3 ? 0 : 1, k < 2 ? 0 : 1)
         col.push(tint.r, tint.g, tint.b)
@@ -271,20 +293,39 @@ function foliage(balls: { at: Vector3; r: number }[], seed: number) {
   return geo
 }
 
-export function Hedges() {
-  const geo = useMemo(() => {
-    const rand = rng(31)
-    const balls: { at: Vector3; r: number }[] = []
-    // the hedge: a long clipped mound, balls along it overlapping
-    for (const hd of SET.hedges)
-      for (let x = hd.x0 + hd.d / 2; x <= hd.x1 - hd.d / 2; x += hd.d * 0.45)
-        balls.push({ at: new Vector3(x, hd.h * 0.55, hd.z + (rand() - 0.5) * 30), r: hd.d * (0.55 + rand() * 0.08) })
-    // the bushes: a round mound or two each
-    for (const b of SET.bushes) {
-      balls.push({ at: new Vector3(b.x, b.r * 0.7, b.z), r: b.r })
-      balls.push({ at: new Vector3(b.x + (rand() - 0.5) * b.r, b.r * 0.5, b.z + (rand() - 0.2) * b.r * 0.6), r: b.r * 0.7 })
-    }
-    return foliage(balls, 8)
-  }, [])
-  return <mesh geometry={geo} material={LEAVES} castShadow receiveShadow />
+/** the shapes: the hedge a clipped mound, long and squarish; each bush a round mound or two */
+function shrubShapes() {
+  const rand = rng(31)
+  const out: Shape3[] = []
+  for (const hd of SET.hedges) out.push({ at: new Vector3((hd.x0 + hd.x1) / 2, hd.h / 2, hd.z), size: new Vector3((hd.x1 - hd.x0) / 2, hd.h / 2, hd.d / 2), box: true })
+  for (const b of SET.bushes) {
+    out.push({ at: new Vector3(b.x, b.r * 0.62, b.z), size: new Vector3(b.r, b.r * 0.72, b.r * 0.9), box: false })
+    out.push({ at: new Vector3(b.x + (rand() - 0.5) * b.r * 1.1, b.r * 0.42, b.z + (0.2 + rand() * 0.3) * b.r), size: new Vector3(b.r * 0.62, b.r * 0.48, b.r * 0.58), box: false })
+  }
+  return out
 }
+
+export function Hedges() {
+  const { geo, cores } = useMemo(() => {
+    const shapes = shrubShapes()
+    return { geo: foliage(shapes, 8), cores: shapes }
+  }, [])
+  return (
+    <group>
+      <mesh geometry={geo} material={LEAVES} castShadow receiveShadow />
+      {/* the dark cores, a little inside the leaves */}
+      {cores.map((s, i) =>
+        s.box ? (
+          <mesh key={i} material={CORE} position={s.at} scale={s.size.clone().multiplyScalar(1.7)}>
+            <primitive object={CORE_BOX} attach="geometry" />
+          </mesh>
+        ) : (
+          <mesh key={i} material={CORE} position={s.at} scale={s.size.clone().multiplyScalar(0.8)}>
+            <sphereGeometry args={[1, 16, 12]} />
+          </mesh>
+        ),
+      )}
+    </group>
+  )
+}
+const CORE_BOX = new RoundedBoxGeometry(1, 1, 1, 3, 0.3)
