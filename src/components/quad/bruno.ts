@@ -9,6 +9,7 @@ import { Color, MeshLambertMaterial, Vector3, type MeshLambertMaterialParameters
  *           much the surface is turned from the sun and whether something shades it (its cast shadow)
  *   bounce  a violet glow up from the ground on faces turned down, low down
  *   lamps   warm pools round the lamp posts, on whatever's near them
+ *   sheen   (glossy paint only: the car) the sky caught along its edges and on its tops
  *
  *   see-through  (materials with SEE_THROUGH: the blossom only; trunks stay solid) whatever is between the camera and the car
  *           dissolves in a soft round hole, dithered, so the car is never lost behind a tree (Bruno's)
@@ -26,6 +27,7 @@ export const LOOK = {
   lamp: new Color('#ff9c48'),
   sky: ['#34357a', '#9a6fb3', '#f2a0ae', '#ffcfa3'], // top to horizon
   fog: new Color('#e8a7b8'),
+  sheen: new Color('#c9b3e3'), // (what glossy paint reflects: the lilac evening sky)
 }
 
 /** shared by every material: the lamps' positions (world, mm), the time (s) */
@@ -48,10 +50,12 @@ type Opts = MeshLambertMaterialParameters & {
   swayFrom?: number
   /** how much the lamps warm it (0: none, emissive things) */
   warm?: number
+  /** a glossy paint's sheen: the sky caught along its edges and on its top faces (0: matte) */
+  sheen?: number
 }
 
 export function bruno(o: Opts = {}) {
-  const { shade, lit = 1, sway = 0, swayFrom = 0, warm = 1, ...params } = o
+  const { shade, lit = 1, sway = 0, swayFrom = 0, warm = 1, sheen = 0, ...params } = o
   const m = new MeshLambertMaterial(params)
   const u = {
     uLight: { value: LOOK.light.clone().multiplyScalar(LOOK.intensity * lit) },
@@ -60,6 +64,8 @@ export function bruno(o: Opts = {}) {
     uBounce: { value: LOOK.bounce },
     uLamp: { value: LOOK.lamp },
     uWarm: { value: warm },
+    uSheen: { value: sheen },
+    uSheenCol: { value: LOOK.sheen },
     uSway: { value: sway },
     uSwayFrom: { value: swayFrom },
     uLamps: shared.lamps,
@@ -123,6 +129,8 @@ uniform vec3 uShadow;
 uniform vec3 uBounce;
 uniform vec3 uLamp;
 uniform float uWarm;
+uniform float uSheen;
+uniform vec3 uSheenCol;
 uniform vec3 uLamps[4];
 uniform float uLampRange;
 uniform vec3 uCar;
@@ -184,6 +192,12 @@ float bayer4(vec2 p) {
     glow += f * f * (0.55 + 0.45 * max(0.0, dot(vWNormal, d / max(r, 1.0))));
   }
   col += albedo * uLamp * glow * 1.3 * uWarm;
+  // gloss: the evening sky caught along the edges as they turn away, softly on the faces turned up
+  if (uSheen > 0.0) {
+    vec3 V = normalize(cameraPosition - vWPos);
+    float edge = pow(1.0 - clamp(abs(dot(vWNormal, V)), 0.0, 1.0), 2.5);
+    col += uSheenCol * uSheen * (edge * 0.9 + clamp(vWNormal.y, 0.0, 1.0) * 0.3);
+  }
   outgoingLight = col + totalEmissiveRadiance;
 }
 #include <opaque_fragment>`,
