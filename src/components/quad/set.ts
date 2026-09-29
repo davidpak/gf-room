@@ -20,7 +20,7 @@ export const SET = {
     { a: [-1040, 1760], b: [2900, -2000], w: 340 }, //   its arms up to the cherries
   ] as Walk[],
   trees: [
-    { x: -3840, z: -1400, model: 2, rot: 0.3, scale: 0.85 },
+    { x: -3800, z: -800, model: 2, rot: 0.3, scale: 0.85 }, // (on the lawn between the west walk and the V, not on either)
     { x: -2640, z: -1460, model: 0, rot: 2.1, scale: 1 },
     { x: -1200, z: -1430, model: 1, rot: 4.0, scale: 1 },
     { x: 240, z: -1470, model: 3, rot: 1.2, scale: 1 },
