@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { BallCollider, CuboidCollider, useBeforePhysicsStep, useRapier, type RapierRigidBody } from '@react-three/rapier'
 import { Group, Quaternion, Vector3 } from 'three'
@@ -31,7 +31,7 @@ const _w = new Vector3()
 const _q = new Quaternion()
 const UP = new Vector3(0, 1, 0)
 
-export function PaperSheet({ at, rot = 0, color, k = 1 }: { at: [number, number, number]; rot?: number; color: string; k?: number }) {
+export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0 }: { at: [number, number, number]; rot?: number; color: string; k?: number; /** changed: it's laid back out where it started, flat (the same body: never one the hand might be holding swapped out) */ reset?: number }) {
   const body = useRef<RapierRigidBody>(null)
   const inner = useRef<Group>(null)
   const { world } = useRapier()
@@ -42,6 +42,22 @@ export function PaperSheet({ at, rot = 0, color, k = 1 }: { at: [number, number,
   const crumple = useRef(0)
   const held = useRef(false)
   const [geo, setGeo] = useState(() => build(st.current.facets, null))
+  // laid back out, flat, where it started
+  useEffect(() => {
+    if (!reset) return
+    st.current = { facets: sheet(W, H), done: [], bend: null }
+    anim.current = null
+    crumple.current = 0
+    setGeo(build(st.current.facets, null))
+    const b = body.current
+    if (!b) return
+    b.setTranslation({ x: at[0], y: at[1], z: at[2] }, true)
+    _q.setFromAxisAngle(UP, rot)
+    b.setRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w }, true)
+    b.setLinvel({ x: 0, y: 0, z: 0 }, true)
+    b.setAngvel({ x: 0, y: 0, z: 0 }, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reset])
   const [hover, setHover] = useState<number | null>(null)
   const [near, setNear] = useState(false) // (the pointer's over it: its folds show)
   const [, redraw] = useState(0)

@@ -68,6 +68,9 @@ export const SET = {
   },
   // the picnic (./QuadPicnic): a gingham blanket on the open lawn inside the V, south of the photo shoot
   picnic: { x: -950, z: -100, rot: 0.25 },
+  // the art corner (./QuadArt): the art blanket in the V's narrowing south end, below the picnic, its easel at the
+  // blanket's far end facing out toward the cross walk (where you drive up)
+  art: { x: -980, z: 780, rot: 0.1 },
   // Lime's rentals (./QuadLime), left the way they are: two Gliders and two scooters on the cross walk's north
   // edge, east of the V, nosed out onto the walk
   lime: {

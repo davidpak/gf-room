@@ -46,7 +46,7 @@ function Scene({ round }: { round: number }) {
       <Throw />
       <World floorY={FLOOR}>
         {PAPER_COLORS.map((c, i) => (
-          <PaperSheet key={`${round}-${i}`} at={[-60 + i * 4, FLOOR + 2 + i * 3, 60 - i * 3]} rot={Math.sin(i * 2.1) * 0.08} color={c} />
+          <PaperSheet key={i} reset={round} at={[-60 + i * 4, FLOOR + 2 + i * 3, 60 - i * 3]} rot={Math.sin(i * 2.1) * 0.08} color={c} />
         ))}
       </World>
     </>

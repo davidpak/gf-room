@@ -6,7 +6,7 @@ import { PAINTS } from './spec'
  * The paint box (in the page, over the scene, while you're at the easel): a dab of each paint to pick, three
  * brush sizes, undo, and a fresh canvas (blank white, after asking).
  */
-export function PaintBox({ on = true }: { on?: boolean }) {
+export function PaintBox({ on = true, bottom }: { on?: boolean; /** px up from the bottom (over another hint, on the Quad) */ bottom?: number }) {
   const p = painting()
   const [color, setColor] = useState(p.getBrush().color)
   const [size, setSize] = useState(p.getBrush().size)
@@ -14,7 +14,7 @@ export function PaintBox({ on = true }: { on?: boolean }) {
   const pick = (c: string) => (setColor(c), p.setBrush({ color: c }))
   const pickSize = (s: number) => (setSize(s), p.setBrush({ size: s }))
   return (
-    <div className={'paintbox' + (on ? ' on' : '')} onPointerDown={(e) => e.stopPropagation()}>
+    <div className={'paintbox' + (on ? ' on' : '')} style={bottom != null ? { bottom } : undefined} onPointerDown={(e) => e.stopPropagation()}>
       <div className="paintbox-paints">
         {PAINTS.map((c) => (
           <button key={c.name} title={c.name} className={'paintbox-dab' + (c.hex === color ? ' on' : '')} style={{ background: c.hex }} onClick={() => pick(c.hex)} />

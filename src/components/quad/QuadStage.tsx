@@ -15,6 +15,9 @@ import { CookieStand } from './CookieStand'
 import { QuadGuitar } from './QuadGuitar'
 import { QuadPicnic } from './QuadPicnic'
 import { QuadLime, RideHint } from './QuadLime'
+import { ART_OBSTACLES, QuadArt } from './QuadArt'
+import { PaintBox } from '../art/PaintBox'
+import '../art/art.css'
 import { lookBack, useLook } from './look'
 import './quad.css'
 import { SET } from './set'
@@ -63,6 +66,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
       ...SET.hedges.map((h) => ({ kind: 'box' as const, x: (h.x0 + h.x1) / 2, z: h.z, w: h.x1 - h.x0, d: h.d })),
       ...SET.bushes.map((b) => ({ kind: 'circle' as const, x: b.x, z: b.z, r: b.r * 0.8 })),
       { kind: 'circle' as const, x: SET.photos.easel.x, z: SET.photos.easel.z, r: 100 }, // (the bench photo's easel)
+      ...ART_OBSTACLES, // (the art corner's easel and stool)
     ],
     [],
   )
@@ -109,6 +113,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
         <QuadGuitar car={car} />
         <QuadPicnic car={car} />
         <QuadLime car={car} obstacles={obstacles} />
+        <QuadArt car={car} />
       </World>
       <Photos car={car} />
       <Building />
@@ -123,7 +128,8 @@ setCarWell(CAR_SHAPE.well)
 export function QuadStage() {
   const car = useRef<CarState>({ x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
   if (import.meta.env.DEV) Object.assign(window, { __quadCar: car }) // (for trying it from the console)
-  const looking = !!useLook()
+  const look = useLook()
+  const looking = !!look
   return (
     <>
       <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 50, far: 40000, position: [0, 3300, 3900] }} onPointerMissed={() => lookBack()}>
@@ -131,6 +137,7 @@ export function QuadStage() {
       </Canvas>
       <LookControls />
       <RideHint />
+      <PaintBox on={look?.spot.key === 'easel'} bottom={124} />
     </>
   )
 }
