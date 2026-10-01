@@ -176,7 +176,7 @@ export function Mug({ level }: { level: { current: number } }) {
   const { r: R, h: H } = MUG
   return (
     <group>
-      <mesh ref={liquid} geometry={g.liquid} material={LEMONADE} />
+      <mesh ref={liquid} geometry={g.liquid} material={LEMONADE} userData={{ live: true }} />
       <mesh geometry={g.mug} material={GLASS} />
       <mesh geometry={g.mugHandle} material={GLASS} position={[R + 10, H * 0.48, 0]} rotation={[0, 0, -Math.PI * 0.55]} />
       {/* its lemon wheel, slit and sat on the rim; its straw */}

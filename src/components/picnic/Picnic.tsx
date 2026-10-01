@@ -352,7 +352,7 @@ export function Basket({ open, present, state, onTake, onClick }: { open: { curr
       {/* its handles, riveted on both long sides at ±x */}
       {[-1, 1].map((sx, i) => (
         <group key={sx} position={[sx * HD.x, BH - 40, 0]}>
-          <group ref={(g) => void (handles.current[i] = g)}>
+          <group ref={(g) => void (handles.current[i] = g)} userData={{ live: true }}>
             <mesh geometry={geo.strap} material={WOOD} castShadow />
           </group>
           {[-1, 1].map((sz) => (

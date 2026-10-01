@@ -13,6 +13,7 @@ import { onReset } from './reset'
 import { LiveProp, setPrompt } from './Physical'
 import type { CarState, Obstacle } from './Car'
 import { SET } from './set'
+import { Static } from '../../lib/render/Static'
 
 /**
  * The cookie stand on the lawn (Bruno Simon's "accept cookie", a nod to Cookie Clicker): a pop-up
@@ -752,7 +753,7 @@ function Oven({ baking, kind, cookie, onClick }: { baking: { current: number }; 
       ))}
       <mesh geometry={TUBE} material={mat.lamp} position={[px, y0 + 22, d / 2 + 9]} rotation={[Math.PI / 2, 0, 0]} scale={[6, 4, 6]} />
       {/* the door, hinged along its bottom: its frame, the window, the steel strip, the handle */}
-      <group ref={door} position={[OV.door.x, OV.door.y, d / 2 + 4]}>
+      <group ref={door} position={[OV.door.x, OV.door.y, d / 2 + 4]} userData={{ live: true }}>
         {(() => {
           const { w: dw, h: dh } = OV.door
           const strip = dh * 0.17
@@ -775,7 +776,7 @@ function Oven({ baking, kind, cookie, onClick }: { baking: { current: number }; 
         })()}
       </group>
       {/* the cookie baking */}
-      <group ref={cookie} visible={false}>
+      <group ref={cookie} visible={false} userData={{ live: true }}>
         <mesh ref={dough} geometry={geo.bodyM} material={mat.dough} castShadow />
         <mesh ref={chips} geometry={geo.bitsM} material={KINDS[kind].bit === 'candy' ? CANDY_SHELL : CRUMB} castShadow />
       </group>
@@ -1123,6 +1124,7 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
           on its peak; a click and the camera goes in to the stand */}
       <LiveProp id="cookiecanopy" label="" set="cookiestand" at={home(0, 0, 0)} car={car} lift={0} feelPts={[-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * half * K, sz * half * K] as [number, number]))} feelR={14}>
         <group scale={K} onClick={zoom} onPointerOver={pointer} onPointerOut={unpointer}>
+          <Static>
           {[-1, 1].map((sx) =>
             [-1, 1].map((sz) => (
               <group key={sx * 3 + sz}>
@@ -1157,6 +1159,7 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
               <mesh key={s} geometry={TUBE} material={DARK} position={[s * 640, 120, 34]} rotation={[Math.PI / 2, 0, 0]} scale={[16, 8, 16]} />
             ))}
           </group>
+          </Static>
         </group>
         {/* its legs (weighted at their feet), its roof */}
         {[-1, 1].map((sx) =>
@@ -1173,8 +1176,10 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
       {/* the table and its cloth */}
       <LiveProp id="cookietable" label="" set="cookiestand" at={home(0, 0, 0)} car={car} lift={0} feelPts={[-1, 0, 1].map((u) => [u * TABLE.w * 0.33 * K, 0] as [number, number])} feelR={(TABLE.d / 2) * K}>
         <group scale={K} onClick={zoom} onPointerOver={pointer} onPointerOut={unpointer}>
-          <FoldingTable />
-          <mesh geometry={clothGeo} material={tex.cloth} castShadow receiveShadow />
+          <Static>
+            <FoldingTable />
+            <mesh geometry={clothGeo} material={tex.cloth} castShadow receiveShadow />
+          </Static>
         </group>
         <CuboidCollider args={[(TABLE.w / 2 + 10) * K, (TOP_T / 2) * K, (TABLE.d / 2 + 10) * K]} position={[0, (TABLE.h - TOP_T / 2) * K, 0]} mass={2} friction={0.8} />
         {[-1, 1].map((sx) => (
@@ -1185,7 +1190,9 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
       {/* the oven: a click on it bakes, whether or not you're looking at the stand */}
       <LiveProp id="cookieoven" label="" set="cookiestand" at={home(OVEN.x, TABLE.h + 4, -40)} car={car} lift={0} feelPts={[[0, 0]]} feelR={(OVEN.w / 2) * S}>
         <group scale={S}>
-          <Oven baking={baking} kind={bakeKind} cookie={inOven} onClick={bakeClick} />
+          <Static>
+            <Oven baking={baking} kind={bakeKind} cookie={inOven} onClick={bakeClick} />
+          </Static>
         </group>
         <CuboidCollider args={[(OVEN.w / 2) * S, ((OVEN.h + OV.y0) / 2) * S, (OVEN.d / 2) * S]} position={[0, ((OVEN.h + OV.y0) / 2) * S, 0]} mass={0.8} friction={0.8} />
       </LiveProp>
@@ -1193,8 +1200,10 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
       {/* the cooling rack, the cookie that's picked on the menu on it (for looks: the oven's are the ones to take) */}
       <LiveProp id="cookierack" label="" set="cookiestand" at={home(330, TABLE.h + 4, 20)} car={car} lift={0} feelPts={[[0, 0]]} feelR={24}>
         <group scale={K}>
-          <Block size={[420, 12, 300]} at={[0, 40, 0]} m={CHROME} />
-          {[-1, 1].map((sx) => [-1, 1].map((sz) => <mesh key={sx * 3 + sz} geometry={TUBE} material={CHROME} position={[sx * 190, 17, sz * 130]} scale={[6, 34, 6]} />))}
+          <Static>
+            <Block size={[420, 12, 300]} at={[0, 40, 0]} m={CHROME} />
+            {[-1, 1].map((sx) => [-1, 1].map((sz) => <mesh key={sx * 3 + sz} geometry={TUBE} material={CHROME} position={[sx * 190, 17, sz * 130]} scale={[6, 34, 6]} />))}
+          </Static>
         </group>
         <group position={[0, 46 * K + COOKIE.t / 2, 0]} rotation={[0, 0.4, 0]}>
           <Cookie kind={sel} />
@@ -1206,7 +1215,9 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
       {/* the menu: an A-frame chalkboard under the canopy, in front on the right; click a row to pick it */}
       <LiveProp id="cookiemenu" label="" set="cookiestand" at={home(MENU.at[0], 0, MENU.at[2], MENU.rot)} car={car} lift={0} feelPts={[[-0.3 * MENU.w * K, 0], [0.3 * MENU.w * K, 0]]} feelR={30}>
         <group scale={K} onPointerOver={pointer} onPointerOut={unpointer}>
-          <AFrame w={MENU.w} len={MENU.len} lean={MENU.lean} face={tex.menuMat} onFaceClick={menuClick} />
+          <Static>
+            <AFrame w={MENU.w} len={MENU.len} lean={MENU.lean} face={tex.menuMat} onFaceClick={menuClick} />
+          </Static>
         </group>
         <CuboidCollider args={[(MENU.w / 2) * K, 10 * K, MF * K]} position={[0, 10 * K, 0]} mass={0.6} friction={0.8} />
         <CuboidCollider args={[(MENU.w / 2) * K, (MH / 2) * K, (MF / 2) * K]} position={[0, (MH / 2) * K, 0]} mass={0.5} friction={0.8} />

@@ -26,6 +26,7 @@ import { clickSpot, frameAround, useLook, type Spot } from './look'
 import { onReset } from './reset'
 import { onWalk, SET } from './set'
 import type { CarState } from './Car'
+import { Static } from '../../lib/render/Static'
 
 /**
  * The picnic on the Quad (../picnic), on the open lawn inside the V: the gingham blanket laid on the grass
@@ -217,7 +218,9 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
     <>
       {/* the blanket, laid on the grass (it stays put) */}
       <group position={[AT.x, LAWN, AT.z]} rotation={[0, AT.rot, 0]} scale={K}>
-        <Blanket />
+        <Static>
+          <Blanket />
+        </Static>
       </group>
       {/* (its top, solid: what's set down on it rests on the cloth, not down in it on the grass) */}
       <RigidBody type="fixed" colliders={false} position={[AT.x, LAWN, AT.z]} rotation={[0, AT.rot, 0]}>
@@ -226,7 +229,9 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       {/* the basket: click it to go in and lift its lids */}
       <LiveProp id="picnicbasket" label="" set="picnic" at={home(LAYOUT.basket.x, LAYOUT.y, LAYOUT.basket.z, LAYOUT.basket.rot)} car={car} lift={0} feelAlong={[-0.25 * l * K, 0.25 * l * K]} feelR={(d / 2) * K}>
         <group ref={basketModel} scale={K} onPointerOver={pointer} onPointerOut={unpointer}>
-          <Basket open={open} present={present} state={food} onClick={zoom} onTake={(k, e) => (e.stopPropagation(), take(k))} />
+          <Static>
+            <Basket open={open} present={present} state={food} onClick={zoom} onTake={(k, e) => (e.stopPropagation(), take(k))} />
+          </Static>
         </group>
         <CuboidCollider args={[(l / 2) * K, (h / 2) * K, (d / 2) * K]} position={[0, (h / 2) * K, 0]} mass={0.5} friction={0.8} />
       </LiveProp>
@@ -234,7 +239,9 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       {LAYOUT.stack.map((b) => (
         <LiveProp key={b.k} id={`picnicbook${b.k}`} label="" set="picnic" at={home(b.x, LAYOUT.y + b.y, b.z, b.rot)} car={car} lift={0} feelAlong={[0]} feelR={(BOOKS[b.k].h / 2) * K}>
           <group scale={K}>
-            <ClosedBook k={b.k} />
+            <Static>
+              <ClosedBook k={b.k} />
+            </Static>
           </group>
           <CuboidCollider args={[(BOOKS[b.k].w / 2) * K, (BOOKS[b.k].t / 2) * K, (BOOKS[b.k].h / 2) * K]} position={[0, (BOOKS[b.k].t / 2) * K, 0]} mass={0.1} friction={0.9} />
         </LiveProp>
@@ -250,7 +257,9 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       {taken.map((t) => (
         <Holdable key={t.id} position={t.p} rotation={t.r} colliders={false} linearDamping={0.4} angularDamping={0.7} sound="none">
           <group ref={(o) => void (held.current[t.id] = o)} scale={K} onClick={(e) => eat(t.food, e)}>
-            <FoodModel f={t.food} state={food[t.food.key]} />
+            <Static>
+              <FoodModel f={t.food} state={food[t.food.key]} />
+            </Static>
           </group>
           <FoodCollider f={t.food} state={food[t.food.key]} k={K} />
         </Holdable>
@@ -361,26 +370,34 @@ function Spread({ car }: { car: { current: CarState } }) {
     <>
       <LiveProp id="picnicboard" label="" set="picnic" at={at(LAYOUT.board)} car={car} lift={0} feelAlong={[-0.5 * BOARD.r * K, 0.5 * BOARD.r * K]} feelR={BOARD.r * K * 0.6}>
         <group scale={K}>
-          <Board eaten={eaten.board} onEat={eat('board')} />
+          <Static>
+            <Board eaten={eaten.board} onEat={eat('board')} />
+          </Static>
         </group>
         <CylinderCollider args={[(BOARD.t / 2) * K, BOARD.r * K]} position={[0, (BOARD.t / 2) * K, 0]} mass={0.3} friction={0.9} />
       </LiveProp>
       <LiveProp id="picnicbowl" label="" set="picnic" at={at(LAYOUT.bowl)} car={car} lift={0} feelR={BOWL.r * K}>
         <group scale={K}>
-          <FruitBowl eaten={eaten.bowl} onEat={eat('bowl')} />
+          <Static>
+            <FruitBowl eaten={eaten.bowl} onEat={eat('bowl')} />
+          </Static>
         </group>
         <CylinderCollider args={[(BOWL.h / 2) * K, BOWL.r * K]} position={[0, (BOWL.h / 2) * K, 0]} mass={0.2} friction={0.9} />
       </LiveProp>
       <LiveProp id="picnicpitcher" label="" set="picnic" at={at(LAYOUT.pitcher)} car={car} lift={0} feelR={PITCHER.r * K} pose={pose}>
         <group scale={K} onClick={(e) => (e.stopPropagation(), pourOut())} onPointerOver={pointer} onPointerOut={unpointer}>
-          <Pitcher />
+          <Static>
+            <Pitcher />
+          </Static>
         </group>
         <CylinderCollider args={[((PITCHER.h + PITCHER.band) / 2) * K, PITCHER.r * K]} position={[0, ((PITCHER.h + PITCHER.band) / 2) * K, 0]} mass={0.5} friction={0.8} />
       </LiveProp>
       {LAYOUT.mugs.map((m, i) => (
         <LiveProp key={i} id={`picnicmug${i}`} label="" set="picnic" at={at(m)} car={car} lift={0} feelR={MUG.r * K}>
           <group scale={K} onClick={(e) => (e.stopPropagation(), sip(i))} onPointerOver={pointer} onPointerOut={unpointer}>
-            <Mug level={levels[i]} />
+            <Static>
+              <Mug level={levels[i]} />
+            </Static>
           </group>
           <CylinderCollider args={[(MUG.h / 2) * K, MUG.r * K]} position={[0, (MUG.h / 2) * K, 0]} mass={0.15} friction={0.8} />
         </LiveProp>
@@ -388,14 +405,18 @@ function Spread({ car }: { car: { current: CarState } }) {
       {LAYOUT.lemons.map((m, i) => (
         <LiveProp key={i} id={`picniclemon${i}`} label="" set="picnic" at={at(m)} car={car} lift={0} feelR={(LEMON.l / 2) * K}>
           <group scale={K}>
-            <Lemon />
+            <Static>
+              <Lemon />
+            </Static>
           </group>
           <BallCollider args={[(LEMON.w / 2) * K]} position={[0, (LEMON.w / 2) * K, 0]} mass={0.05} friction={0.6} />
         </LiveProp>
       ))}
       <LiveProp id="picnicflowers" label="" set="picnic" at={at(LAYOUT.flowers)} car={car} lift={0} feelR={VASE.r * K * 1.5}>
         <group scale={K}>
-          <Flowers />
+          <Static>
+            <Flowers />
+          </Static>
         </group>
         <CylinderCollider args={[(VASE.h / 2) * K, VASE.r * K]} position={[0, (VASE.h / 2) * K, 0]} mass={0.1} friction={0.8} />
       </LiveProp>

@@ -13,6 +13,7 @@ import { shootProps } from './ShootSet'
 import { cookieSignProp } from './CookieStand'
 import type { CAR_SHAPE, CarState, Obstacle } from './Car'
 import { PADS, SET } from './set'
+import { Static } from '../../lib/render/Static'
 
 /**
  * The Quad's physical side, in the shared toy world (lib/physics/World): what the benches rest on and
@@ -312,7 +313,9 @@ export function LiveProps({ car }: { car: { current: CarState } }) {
     <>
       {SET.benches.map((b, i) => (
         <LiveProp key={`bench${i}`} id={`bench${i}`} label="Put the bench back" at={{ x: b.x, y: PAVING, z: b.z, rot: b.rot }} car={car} lift={330} feelAlong={[-150, 0, 150]} feelR={105}>
-          <Bench />
+          <Static>
+            <Bench />
+          </Static>
           {/* its seat and legs a block, its back a slab raked back */}
           <CuboidCollider args={[BENCH.L / 2, BENCH.seat / 2, 62]} position={[0, BENCH.seat / 2, 0]} mass={6} friction={0.7} />
           <CuboidCollider args={[BENCH.L / 2, 75, 9]} position={[0, BENCH.seat + 70, -62]} rotation={[-0.16, 0, 0]} mass={2} friction={0.7} />
@@ -321,13 +324,15 @@ export function LiveProps({ car }: { car: { current: CarState } }) {
       {/* the photo shoot's kit (./ShootSet) */}
       {[...shootProps(), cookieSignProp()].map((p) => (
         <LiveProp key={p.id} id={p.id} label={p.label} at={p.at} car={car} lift={p.lift} feelAlong={p.feelAlong} feelR={p.feelR} set={'set' in p ? (p.set as string) : undefined}>
-          {p.node}
+          {p.id.includes('laptop') ? p.node : <Static>{p.node}</Static>}
           {p.colliders}
         </LiveProp>
       ))}
       {SET.signs.map((s, i) => (
         <LiveProp key={`sign${i}`} id={`sign${i}`} label="Stand the sign back up" at={{ x: s.x, y: LAWN, z: s.z, rot: s.rot }} car={car} lift={SIGN.low + SIGN.h + 60} feelAlong={[-70, 70]} feelR={40}>
-          <Sign />
+          <Static>
+            <Sign />
+          </Static>
           {/* the board, and the stake's legs below it */}
           <CuboidCollider args={[SIGN.w / 2, SIGN.h / 2, SIGN.t / 2 + 2]} position={[0, SIGN.low + SIGN.h / 2, 0]} mass={0.6} friction={0.6} />
           <CuboidCollider args={[SIGN.apart / 2 + 4, SIGN.low / 2, 6]} position={[0, SIGN.low / 2, -SIGN.t / 2 - SIGN.stake]} mass={0.3} friction={0.8} />
