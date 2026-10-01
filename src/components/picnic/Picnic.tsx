@@ -1,16 +1,18 @@
 import { useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { BufferAttribute, BufferGeometry, CatmullRomCurve3, CylinderGeometry, DoubleSide, Matrix4, Quaternion, Shape, ShapeGeometry, SphereGeometry, Vector2, Vector3, type Group, type Texture } from 'three'
+import { BufferAttribute, BufferGeometry, CatmullRomCurve3, CylinderGeometry, DoubleSide, Euler, Matrix4, Quaternion, Shape, ShapeGeometry, SphereGeometry, Vector2, Vector3, type Group, type Texture } from 'three'
 import { bruno } from '../quad/bruno'
 import { BASKET } from './spec'
-import { Sandwich } from './Sandwich'
+import { FoodModel, type Food, type FoodState } from './food'
 import { paint, rng } from './paint'
 
 /**
  * The picnic basket (./spec [W]), in real millimetres, the toy look: woven woodchip (wide flat weavers over
  * and under narrow stakes, a doubled band round its rim), open-topped, two flat wooden handles riveted on in
  * brass each side that swing up and lean in to meet over its middle; a tan gingham liner inside, folded down
- * over its rim and tied with ribbon bows each side; four sandwich halves (./Sandwich) packed flat in it.
+ * over its rim and tied with ribbon bows each side. Packed in it (./food): three sub halves wrapped in paper
+ * stood up along its back, their cut ends up, a bunch of green grapes and one of red lying in front of them,
+ * and the baguette stood up in its corner, out over the rim.
  * `open` 0..1 swings its handles down and out against its rim, out of the way of whatever's lifted out.
  * (The blanket: ./Blanket; the books: ./Books)
  *
@@ -161,24 +163,34 @@ function ribbon(pts: Vector3[], w: number, side: Vector3) {
   return g
 }
 
-/** where its sandwiches lie, packed flat: two each side, their cut along the wall, their point in toward
- *  the middle (x, z of the cut's middle, which way they reach, which half) */
-export const SANDWICH_AT: [number, number, number, number, 0 | 1][] = [
-  [-76, 0, -96, Math.PI + 0.04, 0],
-  [76, 0, -96, Math.PI - 0.03, 1],
-  [-76, 0, 96, 0.03, 1],
-  [76, 0, 96, -0.04, 0],
-]
 const FLOOR = wall + 3 // (the liner's floor)
-/** sandwich k's place in the basket's frame (real mm): for lifting it out */
-export function sandwichInBasket(k: number) {
-  const [x, , z, r] = SANDWICH_AT[k]
-  return new Matrix4().compose(new Vector3(x, FLOOR, z), new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), r), new Vector3(1, 1, 1))
+const Y = new Vector3(0, 1, 0)
+/** a sub half stood on its rounded end, its cut up, leaning back against the others (`lean`), turned a
+ *  little (`yaw`): its length up, its crown toward +x, its split toward the back */
+function standing(x: number, z: number, lean: number, yaw: number) {
+  const up = new Vector3(0, Math.cos(lean), -Math.sin(lean))
+  const across = new Vector3(0, -Math.sin(lean), -Math.cos(lean))
+  const m = new Matrix4().makeBasis(up, new Vector3(1, 0, 0), across)
+  m.premultiply(new Matrix4().makeRotationAxis(Y, yaw))
+  m.setPosition(x - 30, FLOOR + 152, z)
+  return m
 }
+/** what's in it and where (its frame, real mm) */
+export const CONTENTS: (Food & { at: Matrix4; /** how far below where it's held from it reaches (lifted out, it goes up this much further to clear the rim) */ below: number })[] = [
+  { key: 'sub0', kind: 'sub', v: 0, below: 165, at: standing(-62, -38, 0.24, 0.08) },
+  { key: 'sub1', kind: 'sub', v: 1, below: 165, at: standing(22, -42, 0.2, -0.05) },
+  { key: 'sub2', kind: 'sub', v: 2, below: 165, at: standing(106, -36, 0.27, 0.1) },
+  { key: 'grapes0', kind: 'grapes', v: 0, below: 0, at: new Matrix4().compose(new Vector3(-150, FLOOR + 34, 26), new Quaternion().setFromEuler(new Euler(0.22, -0.12, 0.05)), new Vector3(1, 1, 1)) },
+  { key: 'grapes1', kind: 'grapes', v: 1, below: 0, at: new Matrix4().compose(new Vector3(150, FLOOR + 30, 30), new Quaternion().setFromEuler(new Euler(0.2, Math.PI + 0.1, 0)), new Vector3(1, 1, 1)) },
+  // (the baguette stood in the back left corner on its end, leaning out over the end and a little back, its slashes to the front)
+  { key: 'baguette', kind: 'baguette', v: 0, below: 220, at: new Matrix4().compose(new Vector3(-174, FLOOR + 218, -70), new Quaternion().setFromEuler(new Euler(-0.13, 0, Math.PI / 2 + 0.26)).multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2)), new Vector3(1, 1, 1)) },
+]
+/** where content k is in the basket's frame (real mm): for lifting it out */
+export const contentAt = (k: number) => CONTENTS[k].at
 /** how high a thing lifted out of it has to go to clear its rim (real mm, its frame) */
 export const CLEAR = BH + 70
 
-export function Basket({ open, present = [true, true, true, true], onSandwich, onClick }: { open: { current: number }; present?: boolean[]; onSandwich?: (k: number, e: ThreeEvent<MouseEvent>) => void; onClick?: (e: ThreeEvent<MouseEvent>) => void }) {
+export function Basket({ open, present, state, onTake, onClick }: { open: { current: number }; present?: boolean[]; state?: Record<string, FoodState>; onTake?: (k: number, e: ThreeEvent<MouseEvent>) => void; onClick?: (e: ThreeEvent<MouseEvent>) => void }) {
   const geo = useMemo(() => {
     const top = roundRect(BL / 2, BD / 2, 26)
     const perim = 2 * (BL + BD)
@@ -286,20 +298,20 @@ export function Basket({ open, present = [true, true, true, true], onSandwich, o
           ))}
         </group>
       ))}
-      {/* the sandwiches in it */}
-      {SANDWICH_AT.map(([x, , z, rot, h], k) =>
-        present[k] ? (
+      {/* what's packed in it */}
+      {CONTENTS.map((c, k) =>
+        present?.[k] ?? true ? (
           <group
-            key={k}
-            position={[x, FLOOR, z]}
-            rotation={[0, rot, 0]}
+            key={c.key}
+            matrix={c.at}
+            matrixAutoUpdate={false}
             onClick={(e) => {
-              if (!onSandwich || open.current < 0.5) return
+              if (!onTake || open.current < 0.5) return
               e.stopPropagation()
-              onSandwich(k, e)
+              onTake(k, e)
             }}
           >
-            <Sandwich half={h} />
+            <FoodModel f={c} state={state?.[c.key]} />
           </group>
         ) : null,
       )}

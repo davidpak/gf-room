@@ -4,11 +4,12 @@ import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { Euler, Matrix4, Quaternion, Vector3, type Group } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
 import { Prompts, type PromptItem } from '../prompt/Prompts'
-import { Basket, CLEAR, sandwichInBasket, SANDWICH_AT } from '../picnic/Picnic'
+import { Basket, CLEAR, CONTENTS, contentAt } from '../picnic/Picnic'
 import { Blanket } from '../picnic/Blanket'
 import { ClosedBook, OpenBook, OPEN_BOOK } from '../picnic/Books'
 import { Flights, type Flight } from '../picnic/Flight'
-import { Sandwich, SANDWICH_T } from '../picnic/Sandwich'
+import { FoodCollider, FoodModel, type Food, type FoodState } from '../picnic/food'
+import { nearestGrape } from '../picnic/Grapes'
 import { LAYOUT } from '../picnic/layout'
 import { BASKET, BLANKET, BOOKS } from '../picnic/spec'
 import { LiveProp, setPrompt } from './Physical'
@@ -23,8 +24,9 @@ import type { CarState } from './Car'
  * The basket and the books are loose things (the car knocks them about, you carry them); one prompt,
  * Reset Picnic, puts it all back (and the sandwiches back in the basket).
  *
- *   the basket   click it: the camera goes in and its lids lift; click a sandwich and it's lifted out, up
- *                over the rim and down onto the blanket, a toy to carry from there (four of them)
+ *   the basket   click it: the camera goes in and its handles swing down; click what's in it (the wrapped
+ *                subs, the grapes, the baguette) and it's lifted out, up over the rim and down onto the
+ *                blanket, a toy to carry from there; click a bunch of grapes there to eat one
  *   the book     click it: the camera goes in; click its right page to turn it, its left to turn back
  *
  * At the benches' toy scale, 0.24.
@@ -46,8 +48,6 @@ const BASKET_ROT = AT.rot + LAYOUT.basket.rot
 const BASKET_LOOK = new Vector3(0.8 * Math.cos(BASKET_ROT) + 0.55 * Math.sin(BASKET_ROT), 1.7, -0.8 * Math.sin(BASKET_ROT) + 0.55 * Math.cos(BASKET_ROT)).normalize()
 const BOOK_ROT = AT.rot + LAYOUT.open.rot
 const BOOK_LOOK = new Vector3(0.12 * Math.cos(BOOK_ROT) + 0.55 * Math.sin(BOOK_ROT), 1.6, -0.12 * Math.sin(BOOK_ROT) + 0.55 * Math.cos(BOOK_ROT)).normalize()
-/** a sandwich lying flat, its collider (real mm, its frame: the cut along x, the rest toward -z) */
-const SANDWICH_BOX = { half: [71, SANDWICH_T / 2, 36] as [number, number, number], at: [0, SANDWICH_T / 2, -34] as [number, number, number] }
 
 export function QuadPicnic({ car }: { car: { current: CarState } }) {
   const look = useLook()
@@ -62,7 +62,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       key: 'picnic',
       items: [],
       frame: (pos, at, aspect) => frameAround(pos, at, aspect, place(LAYOUT.basket.x, 150, LAYOUT.basket.z), 210, 150, BASKET_LOOK),
-      hint: 'click a sandwich to lift it out',
+      hint: 'click something to lift it out',
     }),
     [],
   )
@@ -84,39 +84,53 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
     if (!reading) clickSpot(bookSpot)
   }
 
-  // ---- the sandwiches: in the basket, on their way out, or out (toys on the blanket)
-  const [present, setPresent] = useState([true, true, true, true])
+  // ---- what's in the basket: in it, on its way out, or out (toys on the blanket); and what's been eaten
+  const [present, setPresent] = useState(() => CONTENTS.map(() => true))
   const [flights, setFlights] = useState<Flight[]>([])
-  const [taken, setTaken] = useState<{ id: number; half: 0 | 1; p: [number, number, number]; r: [number, number, number] }[]>([])
+  const [taken, setTaken] = useState<{ id: number; food: Food; p: [number, number, number]; r: [number, number, number] }[]>([])
+  const [food, setFood] = useState<Record<string, FoodState>>({})
+  const eat = (f: Food, e: ThreeEvent<MouseEvent>) => {
+    if (f.kind !== 'grapes') return
+    e.stopPropagation()
+    const local = e.eventObject.worldToLocal(e.point.clone())
+    setFood((all) => {
+      const eaten = new Set(all[f.key]?.eaten)
+      const i = nearestGrape(f.v as 0 | 1, local, eaten)
+      if (i < 0) return all
+      eaten.add(i)
+      return { ...all, [f.key]: { ...all[f.key], eaten } }
+    })
+  }
   const next = useRef(1)
   const basketModel = useRef<Group>(null)
   const take = (k: number) => {
     const g = basketModel.current
     if (!g) return
     g.updateWorldMatrix(true, false)
-    const from = g.matrixWorld.clone().multiply(sandwichInBasket(k))
+    const from = g.matrixWorld.clone().multiply(contentAt(k))
     const [x, z, r] = LAYOUT.landing[k]
     const to = new Matrix4().compose(place(x, LAYOUT.y + 2, z), new Quaternion().setFromAxisAngle(up, AT.rot + r), new Vector3(K, K, K))
     setPresent((p) => p.map((v, i) => (i === k ? false : v)))
-    const clear = g.localToWorld(new Vector3(0, CLEAR, 0)).y
-    setFlights((f) => [...f, { id: next.current++, half: SANDWICH_AT[k][4], from, to, clear }])
+    const clear = g.localToWorld(new Vector3(0, CLEAR + CONTENTS[k].below, 0)).y
+    setFlights((f) => [...f, { id: next.current++, food: CONTENTS[k], state: food[CONTENTS[k].key], from, to, clear }])
   }
   const land = (f: Flight) => {
     const p = new Vector3()
     const q = new Quaternion()
     f.to.decompose(p, q, new Vector3())
     setFlights((all) => all.filter((x) => x.id !== f.id))
-    setTaken((t) => [...t, { id: f.id, half: f.half, p: [p.x, p.y, p.z], r: new Euler().setFromQuaternion(q).toArray().slice(0, 3) as [number, number, number] }])
+    setTaken((t) => [...t, { id: f.id, food: f.food, p: [p.x, p.y, p.z], r: new Euler().setFromQuaternion(q).toArray().slice(0, 3) as [number, number, number] }])
   }
   const refill = () => {
-    setPresent([true, true, true, true])
+    setPresent(CONTENTS.map(() => true))
     setFlights([])
     setTaken([])
+    setFood({})
   }
   useEffect(() => onReset(refill), [])
   const base = useMemo(() => setPrompt('picnic', 'Reset Picnic', (o) => o.copy(place(-360, 900, -500))), [])
   const outRef = useRef(0)
-  outRef.current = taken.length + flights.length + present.filter((v) => !v).length
+  outRef.current = taken.length + flights.length + present.filter((v) => !v).length + Object.keys(food).length
   const prompt: PromptItem = useMemo(
     () => ({
       ...base,
@@ -146,7 +160,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       {/* the basket: click it to go in and lift its lids */}
       <LiveProp id="picnicbasket" label="" set="picnic" at={home(LAYOUT.basket.x, LAYOUT.y, LAYOUT.basket.z, LAYOUT.basket.rot)} car={car} lift={0} feelAlong={[-0.25 * l * K, 0.25 * l * K]} feelR={(d / 2) * K}>
         <group ref={basketModel} scale={K} onPointerOver={pointer} onPointerOut={unpointer}>
-          <Basket open={open} present={present} onClick={zoom} onSandwich={(k, e) => (e.stopPropagation(), take(k))} />
+          <Basket open={open} present={present} state={food} onClick={zoom} onTake={(k, e) => (e.stopPropagation(), take(k))} />
         </group>
         <CuboidCollider args={[(l / 2) * K, (h / 2) * K, (d / 2) * K]} position={[0, (h / 2) * K, 0]} mass={0.5} friction={0.8} />
       </LiveProp>
@@ -165,14 +179,14 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
         </group>
         <CuboidCollider args={[(OPEN_BOOK.w / 2) * K, (OPEN_BOOK.t / 2) * K, (OPEN_BOOK.h / 2) * K]} position={[0, (OPEN_BOOK.t / 2) * K, 0]} mass={0.1} friction={0.9} />
       </LiveProp>
-      {/* the sandwiches lifted out, and those out on the blanket (toys) */}
+      {/* what's lifted out, and what's out on the blanket (toys) */}
       <Flights flights={flights} onLand={land} />
       {taken.map((t) => (
         <Holdable key={t.id} position={t.p} rotation={t.r} colliders={false} linearDamping={0.4} angularDamping={0.7} sound="none">
-          <group scale={K}>
-            <Sandwich half={t.half} />
+          <group scale={K} onClick={(e) => eat(t.food, e)}>
+            <FoodModel f={t.food} state={food[t.food.key]} />
           </group>
-          <CuboidCollider args={[SANDWICH_BOX.half[0] * K, SANDWICH_BOX.half[1] * K, SANDWICH_BOX.half[2] * K]} position={[SANDWICH_BOX.at[0] * K, SANDWICH_BOX.at[1] * K, SANDWICH_BOX.at[2] * K]} mass={0.03} friction={0.9} />
+          <FoodCollider f={t.food} state={food[t.food.key]} k={K} />
         </Holdable>
       ))}
       <Prompts items={[prompt]} far={9000} />

@@ -1,18 +1,21 @@
 import { useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, Matrix4, PCFSoftShadowMap, Quaternion, SRGBColorSpace, Vector3, type Group } from 'three'
 import { LOOK, bruno } from '../quad/bruno'
-import { Basket, CLEAR, sandwichInBasket, SANDWICH_AT } from './Picnic'
+import { Basket, CLEAR, CONTENTS, contentAt } from './Picnic'
 import { Blanket } from './Blanket'
 import { ClosedBook, OpenBook } from './Books'
 import { Flights, type Flight } from './Flight'
-import { Sandwich } from './Sandwich'
+import { FoodModel } from './food'
 import { LAYOUT } from './layout'
+import { Sub } from './Sub'
+import { Grapes } from './Grapes'
+import { Baguette } from './Baguette'
 
 /**
  * The picnic on its own (gallery first), full size, in the Quad's evening light: the gingham blanket, the
- * basket (click it to swing its handles down; click a sandwich to lift it out onto the blanket), two books stacked,
+ * basket (click it to swing its handles down; click what's in it to lift it out onto the blanket), two books stacked,
  * and The Little Prince open (click its right page to turn it, its left to turn back).
  * &cam=x,y,z&at=x,y,z to look closely; &view=open starts with the basket's handles down.
  */
@@ -35,12 +38,44 @@ const num = (k: string) => (q?.get(k) ? (q.get(k)!.split(',').map(Number) as [nu
 const CAM = num('cam')
 const AT = num('at')
 const OPEN = q?.get('view') === 'open'
+const SHOW = q?.get('show')
 const up = new Vector3(0, 1, 0)
 
+/** &show=food: the food on its own, in a row, to look at closely */
+function Food() {
+  return (
+    <>
+      <group position={[-300, 0, 0]} rotation={[0, -0.5, 0]}>
+        <Sub v={0} />
+      </group>
+      <group position={[-100, 0, 40]} rotation={[0, 2.6, 0]}>
+        <Sub v={1} />
+      </group>
+      <group position={[60, 0, -60]}>
+        <Grapes k={0} />
+      </group>
+      <group position={[60, 0, 80]}>
+        <Grapes k={1} />
+      </group>
+      <group position={[0, 0, 250]} rotation={[0, 0.2, 0]}>
+        <Baguette />
+      </group>
+      <group position={[0, 0, -250]} rotation={[0, -0.1, 0]}>
+        <Baguette lo={-120} hi={150} />
+      </group>
+      <group position={[300, 0, -200]}>
+        <Baguette lo={-210} hi={-165} />
+      </group>
+    </>
+  )
+}
+
 function Scene() {
+  const get = useThree((s) => s.get)
+  if (import.meta.env.DEV) Object.assign(window, { __r3f: get }) // (for screenshots from the console)
   const background = useMemo(sky, [])
   const [lidUp, setLidUp] = useState(OPEN)
-  const [present, setPresent] = useState([true, true, true, true])
+  const [present, setPresent] = useState(() => CONTENTS.map(() => true))
   const [flights, setFlights] = useState<Flight[]>([])
   const [lying, setLying] = useState<Flight[]>([])
   const open = useRef(OPEN ? 1 : 0)
@@ -53,12 +88,12 @@ function Scene() {
     const g = basket.current
     if (!g) return
     g.updateWorldMatrix(true, false)
-    const from = g.matrixWorld.clone().multiply(sandwichInBasket(k))
+    const from = g.matrixWorld.clone().multiply(contentAt(k))
     const [x, z, r] = LAYOUT.landing[k]
     const to = new Matrix4().compose(new Vector3(x, LAYOUT.y + 2, z), new Quaternion().setFromAxisAngle(up, r), new Vector3(1, 1, 1))
     setPresent((p) => p.map((v, i) => (i === k ? false : v)))
-    const clear = g.localToWorld(new Vector3(0, CLEAR, 0)).y
-    setFlights((f) => [...f, { id: next.current++, half: SANDWICH_AT[k][4], from, to, clear }])
+    const clear = g.localToWorld(new Vector3(0, CLEAR + CONTENTS[k].below, 0)).y
+    setFlights((f) => [...f, { id: next.current++, food: CONTENTS[k], from, to, clear }])
   }
   return (
     <>
@@ -81,14 +116,14 @@ function Scene() {
       <mesh material={LAWN} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[2600, 64]} />
       </mesh>
-      <Blanket />
-      <group ref={basket} position={[LAYOUT.basket.x, LAYOUT.y, LAYOUT.basket.z]} rotation={[0, LAYOUT.basket.rot, 0]}>
-        <Basket open={open} present={present} onClick={(e) => (e.stopPropagation(), setLidUp((o) => !o))} onSandwich={(k) => take(k)} />
-      </group>
+      {SHOW === 'food' ? <Food /> : <Blanket />}
+      {SHOW !== 'food' && <group ref={basket} position={[LAYOUT.basket.x, LAYOUT.y, LAYOUT.basket.z]} rotation={[0, LAYOUT.basket.rot, 0]}>
+        <Basket open={open} present={present} onClick={(e) => (e.stopPropagation(), setLidUp((o) => !o))} onTake={(k) => take(k)} />
+      </group>}
       <Flights flights={flights} onLand={(f) => (setFlights((all) => all.filter((x) => x.id !== f.id)), setLying((l) => [...l, f]))} />
       {lying.map((f) => (
         <group key={f.id} matrix={f.to} matrixAutoUpdate={false}>
-          <Sandwich half={f.half} />
+          <FoodModel f={f.food} />
         </group>
       ))}
       {LAYOUT.stack.map((b) => (

@@ -1,14 +1,14 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Matrix4, Quaternion, Vector3, type Group } from 'three'
-import { Sandwich } from './Sandwich'
+import { FoodModel, type Food, type FoodState } from './food'
 
 /**
- * A sandwich lifted out of the basket: up out of it, over its rim in an arc, turning as it goes, and down to
- * lie on the blanket (where it's handed on: to the physics as a toy in the Quad, or left lying on the
- * gallery page). `from` and `to` are world matrices (their scale the sandwich's).
+ * Something lifted out of the basket (./food): up out of it, over its rim in an arc, turning as it goes, and
+ * down to lie on the blanket (where it's handed on: to the physics as a toy in the Quad, or left lying on the
+ * gallery page). `from` and `to` are world matrices (their scale the thing's).
  */
-export type Flight = { id: number; half: 0 | 1; from: Matrix4; to: Matrix4; /** the height (world) it rises to first, clear of the basket */ clear: number }
+export type Flight = { id: number; food: Food; state?: FoodState; from: Matrix4; to: Matrix4; /** the height (world) it rises to first, clear of the basket */ clear: number }
 const DUR = 0.85
 
 function Flying({ f, onLand }: { f: Flight; onLand: (f: Flight) => void }) {
@@ -38,7 +38,6 @@ function Flying({ f, onLand }: { f: Flight; onLand: (f: Flight) => void }) {
     t.current = Math.min(1, t.current + dt / DUR)
     const u = t.current
     const ease = (x: number) => x * x * (3 - 2 * x)
-    const e = ease(u)
     const { p0, p1, c, p3, q0, q3, s } = path
     if (u < 0.38) _p.lerpVectors(p0, p1, ease(u / 0.38))
     else {
@@ -47,9 +46,10 @@ function Flying({ f, onLand }: { f: Flight; onLand: (f: Flight) => void }) {
       const a = 1 - v
       _p.set(0, 0, 0).addScaledVector(p1, a * a).addScaledVector(c, 2 * a * v).addScaledVector(p3, v * v)
     }
-    // turning to lie as it'll land, with a little tip as it swings over
-    _q.copy(q0).slerp(q3, Math.min(1, e * 1.15))
-    _tilt.setFromAxisAngle(new Vector3(1, 0, 0), Math.sin(Math.PI * u) * 0.35)
+    // (held as it was till it's clear of the rim:) then turning to lie as it'll land, with a little tip as it swings over
+    const v = u < 0.38 ? 0 : ease((u - 0.38) / 0.62)
+    _q.copy(q0).slerp(q3, Math.min(1, v * 1.1))
+    _tilt.setFromAxisAngle(new Vector3(1, 0, 0), Math.sin(Math.PI * v) * 0.3)
     _q.multiply(_tilt)
     o.position.copy(_p)
     o.quaternion.copy(_q)
@@ -61,7 +61,7 @@ function Flying({ f, onLand }: { f: Flight; onLand: (f: Flight) => void }) {
   })
   return (
     <group ref={g} matrixAutoUpdate>
-      <Sandwich half={f.half} />
+      <FoodModel f={f.food} state={f.state} />
     </group>
   )
 }
