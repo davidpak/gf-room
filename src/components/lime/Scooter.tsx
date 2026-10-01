@@ -1,5 +1,7 @@
-import { useMemo, type ReactNode } from 'react'
-import { DoubleSide, Quaternion, Vector3, type BufferGeometry, type Material } from 'three'
+import { useLayoutEffect, useMemo, useRef, type ReactNode, type Ref } from 'react'
+import { useFrame } from '@react-three/fiber'
+import type { LimeRig } from './Glider'
+import { DoubleSide, Quaternion, Vector3, type BufferGeometry, type Group, type Material } from 'three'
 import { bruno } from '../quad/bruno'
 import { paint, rng } from '../picnic/paint'
 import { bar, box, capsule, carve, coarse, cylinder, mesh, slab, smax, sphere, union, type Sdf } from '../../lib/sdf/sdf'
@@ -364,10 +366,10 @@ function build() {
 const AXIS = new Vector3(T[0] - A[0], T[1] - A[1], 0).normalize()
 const ALIGN = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), AXIS)
 const UNALIGN = ALIGN.clone().invert()
-function Steered({ angle, children }: { angle: number; children: ReactNode }) {
+function Steered({ angle, turn, live, children }: { angle: number; turn?: Ref<Group>; live?: boolean; children: ReactNode }) {
   return (
-    <group position={[A[0], A[1], 0]} quaternion={ALIGN}>
-      <group rotation={[0, angle, 0]}>
+    <group position={[A[0], A[1], 0]} quaternion={ALIGN} userData={{ live }}>
+      <group ref={turn} rotation={[0, angle, 0]}>
         <group quaternion={UNALIGN}>
           <group position={[-A[0], -A[1], 0]}>{children}</group>
         </group>
@@ -376,8 +378,25 @@ function Steered({ angle, children }: { angle: number; children: ReactNode }) {
   )
 }
 
-export function Scooter({ steer = 0, spin = 0, battery = 0.8, detail = 1 }: { steer?: number; spin?: number; battery?: number; /** 2: half as fine (seen small, in the Quad) */ detail?: number }) {
+export function Scooter({ steer = 0, spin = 0, battery = 0.8, detail = 1, rig, live }: { steer?: number; spin?: number; battery?: number; /** 2: half as fine (seen small, in the Quad) */ detail?: number; /** ridden (../quad/QuadLime): its bars turned, its wheels rolled each frame (its kickstand stays folded) */ rig?: LimeRig; /** its moving parts left unmerged by a <Static> round it */ live?: boolean }) {
   const g = useMemo(() => (made[detail] ??= coarse(detail, build)), [detail])
+  const turn = useRef<Group>(null)
+  const rear = useRef<Group>(null)
+  const front = useRef<Group>(null)
+  useFrame(() => {
+    const r = rig?.current
+    if (!r) return
+    if (turn.current) turn.current.rotation.y = r.steer
+    if (rear.current) rear.current.rotation.z = -r.spin
+    if (front.current) front.current.rotation.z = -r.spin * (WHEELS.rear.od / WHEELS.front.od)
+  })
+  // (let go: back as drawn, before a <Static> round it merges it again)
+  useLayoutEffect(() => {
+    if (rig) return
+    turn.current?.rotation.set(0, steer, 0)
+    rear.current?.rotation.set(0, 0, -spin)
+    front.current?.rotation.set(0, 0, -spin * (WHEELS.rear.od / WHEELS.front.od))
+  }, [rig, steer, spin])
   const m = (geo: BufferGeometry, mat: Material, shadow = true) => <mesh geometry={geo} material={mat} castShadow={shadow} receiveShadow />
   return (
     <group>
@@ -407,15 +426,15 @@ export function Scooter({ steer = 0, spin = 0, battery = 0.8, detail = 1 }: { st
         </mesh>
       ))}
       {/* the rear wheel */}
-      <group position={[AX.rear[0], AX.rear[1], 0]} rotation={[0, 0, -spin]}>
+      <group ref={rear} position={[AX.rear[0], AX.rear[1], 0]} rotation={[0, 0, -spin]} userData={{ live }}>
         {m(g.rear.tyre, M.rubber)}
         {m(g.rear.rim, M.black)}
       </group>
-      <Steered angle={steer}>
+      <Steered angle={steer} turn={turn} live={live}>
         {m(g.fork, M.grey)}
         {m(g.stanchions, M.chrome)}
         {m(g.fender, M.black)}
-        <group position={[A[0], A[1], 0]} rotation={[0, 0, -spin * (WHEELS.rear.od / WHEELS.front.od)]}>
+        <group ref={front} position={[A[0], A[1], 0]} rotation={[0, 0, -spin * (WHEELS.rear.od / WHEELS.front.od)]}>
           {m(g.front.tyre, M.rubber)}
           {m(g.front.rim, M.black)}
         </group>

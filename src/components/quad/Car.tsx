@@ -7,6 +7,7 @@ import { isHolding } from '../../lib/physics/Hand'
 import { getLook, lookAt, lookPose } from './look'
 import { hardReset, onReset } from './reset'
 import { LOOK, shared } from './bruno'
+import { getRide } from './ride'
 import { CivicModel, TYRE_R, WELL, openings, shutDoors } from '../civic/Civic'
 import { TOY } from '../civic/spec'
 
@@ -59,7 +60,7 @@ const BUMP = { along: [-1.6, 0, 1.6].map((k) => k * 1000 * TOY.k), r: 1000 * TOY
 /** how high the ground is under a wheel: the lawn, or up on the bricks (a short ramp over the edge) */
 const LAWN_Y = 5
 const BRICK_Y = 25
-const groundAt = (x: number, z: number) => {
+export const groundAt = (x: number, z: number) => {
   const t = Math.min(1, Math.max(0, (8 - paveSdf(x, z)) / 16))
   return LAWN_Y + (BRICK_Y - LAWN_Y) * t * t * (3 - 2 * t)
 }
@@ -92,6 +93,8 @@ function snapToTexels(p: Vector3, sun: DirectionalLight) {
 }
 const _ta = new Vector3()
 const keys = new Set<string>()
+/** a driving key held (up, down, left, right, brake): the car's, or the Lime's while one's ridden (./ride) */
+export const held = (n: string) => keys.has(n)
 const MAP: Record<string, string> = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'brake', KeyR: 'reset' }
 
 const NONE: Obstacle[] = []
@@ -158,7 +161,8 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     const dt = Math.min(delta, 1 / 30)
     const s = state.current
     const m = sim.current
-    const k = (n: string) => !paused && keys.has(n)
+    const riding = getRide()
+    const k = (n: string) => !paused && !riding && keys.has(n) // (on a Lime: the keys are its)
     // the push forward, the brakes, the drag
     const throttle = (k('up') ? 1 : 0) - (k('down') ? 1 : 0)
     let a = 0
@@ -261,7 +265,9 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     }
     if (Math.abs(s.v) > 150) shutDoors() // (driving off: the doors swing shut)
     // the camera: from above and behind, always the same way round; the sun's shadow follows
-    _target.set(s.x, 0, s.z)
+    // (the camera on the car, or on the Lime being ridden)
+    if (riding) _target.set(riding.x, 0, riding.z)
+    else _target.set(s.x, 0, s.z)
     if (first.current) camAt.current.copy(_target)
     camAt.current.lerp(_target, first.current ? 1 : Math.min(1, dt * 4))
     first.current = false
@@ -322,6 +328,7 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     // the see-through: the trees open round the line from the camera to the car
     shared.cam.value.copy(camera.position)
     if (lk.has && e > 0.5) shared.car.value.copy(lk.at) // (looking at a photo: the blossom opens in front of it)
+    else if (riding) shared.car.value.set(riding.x, 150, riding.z)
     else shared.car.value.set(s.x, 150, s.z)
     if (sun) {
       snapToTexels(_target.set(camAt.current.x, 0, camAt.current.z), sun)

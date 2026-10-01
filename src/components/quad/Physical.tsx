@@ -14,6 +14,7 @@ import { shootProps } from './ShootSet'
 import { cookieSignProp } from './CookieStand'
 import type { CAR_SHAPE, CarState, Obstacle } from './Car'
 import { PADS, SET } from './set'
+import { getRide } from './ride'
 import { Static } from '../../lib/render/Static'
 
 /**
@@ -114,7 +115,8 @@ const _q = new Quaternion()
 /** (the same circles reused frame after frame: nothing left behind for the garbage collector) */
 const pool: (Obstacle & { kind: 'circle' })[] = []
 const out: Obstacle[] = []
-export function propObstacles(): Obstacle[] {
+/** (`except`: the one asking, a Lime being ridden, isn't in its own way) */
+export function propObstacles(except?: string): Obstacle[] {
   out.length = 0
   let n = 0
   const c = carNow.current
@@ -122,7 +124,7 @@ export function propObstacles(): Obstacle[] {
   const sh = Math.sin(c?.heading ?? 0)
   for (const [id, f] of feel) {
     const b = f.body.current
-    if (!b || stowed.has(id)) continue
+    if (!b || stowed.has(id) || id === except) continue
     const t = b.translation()
     // (in or on the car itself: not something for it to bump into)
     if (c) {
@@ -162,12 +164,13 @@ export function setPrompt(set: string, label: string, at: (o: Vector3) => Vector
 
 /** a loose thing of the Quad's: resting at home (held fast there till something moves it), a toy for
  *  the hand and the car, a prompt to put it back (or, one of a `set`, its set's) */
-export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, set, pose, children }: { id: string; label: string; at: { x: number; y: number; z: number; rot: number; q?: Quaternion }; car: { current: CarState }; lift: number; feelAlong?: number[]; feelPts?: [number, number][]; feelR: number; set?: string; pose?: { current: { p: Vector3; q: Quaternion } | null }; children: ReactNode }) {
+export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, set, pose, drive, children }: { id: string; label: string; at: { x: number; y: number; z: number; rot: number; q?: Quaternion }; car: { current: CarState }; lift: number; feelAlong?: number[]; feelPts?: [number, number][]; feelR: number; set?: string; pose?: { current: { p: Vector3; q: Quaternion } | null }; /** ridden (./QuadLime): moved exactly here each step, and left where it is when let go */ drive?: { current: { p: Vector3; q: Quaternion } | null }; children: ReactNode }) {
   // (home turned about the vertical by `rot`, or any way at all by `q`: the guitar leans)
   const home = useMemo(() => new Matrix4().compose(new Vector3(at.x, at.y, at.z), at.q ?? new Quaternion().setFromEuler(new Euler(0, at.rot, 0)), new Vector3(1, 1, 1)), [at])
   // held up somewhere by its owner (`pose`: the guitar, up to be played): there it goes and stays, and
   // when it's let go it flies home
   const posed = useRef(false)
+  const driven = useRef(false)
   const perch = usePerch({
     key: id,
     label,
@@ -224,6 +227,29 @@ export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, 
     if (!body) return
     const s = perch.st.current
     const c = car.current
+    // ridden: exactly where it's taken, each step (and parked, loose, where it's left)
+    const go = drive?.current
+    if (go) {
+      if (!driven.current) {
+        driven.current = true
+        ride.current = null
+        stowed.delete(id)
+        perch.fly.current = null
+        s.perched = false
+        settle.current = false
+        body.setBodyType(perch.rapier.RigidBodyType.KinematicPositionBased, true)
+      }
+      body.setNextKinematicTranslation(go.p)
+      body.setNextKinematicRotation(go.q)
+      return
+    }
+    if (driven.current) {
+      driven.current = false
+      body.setBodyType(perch.rapier.RigidBodyType.Dynamic, true)
+      body.setLinvel(_v.set(0, 0, 0), true)
+      body.setAngvel(_v.set(0, 0, 0), true)
+      return
+    }
     const want = pose?.current
     if (want) {
       if (!posed.current) {
@@ -248,9 +274,10 @@ export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, 
       perch.flyHome()
       return
     }
-    // the car coming at it: it's let go (loose) so the car can shove it
+    // the car coming at it (or a Lime being ridden): it's let go (loose) so it can be shoved
     if (s.perched) {
-      const d = Math.hypot(c.x - at.x, c.z - at.z)
+      const r = getRide()
+      const d = Math.min(Math.hypot(c.x - at.x, c.z - at.z), r && r.id !== id ? Math.hypot(r.x - at.x, r.z - at.z) : Infinity)
       if (settle.current) {
         if (d > 700 + reach) settle.current = false
         return

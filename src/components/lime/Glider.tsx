@@ -1,5 +1,6 @@
-import { useMemo, type ReactNode } from 'react'
-import { BoxGeometry, BufferAttribute, BufferGeometry, CatmullRomCurve3, CylinderGeometry, DoubleSide, ExtrudeGeometry, Quaternion, Shape, TorusGeometry, Vector2, Vector3, type Material } from 'three'
+import { useLayoutEffect, useMemo, useRef, type ReactNode, type Ref } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { BoxGeometry, BufferAttribute, BufferGeometry, CatmullRomCurve3, CylinderGeometry, DoubleSide, ExtrudeGeometry, Quaternion, Shape, TorusGeometry, Vector2, Vector3, type Group, type Material } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { bruno } from '../quad/bruno'
 import { paint, rng } from '../picnic/paint'
@@ -429,9 +430,9 @@ function R0y(py: number) {
   return (622 - py) * 1.8
 }
 
-function Wheel({ g, at, spin }: { g: ReturnType<typeof wheelGeo>; at: Vector3; spin: number }) {
+function Wheel({ g, at, spin, wref, live }: { g: ReturnType<typeof wheelGeo>; at: Vector3; spin: number; wref?: Ref<Group>; live?: boolean }) {
   return (
-    <group position={at} rotation={[0, 0, -spin]}>
+    <group ref={wref} position={at} rotation={[0, 0, -spin]} userData={{ live }}>
       <mesh geometry={g.tyre} material={M.rubber} castShadow receiveShadow />
       <mesh geometry={g.stripes} material={M.stripe} />
       <mesh geometry={g.rim} material={M.black} />
@@ -446,10 +447,10 @@ function Wheel({ g, at, spin }: { g: ReturnType<typeof wheelGeo>; at: Vector3; s
 const AXIS = new Vector3(AXLE.front[0] - STEER.top[0], AXLE.front[1] - STEER.top[1], 0).normalize().negate()
 const ALIGN = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), AXIS)
 const UNALIGN = ALIGN.clone().invert()
-function Steered({ angle, children }: { angle: number; children: ReactNode }) {
+function Steered({ angle, turn, live, children }: { angle: number; turn?: Ref<Group>; live?: boolean; children: ReactNode }) {
   return (
-    <group position={V(STEER.top)} quaternion={ALIGN}>
-      <group rotation={[0, angle, 0]}>
+    <group position={V(STEER.top)} quaternion={ALIGN} userData={{ live }}>
+      <group ref={turn} rotation={[0, angle, 0]}>
         <group quaternion={UNALIGN}>
           <group position={V(STEER.top).negate()}>{children}</group>
         </group>
@@ -458,8 +459,31 @@ function Steered({ angle, children }: { angle: number; children: ReactNode }) {
   )
 }
 
-export function Glider({ steer = 0, spin = 0, stand = 1 }: { steer?: number; spin?: number; stand?: number }) {
+/** a Glider being ridden (../quad/QuadLime): its bars turned, its wheels rolled, its kickstand up or down, each frame
+ *  from `rig` (not by drawing it again); `live`, so a <Static> round it leaves those parts unmerged */
+export type LimeRig = { current: { steer: number; spin: number; stand: number } }
+export function Glider({ steer = 0, spin = 0, stand = 1, rig, live }: { steer?: number; spin?: number; stand?: number; rig?: LimeRig; live?: boolean }) {
   const g = useMemo(() => (made ??= build()), [])
+  const turn = useRef<Group>(null)
+  const rear = useRef<Group>(null)
+  const front = useRef<Group>(null)
+  const kick = useRef<Group>(null)
+  useFrame(() => {
+    const r = rig?.current
+    if (!r) return
+    if (turn.current) turn.current.rotation.y = r.steer
+    if (rear.current) rear.current.rotation.z = -r.spin
+    if (front.current) front.current.rotation.z = -r.spin
+    if (kick.current) kick.current.rotation.set(-(1 - r.stand) * 0.2, 0, -(1 - r.stand) * 1.45)
+  })
+  // (let go: back as drawn, before a <Static> round it merges it again)
+  useLayoutEffect(() => {
+    if (rig) return
+    turn.current?.rotation.set(0, steer, 0)
+    rear.current?.rotation.set(0, 0, -spin)
+    front.current?.rotation.set(0, 0, -spin)
+    kick.current?.rotation.set(-(1 - stand) * 0.2, 0, -(1 - stand) * 1.45)
+  }, [rig, steer, spin, stand])
   const mesh = (geo: BufferGeometry, m: Material, shadow = true) => <mesh geometry={geo} material={m} castShadow={shadow} receiveShadow />
   return (
     <group>
@@ -484,19 +508,19 @@ export function Glider({ steer = 0, spin = 0, stand = 1 }: { steer?: number; spi
       {/* the footboards; the kickstand (down, or folded up along the rail) */}
       {mesh(g.boards, M.metal)}
       {mesh(g.treads, M.rubber)}
-      <group position={[KICKSTAND.pivot[0], KICKSTAND.pivot[1], -42]} rotation={[-(1 - stand) * 0.2, 0, -(1 - stand) * 1.45]}>
+      <group ref={kick} position={[KICKSTAND.pivot[0], KICKSTAND.pivot[1], -42]} rotation={[-(1 - stand) * 0.2, 0, -(1 - stand) * 1.45]} userData={{ live }}>
         <group position={[-KICKSTAND.pivot[0], -KICKSTAND.pivot[1], 42]}>
           {mesh(g.kick, M.black)}
           {mesh(g.kickFoot, M.black)}
         </group>
       </group>
       {/* the rear wheel */}
-      <Wheel g={g.wheels[0]} at={V(AXLE.rear)} spin={spin} />
+      <Wheel g={g.wheels[0]} at={V(AXLE.rear)} spin={spin} wref={rear} live={live} />
       {/* the front: fork, wheel, fender, stem, bar, basket, cables, turned together */}
-      <Steered angle={steer}>
+      <Steered angle={steer} turn={turn} live={live}>
         {mesh(g.fork, M.green)}
         {mesh(g.forkCrown, M.green)}
-        <Wheel g={g.wheels[1]} at={V(AXLE.front)} spin={spin * 1} />
+        <Wheel g={g.wheels[1]} at={V(AXLE.front)} spin={spin * 1} wref={front} />
         {mesh(g.frontFender, M.black)}
         {mesh(g.stem, M.green)}
         {mesh(g.bars, M.green)}
