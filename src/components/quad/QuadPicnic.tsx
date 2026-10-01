@@ -30,6 +30,8 @@ import { Static } from '../../lib/render/Static'
 
 /** the sparrows and the butterflies: off for now (flip on to bring them back) */
 const CRITTERS = false
+/** the ducks: off for now too (the bread still tears and flies, it just lies there) */
+const DUCKS = false
 
 /**
  * The picnic on the Quad (../picnic), on the open lawn inside the V: the gingham blanket laid on the grass
@@ -270,7 +272,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       <Spread car={car} />
       {/* the bread thrown, and the ducks */}
       <Feed scale={K} />
-      <Ducks scale={K} home={DUCK_HOME} ground={ground} avoid={() => DUCK_AVOID} offLimits={(x, z) => onCloth(x, z, 120) || onWalk(x, z, 30)} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />
+      {DUCKS && <Ducks scale={K} home={DUCK_HOME} ground={ground} avoid={() => DUCK_AVOID} offLimits={(x, z) => onCloth(x, z, 120) || onWalk(x, z, 30)} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />}
       {CRITTERS && <Sparrows scale={K} perches={SPARROW_PERCHES} near={SPARROW_NEAR} ground={ground} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />}
       <Prompts items={[prompt]} far={9000} />
     </>
