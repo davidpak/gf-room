@@ -1,0 +1,81 @@
+/* the paint box (./PaintBox): over the scene at the bottom, while you're at the easel */
+.paintbox {
+  position: fixed;
+  left: 50%;
+  bottom: 64px;
+  transform: translate(-50%, 12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 24px rgba(70, 50, 80, 0.18);
+  font: 700 18px 'Gaegu', 'Nunito', cursive;
+  color: #5a4d5c;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+  z-index: 15;
+}
+.paintbox.on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.paintbox-paints,
+.paintbox-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.paintbox button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  cursor: pointer;
+}
+.paintbox-dab {
+  width: 26px;
+  height: 22px;
+  border-radius: 50% 46% 52% 44%;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.12);
+  transition: transform 0.15s;
+}
+.paintbox-dab:hover {
+  transform: scale(1.12);
+}
+.paintbox-dab.on {
+  transform: scale(1.18) translateY(-3px);
+  outline: 3px solid #fff;
+  box-shadow: 0 0 0 5px #e7839f;
+}
+.paintbox-size {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #f6eef2;
+  display: grid;
+  place-items: center;
+}
+.paintbox-size.on {
+  background: #f3d6e0;
+}
+.paintbox-size span {
+  border-radius: 50%;
+  display: block;
+}
+.paintbox-btn {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #f6eef2;
+}
+.paintbox-btn:hover {
+  background: #f3d6e0;
+}
+.paintbox-btn.warn {
+  background: #f7c7c0;
+}
