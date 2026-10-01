@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { type ThreeEvent } from '@react-three/fiber'
 import { CuboidCollider, useBeforePhysicsStep } from '@react-three/rapier'
 import { Euler, Quaternion, Vector3 } from 'three'
 import { Glider, type LimeRig } from '../lime/Glider'
@@ -13,7 +13,7 @@ import { getRide, hopOff, hopOn, useRide } from './ride'
 import { getLook, useLook as useLookNow } from './look'
 import { onReset } from './reset'
 import { stepTime } from '../../lib/physics/World'
-import { motor, park, unlock } from '../../lib/sound/lime'
+import { park, unlock } from '../../lib/sound/lime'
 import { Static } from '../../lib/render/Static'
 
 /**
@@ -119,7 +119,6 @@ function Lime({ kind, id, at, car, obstacles }: { kind: Kind; id: string; at: { 
         drive.current = null
         g.steer = 0
         g.stand = 1
-        motor(0)
         park()
       }
       return
@@ -202,12 +201,6 @@ function Lime({ kind, id, at, car, obstacles }: { kind: Kind; id: string; at: { 
     pose.q.setFromEuler(_e.set(st.lean, r.heading - Math.PI / 2, st.pitch, 'YZX'))
     drive.current = pose
   })
-  // the motor's whine, with the speed
-  useFrame(() => {
-    const r = getRide()
-    if (r && r.id === id) motor(Math.abs(r.v) / spec.max)
-  })
-
   const pointer = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
     document.body.style.cursor = riding ? '' : 'pointer'
