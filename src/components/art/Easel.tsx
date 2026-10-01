@@ -161,6 +161,12 @@ function Brush({ tip, handle, at, tilt }: { tip: Material; handle: Material; at:
     </group>
   )
 }
+/** a brush on its own (its handle's foot at the origin, along +y to its tip): one of the jar's colours */
+export function LooseBrush({ i = 0 }: { i?: number }) {
+  const tip = useMemo(() => bruno({ color: PAINTS[[2, 7, 4, 9, 0, 3][i % 6]].hex }), [i])
+  return <Brush tip={tip} handle={HANDLES[i % HANDLES.length]} at={[0, 0, 0]} tilt={[0, 0, 0]} />
+}
+
 /** the jar: turned from its section, a real wall (thick, glazed, the rim rounded over), a floor inside, darker within */
 const GLAZE_IN = bruno({ color: '#7f9fbd', shade: '#4d5a7a', side: DoubleSide })
 export function BrushJar() {

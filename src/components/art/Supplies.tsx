@@ -3,6 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { BackSide, BoxGeometry, BufferAttribute, BufferGeometry, CatmullRomCurve3, CircleGeometry, CylinderGeometry, DoubleSide, Group, LatheGeometry, PlaneGeometry, SphereGeometry, TorusGeometry, TubeGeometry, Vector2, Vector3, type Material } from 'three'
 import { bruno } from '../quad/bruno'
 import { paint, rng } from '../picnic/paint'
+import { LooseBrush } from './Easel'
 import { CRANE, HOOP, PENCIL_COLORS, PENCILS, POT, SKETCHBOOK, WATERCOLOR } from './spec'
 
 /**
@@ -320,16 +321,29 @@ export function Watercolors() {
   )
 }
 const DISC = new CircleGeometry(1, 20)
-/** the water cup: a little yellow cup of cloudy water */
-const CUP = bruno({ color: '#f2cf6a', shade: '#9a7a62' })
-const WATER = bruno({ color: '#b6b3c8', shade: '#7d7a96', sheen: 0.4 })
+/** the water cup: a little yellow ceramic cup (turned from its section: a real wall, the rim rounded over, a floor
+ *  inside), cloudy rinse water in it, a brush left standing in it tip down, its handle resting on the rim */
+const CUP = bruno({ color: '#f2cf6a', shade: '#9a7a62', side: DoubleSide })
+const CUP_IN = bruno({ color: '#e3b94e', shade: '#8a6a52', side: DoubleSide })
+const WATER = bruno({ color: '#b9b2c9', shade: '#7d7a96', sheen: 0.4 })
+const CUPS = { top: 34, foot: 28, h: 62, wall: 4.5, water: 44 }
 export function WaterCup() {
-  const geo = useMemo(() => new CylinderGeometry(34, 28, 62, 28, 1, true), [])
+  const { top, foot, h, wall, water } = CUPS
+  const geo = useMemo(() => {
+    const outer = [new Vector2(0, 0), new Vector2(foot - 3, 0), new Vector2(foot, 3), new Vector2(top, h - 2.5), new Vector2(top - wall * 0.2, h - 0.4), new Vector2(top - wall * 0.5, h)]
+    const inner = [new Vector2(top - wall * 0.8, h - 0.4), new Vector2(top - wall, h - 2.5), new Vector2(foot - wall, wall + 3), new Vector2(foot - wall - 3, wall), new Vector2(0, wall)]
+    return { out: new LatheGeometry(outer, 40), in: new LatheGeometry(inner, 40) }
+  }, [top, foot, h, wall])
+  const inner = foot - wall + ((top - foot) * water) / h // (the water's edge: the inside's radius at that height)
   return (
     <group>
-      <mesh geometry={geo} material={CUP} position={[0, 31, 0]} castShadow receiveShadow />
-      <mesh geometry={DISC} material={CUP} position={[0, 1, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[28, 28, 1]} />
-      <mesh geometry={DISC} material={WATER} position={[0, 48, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[32, 32, 1]} />
+      <mesh geometry={geo.out} material={CUP} castShadow receiveShadow />
+      <mesh geometry={geo.in} material={CUP_IN} receiveShadow />
+      <mesh geometry={DISC} material={WATER} position={[0, water, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[inner, inner, 1]} />
+      {/* the brush, tip down in the water, its handle out over the rim */}
+      <group position={[128, 172, 0]} rotation={[0, 0, Math.PI - 0.74]}>
+        <LooseBrush i={2} />
+      </group>
     </group>
   )
 }
