@@ -68,6 +68,9 @@ export const SET = {
   },
   // the picnic (./QuadPicnic): a gingham blanket on the open lawn inside the V, south of the photo shoot
   picnic: { x: -950, z: -100, rot: 0.25 },
+  // Lime's rentals (./QuadLime), left the way they are: two Gliders on the cross walk's north edge, east of the V,
+  // nosed out onto the walk
+  lime: { gliders: [{ x: 520, z: 1690, rot: -Math.PI / 2 + 0.08 }, { x: 700, z: 1700, rot: -Math.PI / 2 - 0.12 }] },
   // the cookie stand (./CookieStand): a canopy over a table in the corner of the big lawn east of the V, facing out front
   cookies: { x: 3230, z: 1120, rot: 0, sign: { x: 2760, z: 1150, rot: 0.3 } }, // (in the lawn's corner by the walks; its sign just off its left, its arrow toward it)
   // the building along the north edge (cut off where the island ends), its wing stepping out; the
