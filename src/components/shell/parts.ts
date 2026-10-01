@@ -29,7 +29,7 @@ export const PARTS = {
   picnic: { title: 'A picnic', hint: 'click the basket to look in · click what’s in it to lift it out · &show=food or &show=ducks · drag to look round · scroll to zoom', stage: page(() => import('../picnic/PicnicStage'), 'PicnicStage') },
   glider: { title: 'LimeGlider', hint: 'drag to look round · scroll to zoom · &steer=0.4 turns its bars · &stand=0 folds its kickstand', stage: page(() => import('../lime/GliderStage'), 'GliderStage') },
   scooter: { title: 'Lime Gen4 scooter', hint: 'drag to look round · scroll to zoom · &steer=0.4 turns its bars · &battery=0.3 (or 0.1) for a yellow (or red) lime', stage: page(() => import('../lime/GliderStage'), 'ScooterStage') },
-  easel: { title: 'The art corner', hint: 'pick a paint and a brush below · press and drag on the canvas to paint · drag elsewhere to look round · scroll to zoom', stage: page(() => import('../art/ArtStage'), 'ArtStage') },
+  easel: { title: 'The art corner', hint: 'pick a paint and a brush below · press and drag on the canvas to paint · click the sketchbook’s pages to turn them · drag elsewhere to look round · scroll to zoom', stage: page(() => import('../art/ArtStage'), 'ArtStage') },
   prompt: { title: 'Fix-it prompts', hint: 'click a prompt · carry a block away and its prompt comes back when it settles · press the wheel and drag to look', stage: page(() => import('../prompt/PromptStage'), 'PromptStage') },
 } satisfies Record<string, Part>
 export type PartKey = keyof typeof PARTS

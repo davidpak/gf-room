@@ -43,3 +43,23 @@ export const PAINTS = [
   { name: 'lavender', hex: '#b9a0e2' },
   { name: 'bark', hex: '#8a5a44' },
 ]
+
+// ---- the art blanket and what's on it (real mm; its frame: x across, z along, y up, its middle at the origin)
+const IN = 25.4
+/** [B] a woven cotton throw, 50 × 60", stripes along its length, a knotted fringe at each end */
+export const THROW = { w: 50 * IN, l: 60 * IN, t: 3, fringe: 60 }
+/** [K] a spiral-bound sketchbook, 9 × 12" pages (opened flat: 18 × 12"), a kraft back board */
+export const SKETCHBOOK = { w: 9 * IN, h: 12 * IN, board: 2, leaves: 6, rings: 22, ring: 7 }
+/** [P] a tin of 12 coloured pencils (~190 × 90 × 12), the pencils 7 across, 175 long, sharpened */
+export const PENCILS = { tin: { w: 190, d: 92, h: 12 }, r: 3.6, len: 175 }
+/** [W] a travel watercolour box, 12 half pans (16 × 19), its lid opening out flat as a mixing palette */
+export const WATERCOLOR = { w: 118, d: 62, h: 14, pan: { w: 16, d: 19, h: 9 } }
+/** [H] a 6" beech embroidery hoop, its brass clasp; the linen in it */
+export const HOOP = { r: 76, ring: 9, h: 10 }
+/** [O] an origami crane folded from a 6" square: ~ 150 across the wings, 110 nose to tail */
+export const CRANE = { span: 150, len: 110, h: 60 }
+/** [U] an echeveria in a 3" terracotta pot */
+export const POT = { r: 40, h: 68, rim: 10 }
+
+/** the pencils' colours, the watercolours' (the paints, and a few more) */
+export const PENCIL_COLORS = ['#e2574c', '#f08a4b', '#f4c84a', '#9ccf5f', '#3f9a5c', '#4bb4c9', '#3b6fc4', '#7b5cc4', '#e57fb0', '#8a5a44', '#6b6b6b', '#2f2a3a']
