@@ -24,7 +24,7 @@ export const EASEL = {
 export const CANVAS = { w: 406, h: 508, d: 20, bar: 20 } // [C] (bar: the stretcher bars' width, seen from behind)
 export const STOOL = { h: 450, seat: 150, t: 28, leg: 22, splay: 190 } // [S] (seat: its radius; splay: how far out its feet stand)
 export const PALETTE = { w: 400, d: 300, t: 5, hole: 24 } // [P]
-export const JAR = { r: 45, h: 120, wall: 3 } // [J]
+export const JAR = { r: 45, h: 120, wall: 6 } // [J] (a glazed stoneware jar: its wall ~6 thick)
 export const BRUSH = { len: 220, handle: 5, ferrule: 6 } // [J]
 export const TUBE = { r: 11, len: 95, cap: 14 } // [T]
 

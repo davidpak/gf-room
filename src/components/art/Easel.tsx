@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
 import { useThree, type ThreeEvent } from '@react-three/fiber'
-import { BoxGeometry, CylinderGeometry, ExtrudeGeometry, Path, Quaternion, Shape, SphereGeometry, Vector3, type Material } from 'three'
+import { BoxGeometry, CylinderGeometry, DoubleSide, ExtrudeGeometry, LatheGeometry, Path, Quaternion, Shape, SphereGeometry, Vector2, Vector3, type Material } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from '../quad/bruno'
 import { painting } from './painting'
@@ -20,7 +20,7 @@ const WOOD = bruno({ color: '#d9b48a', shade: '#8a6a5a' })
 const WOOD_DARK = bruno({ color: '#b98d62', shade: '#6e5048' })
 const WRAP = bruno({ color: '#f3ece0', shade: '#a99aa8' }) // (the canvas round its edges, and its back)
 const METAL = bruno({ color: '#c9c6cf', shade: '#77738a' })
-const GLAZE = bruno({ color: '#a9cbe0', shade: '#6d7c9e', sheen: 0.3 })
+const GLAZE = bruno({ color: '#a9cbe0', shade: '#6d7c9e', sheen: 0.3, side: DoubleSide })
 const RBOX = new RoundedBoxGeometry(1, 1, 1, 2, 0.18)
 const UP = new Vector3(0, 1, 0)
 
@@ -161,17 +161,26 @@ function Brush({ tip, handle, at, tilt }: { tip: Material; handle: Material; at:
     </group>
   )
 }
+/** the jar: turned from its section, a real wall (thick, glazed, the rim rounded over), a floor inside, darker within */
+const GLAZE_IN = bruno({ color: '#7f9fbd', shade: '#4d5a7a', side: DoubleSide })
 export function BrushJar() {
-  const jar = useMemo(() => new CylinderGeometry(JAR.r, JAR.r * 0.92, JAR.h, 36, 1, true), [])
-  const base = useMemo(() => new CylinderGeometry(JAR.r * 0.92, JAR.r * 0.92, 6, 36), [])
+  const { r, h, wall } = JAR
+  const geo = useMemo(() => {
+    const o = r * 0.93 // (a little narrower at its foot)
+    const outer = [new Vector2(0, 0), new Vector2(o - 3, 0), new Vector2(o, 3), new Vector2(r, h - 3), new Vector2(r - wall * 0.15, h - 0.6), new Vector2(r - wall * 0.5, h)]
+    const inner = [new Vector2(r - wall * 0.85, h - 0.6), new Vector2(r - wall, h - 3), new Vector2(o - wall, wall + 3), new Vector2(o - wall - 3, wall), new Vector2(0, wall)]
+    return { out: new LatheGeometry(outer, 48), in: new LatheGeometry(inner, 48) }
+  }, [r, h, wall])
   const tips = useMemo(() => [2, 7, 4, 9, 0, 3].map((i) => bruno({ color: PAINTS[i].hex })), [])
   return (
     <group>
-      <mesh geometry={jar} material={GLAZE} position={[0, JAR.h / 2, 0]} castShadow receiveShadow />
-      <mesh geometry={base} material={GLAZE} position={[0, 3, 0]} />
+      <mesh geometry={geo.out} material={GLAZE} castShadow receiveShadow />
+      <mesh geometry={geo.in} material={GLAZE_IN} receiveShadow />
+      {/* the brushes stood in it, their feet near the middle, leaning out to rest on the rim (inside it, not through it) */}
       {tips.map((t, i) => {
-        const a = (i / tips.length) * Math.PI * 2
-        return <Brush key={i} tip={t} handle={HANDLES[i % HANDLES.length]} at={[Math.cos(a) * 18, 10, Math.sin(a) * 18]} tilt={[Math.sin(a) * 0.22, 0, -Math.cos(a) * 0.22]} />
+        const a = (i / tips.length) * Math.PI * 2 + 0.3
+        const lean = 0.17 + (i % 3) * 0.025
+        return <Brush key={i} tip={t} handle={HANDLES[i % HANDLES.length]} at={[Math.cos(a) * 7, wall, Math.sin(a) * 7]} tilt={[Math.sin(a) * lean, 0, -Math.cos(a) * lean]} />
       })}
     </group>
   )
