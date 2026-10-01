@@ -25,4 +25,18 @@ export const LAYOUT = {
     [-240, -60, 0.4],
     [-120, -170, 0.25],
   ] as [number, number, number][],
+  // the spread: the grazing board across the middle, the bowl of fruit by the open book, the lemonade (pitcher,
+  // two mugs, lemons) toward the near right, the jar of wildflowers by the books
+  board: { x: 180, z: -120, rot: 0.3 },
+  bowl: { x: -330, z: 120, rot: 0 },
+  pitcher: { x: 520, z: -430, rot: 2.6 },
+  mugs: [
+    { x: 385, z: -610, rot: 2.1 },
+    { x: 630, z: -230, rot: 3.6 },
+  ],
+  lemons: [
+    { x: 250, z: -530, rot: 0.6 },
+    { x: -60, z: -480, rot: 2.0 },
+  ],
+  flowers: { x: 560, z: 70, rot: 0 },
 }

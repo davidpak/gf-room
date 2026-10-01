@@ -105,6 +105,8 @@ export function CarBody({ state, shape }: { state: { current: CarState }; shape:
  *  than the car driving through it */
 type Feel = { body: { current: RapierRigidBody | null }; pts: [number, number][]; r: number }
 const feel = new Map<string, Feel>()
+/** a loose thing's body, by its id (where it is now: the lemonade pours into a glass wherever it's been put) */
+export const liveBody = (id: string) => feel.get(id)?.body.current ?? null
 const _p = new Vector3()
 const _q = new Quaternion()
 export function propObstacles(): Obstacle[] {

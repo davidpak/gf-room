@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { CuboidCollider, RigidBody } from '@react-three/rapier'
+import { BallCollider, CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier'
 import { Euler, Matrix4, Quaternion, Vector3, type Group } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
 import { Prompts, type PromptItem } from '../prompt/Prompts'
@@ -14,9 +14,13 @@ import { nearestBerry } from '../picnic/Strawberries'
 import { feed, tear, throwBread, WHOLE } from '../picnic/feed'
 import { Feed } from '../picnic/Toss'
 import { Ducks, ducksAt } from '../ducks/Ducks'
+import { Board, BOARD } from '../picnic/Board'
+import { FruitBowl, BOWL } from '../picnic/FruitBowl'
+import { Lemon, LEMON, Mug, MUG, Pitcher, PITCHER } from '../picnic/Lemonade'
+import { Butterflies, Flowers, VASE } from '../picnic/Flowers'
 import { LAYOUT } from '../picnic/layout'
 import { BASKET, BLANKET, BOOKS } from '../picnic/spec'
-import { LiveProp, setPrompt } from './Physical'
+import { liveBody, LiveProp, setPrompt } from './Physical'
 import { clickSpot, frameAround, useLook, type Spot } from './look'
 import { onReset } from './reset'
 import { onWalk, SET } from './set'
@@ -34,6 +38,10 @@ import type { CarState } from './Car'
  *   the baguette out on the blanket: click it and a piece is torn off the end you clicked nearer and thrown
  *                to the ducks (crumbs fall where it tore)
  *   the book     click it: the camera goes in; click its right page to turn it, its left to turn back
+ *
+ *   the spread   (./Spread, below) the grazing board and the bowl of fruit: click anything on them to eat it;
+ *                the lemonade: click the pitcher and it's lifted and poured into the emptier mug, click a
+ *                mug to drink some; the lemons roll; the jar of wildflowers has two butterflies about it
  *
  * And a family of mallards (../ducks) about the lawn south of it, who come for the bread.
  *
@@ -70,6 +78,11 @@ const DUCK_AVOID = [
   { ...place(LAYOUT.basket.x, 0, LAYOUT.basket.z), r: 0.55 * BASKET.l * K },
   { ...place(LAYOUT.stack[0].x, 0, LAYOUT.stack[0].z), r: 0.55 * BOOKS[1].h * K },
   { ...place(LAYOUT.open.x, 0, LAYOUT.open.z), r: 0.5 * OPEN_BOOK.w * K },
+  { ...place(LAYOUT.board.x, 0, LAYOUT.board.z), r: BOARD.r * K },
+  { ...place(LAYOUT.bowl.x, 0, LAYOUT.bowl.z), r: BOWL.r * K },
+  { ...place(LAYOUT.pitcher.x, 0, LAYOUT.pitcher.z), r: PITCHER.r * K * 1.3 },
+  ...LAYOUT.mugs.map((m) => ({ ...place(m.x, 0, m.z), r: MUG.r * K * 1.3 })),
+  { ...place(LAYOUT.flowers.x, 0, LAYOUT.flowers.z), r: VASE.r * K * 2 },
 ].map((p) => ({ x: p.x, z: p.z, r: p.r }))
 /** the close looks: down into the basket from over its front, its handles either side; down on the open book */
 const BASKET_ROT = AT.rot + LAYOUT.basket.rot
@@ -167,6 +180,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
     setTaken((t) => [...t, { id: f.id, food: f.food, p: [p.x, p.y, p.z], r: new Euler().setFromQuaternion(q).toArray().slice(0, 3) as [number, number, number] }])
   }
   const refill = () => {
+    spreadReset.forEach((f) => f())
     setPresent(CONTENTS.map(() => true))
     setFlights([])
     setTaken([])
@@ -181,7 +195,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
   const prompt: PromptItem = useMemo(
     () => ({
       ...base,
-      when: () => base.when() || outRef.current > 0,
+      when: () => base.when() || outRef.current > 0 || spreadTouched.current,
       run: () => {
         base.run()
         refill()
@@ -236,10 +250,165 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
           <FoodCollider f={t.food} state={food[t.food.key]} k={K} />
         </Holdable>
       ))}
+      <Spread car={car} />
       {/* the bread thrown, and the ducks */}
       <Feed scale={K} />
       <Ducks scale={K} home={DUCK_HOME} ground={ground} avoid={() => DUCK_AVOID} offLimits={(x, z) => onCloth(x, z, 120) || onWalk(x, z, 30)} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />
       <Prompts items={[prompt]} far={9000} />
+    </>
+  )
+}
+
+// ---- the spread on the blanket
+const spreadReset = new Set<() => void>()
+const spreadTouched = { current: false }
+const MUG_START = [0.8, 0.45]
+/** the pitcher's spout, in its own frame (real mm) */
+const SPOUT = new Vector3(-PITCHER.neck + 4, PITCHER.h + PITCHER.band + 6, 0)
+const _v = new Vector3()
+const _q = new Quaternion()
+function Spread({ car }: { car: { current: CarState } }) {
+  const [eaten, setEaten] = useState<Record<string, Set<number>>>({})
+  const levels = useMemo(() => MUG_START.map((l) => ({ current: l })), [])
+  const want = useMemo(() => MUG_START.map((l) => ({ current: l })), [])
+  // the pitcher, up and pouring: where it's held (world), into which mug, how far through
+  const pose = useRef<{ p: Vector3; q: Quaternion } | null>(null)
+  const pour = useRef<{ mug: number; t: number } | null>(null)
+  const stream = useRef<Group>(null)
+  useEffect(() => {
+    const reset = () => {
+      setEaten({})
+      MUG_START.forEach((l, i) => ((levels[i].current = l), (want[i].current = l)))
+      pose.current = null
+      pour.current = null
+      spreadTouched.current = false
+    }
+    spreadReset.add(reset)
+    return () => void spreadReset.delete(reset)
+  }, [levels, want])
+  const eat = (key: string) => (i: number) => {
+    spreadTouched.current = true
+    setEaten((all) => ({ ...all, [key]: new Set([...(all[key] ?? []), i]) }))
+  }
+  const pourOut = () => {
+    if (pour.current) return
+    const mug = levels[0].current <= levels[1].current ? 0 : 1
+    if (levels[mug].current > 0.85) return
+    pour.current = { mug, t: 0 }
+    spreadTouched.current = true
+  }
+  const sip = (i: number) => {
+    want[i].current = Math.max(0, want[i].current - 0.25)
+    spreadTouched.current = true
+  }
+  useFrame((_, raw) => {
+    const dt = Math.max(0, Math.min(0.05, raw))
+    // the mugs' lemonade going down as it's drunk (and up as it's poured)
+    levels.forEach((l, i) => (l.current += (want[i].current - l.current) * Math.min(1, dt * 3)))
+    const P = pour.current
+    const s = stream.current
+    if (!P) {
+      if (s) s.visible = false
+      return
+    }
+    P.t += dt
+    const mb = liveBody('picnicmug' + P.mug)
+    const pb = liveBody('picnicpitcher')
+    if (!mb || !pb) return (pour.current = null)
+    // held over the mug from the side it's on, tipped toward it, its spout over the mug's mouth
+    const m = mb.translation()
+    const pp = pb.translation()
+    const d = _v.set(m.x - pp.x, 0, m.z - pp.z)
+    if (P.t < 0.05 || !pose.current) {
+      if (d.lengthSq() < 1e-6) d.set(1, 0, 0)
+      d.normalize()
+      const yaw = Math.atan2(d.z, -d.x)
+      const q = new Quaternion().setFromAxisAngle(up, yaw).multiply(new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), 1.05))
+      const spout = SPOUT.clone().multiplyScalar(K).applyQuaternion(q)
+      const p = new Vector3(m.x, m.y + (MUG.h + 34) * K, m.z).sub(spout)
+      pose.current = { p, q }
+    }
+    // pouring once it's there: the stream from its spout down into the mug, the mug filling
+    const pouring = P.t > 0.7 && P.t < 2.3
+    if (pouring) want[P.mug].current = Math.min(0.92, want[P.mug].current + dt * 0.45)
+    if (s) {
+      s.visible = pouring
+      if (pouring) {
+        const r = pb.rotation()
+        const top = SPOUT.clone().multiplyScalar(K).applyQuaternion(_q.set(r.x, r.y, r.z, r.w)).add(new Vector3(pp.x, pp.y, pp.z))
+        const bottom = new Vector3(m.x, m.y + (8 + levels[P.mug].current * MUG.h * 0.72) * K, m.z)
+        s.position.copy(top).lerp(bottom, 0.5)
+        s.scale.set(1, Math.max(0.1, top.distanceTo(bottom)), 1)
+        s.quaternion.setFromUnitVectors(up, top.clone().sub(bottom).normalize())
+      }
+    }
+    if (P.t > 2.6) {
+      pose.current = null
+      pour.current = null
+    }
+  })
+  const pointer = (e: ThreeEvent<PointerEvent>) => (e.stopPropagation(), (document.body.style.cursor = 'pointer'))
+  const unpointer = () => (document.body.style.cursor = '')
+  const at = (p: { x: number; z: number; rot: number }, lift = 0) => home(p.x, LAYOUT.y + lift, p.z, p.rot)
+  if (import.meta.env.DEV) Object.assign(window, { __spread: { pour: pourOut, sip, eat: (k: string, i: number) => eat(k)(i) } }) // (for trying it from the console)
+  return (
+    <>
+      <LiveProp id="picnicboard" label="" set="picnic" at={at(LAYOUT.board)} car={car} lift={0} feelAlong={[-0.5 * BOARD.r * K, 0.5 * BOARD.r * K]} feelR={BOARD.r * K * 0.6}>
+        <group scale={K}>
+          <Board eaten={eaten.board} onEat={eat('board')} />
+        </group>
+        <CylinderCollider args={[(BOARD.t / 2) * K, BOARD.r * K]} position={[0, (BOARD.t / 2) * K, 0]} mass={0.3} friction={0.9} />
+      </LiveProp>
+      <LiveProp id="picnicbowl" label="" set="picnic" at={at(LAYOUT.bowl)} car={car} lift={0} feelR={BOWL.r * K}>
+        <group scale={K}>
+          <FruitBowl eaten={eaten.bowl} onEat={eat('bowl')} />
+        </group>
+        <CylinderCollider args={[(BOWL.h / 2) * K, BOWL.r * K]} position={[0, (BOWL.h / 2) * K, 0]} mass={0.2} friction={0.9} />
+      </LiveProp>
+      <LiveProp id="picnicpitcher" label="" set="picnic" at={at(LAYOUT.pitcher)} car={car} lift={0} feelR={PITCHER.r * K} pose={pose}>
+        <group scale={K} onClick={(e) => (e.stopPropagation(), pourOut())} onPointerOver={pointer} onPointerOut={unpointer}>
+          <Pitcher />
+        </group>
+        <CylinderCollider args={[((PITCHER.h + PITCHER.band) / 2) * K, PITCHER.r * K]} position={[0, ((PITCHER.h + PITCHER.band) / 2) * K, 0]} mass={0.5} friction={0.8} />
+      </LiveProp>
+      {LAYOUT.mugs.map((m, i) => (
+        <LiveProp key={i} id={`picnicmug${i}`} label="" set="picnic" at={at(m)} car={car} lift={0} feelR={MUG.r * K}>
+          <group scale={K} onClick={(e) => (e.stopPropagation(), sip(i))} onPointerOver={pointer} onPointerOut={unpointer}>
+            <Mug level={levels[i]} />
+          </group>
+          <CylinderCollider args={[(MUG.h / 2) * K, MUG.r * K]} position={[0, (MUG.h / 2) * K, 0]} mass={0.15} friction={0.8} />
+        </LiveProp>
+      ))}
+      {LAYOUT.lemons.map((m, i) => (
+        <LiveProp key={i} id={`picniclemon${i}`} label="" set="picnic" at={at(m)} car={car} lift={0} feelR={(LEMON.l / 2) * K}>
+          <group scale={K}>
+            <Lemon />
+          </group>
+          <BallCollider args={[(LEMON.w / 2) * K]} position={[0, (LEMON.w / 2) * K, 0]} mass={0.05} friction={0.6} />
+        </LiveProp>
+      ))}
+      <LiveProp id="picnicflowers" label="" set="picnic" at={at(LAYOUT.flowers)} car={car} lift={0} feelR={VASE.r * K * 1.5}>
+        <group scale={K}>
+          <Flowers />
+        </group>
+        <CylinderCollider args={[(VASE.h / 2) * K, VASE.r * K]} position={[0, (VASE.h / 2) * K, 0]} mass={0.1} friction={0.8} />
+      </LiveProp>
+      <Butterflies
+        at={() => {
+          const b = liveBody('picnicflowers')
+          if (!b) return null
+          const t = b.translation()
+          return new Vector3(t.x, t.y, t.z)
+        }}
+        scale={K}
+      />
+      {/* the lemonade poured, a thin stream from the spout */}
+      <group ref={stream} visible={false}>
+        <mesh>
+          <cylinderGeometry args={[0.9, 0.7, 1, 8]} />
+          <meshBasicMaterial color="#f6e7a4" transparent opacity={0.85} />
+        </mesh>
+      </group>
     </>
   )
 }

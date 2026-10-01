@@ -91,6 +91,11 @@ const FLAT: [number, number, number][] = [
   [LAYOUT.basket.x, LAYOUT.basket.z, 190],
   [LAYOUT.stack[0].x, LAYOUT.stack[0].z, 110],
   [LAYOUT.open.x, LAYOUT.open.z, 180],
+  [LAYOUT.board.x, LAYOUT.board.z, 215],
+  [LAYOUT.bowl.x, LAYOUT.bowl.z, 60],
+  [LAYOUT.pitcher.x, LAYOUT.pitcher.z, 70],
+  ...LAYOUT.mugs.map((m): [number, number, number] => [m.x, m.z, 50]),
+  [LAYOUT.flowers.x, LAYOUT.flowers.z, 45],
 ]
 function height(x: number, z: number) {
   let y = T / 2 + 3 + 3 * Math.sin(x * 0.0045 + 0.7) * Math.sin(z * 0.0032 + 1.9) + 1.4 * Math.sin(x * 0.011 + z * 0.007)

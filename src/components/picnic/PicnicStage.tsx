@@ -8,6 +8,10 @@ import { Blanket } from './Blanket'
 import { ClosedBook, OpenBook } from './Books'
 import { Flights, type Flight } from './Flight'
 import { FoodModel } from './food'
+import { Board } from './Board'
+import { FruitBowl } from './FruitBowl'
+import { Lemon, Mug, Pitcher } from './Lemonade'
+import { Butterflies, Flowers } from './Flowers'
 import { LAYOUT } from './layout'
 import { Sub } from './Sub'
 import { Grapes } from './Grapes'
@@ -94,6 +98,42 @@ function DuckShow() {
   )
 }
 
+/** the spread on the blanket: the board, the fruit, the lemonade, the flowers (and their butterflies) */
+const FLOWERS_AT = new Vector3(LAYOUT.flowers.x, LAYOUT.y, LAYOUT.flowers.z)
+function Spread() {
+  const [eaten, setEaten] = useState<Record<string, Set<number>>>({})
+  const eat = (key: string) => (i: number) => setEaten((all) => ({ ...all, [key]: new Set([...(all[key] ?? []), i]) }))
+  const levels = useMemo(() => [{ current: 0.8 }, { current: 0.45 }], [])
+  const at = (p: { x: number; z: number; rot: number }) => ({ position: [p.x, LAYOUT.y, p.z] as [number, number, number], rotation: [0, p.rot, 0] as [number, number, number] })
+  return (
+    <>
+      <group {...at(LAYOUT.board)}>
+        <Board eaten={eaten.board} onEat={eat('board')} />
+      </group>
+      <group {...at(LAYOUT.bowl)}>
+        <FruitBowl eaten={eaten.bowl} onEat={eat('bowl')} />
+      </group>
+      <group {...at(LAYOUT.pitcher)}>
+        <Pitcher />
+      </group>
+      {LAYOUT.mugs.map((m, i) => (
+        <group key={i} {...at(m)} onClick={(e) => (e.stopPropagation(), (levels[i].current = Math.max(0, levels[i].current - 0.25)))}>
+          <Mug level={levels[i]} />
+        </group>
+      ))}
+      {LAYOUT.lemons.map((m, i) => (
+        <group key={i} {...at(m)}>
+          <Lemon />
+        </group>
+      ))}
+      <group {...at(LAYOUT.flowers)}>
+        <Flowers />
+      </group>
+      <Butterflies at={() => FLOWERS_AT} scale={1} />
+    </>
+  )
+}
+
 function Scene() {
   const get = useThree((s) => s.get)
   if (import.meta.env.DEV) Object.assign(window, { __r3f: get }) // (for screenshots from the console)
@@ -155,6 +195,7 @@ function Scene() {
           <ClosedBook k={b.k} />
         </group>
       ))}
+      {!SHOW && <Spread />}
       {!SHOW && (
         <group position={[LAYOUT.open.x, LAYOUT.y, LAYOUT.open.z]} rotation={[0, LAYOUT.open.rot, 0]}>
           <OpenBook />

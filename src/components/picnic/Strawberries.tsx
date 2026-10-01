@@ -52,11 +52,11 @@ const seedTex = paint(128, 128, (g) => {
   g.fillStyle = gr
   g.fillRect(0, 0, 128, 128)
 })
-const BERRY = bruno({ map: seedTex ?? undefined, color: '#ffffff', shade: '#8a2f4f', sheen: 0.5 })
-const LEAF = bruno({ color: '#5aa043', shade: '#3c6a50', side: DoubleSide })
+export const BERRY = bruno({ map: seedTex ?? undefined, color: '#ffffff', shade: '#8a2f4f', sheen: 0.5 })
+export const LEAF = bruno({ color: '#5aa043', shade: '#3c6a50', side: DoubleSide })
 
 /** a strawberry: its shoulders full, drawn to a blunt point; standing on its point, its calyx up (y) */
-function berryGeo(len: number, w: number) {
+export function berryGeo(len: number, w: number) {
   const prof: Vector2[] = []
   for (let i = 0; i <= 16; i++) {
     const t = i / 16
@@ -67,7 +67,7 @@ function berryGeo(len: number, w: number) {
   return new LatheGeometry(prof, 20)
 }
 /** its calyx: a star of sepals, flat, curling out and down at their tips */
-function calyxGeo(w: number) {
+export function calyxGeo(w: number) {
   const s = new Shape()
   const n = 7
   for (let i = 0; i <= n * 2; i++) {

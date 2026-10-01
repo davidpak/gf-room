@@ -67,9 +67,9 @@ function build(k: 0 | 1) {
   const twigs = [new TubeGeometry(new CatmullRomCurve3([new Vector3(-14, mid + 9, 4), new Vector3(-17, mid + 4, -6), new Vector3(-15, mid - 2, -12)]), 6, 1.6, 5)]
   return { mats, cols, stalk, twigs }
 }
-const SPHERE = new SphereGeometry(1, 16, 12)
+export const SPHERE = new SphereGeometry(1, 16, 12)
 const STEM = bruno({ color: '#8e7a45', shade: '#5f5550' })
-const SKIN = [0, 1].map((k) => bruno({ color: '#ffffff', shade: GRAPES[k].shade, sheen: 0.35 }))
+export const SKIN = [0, 1].map((k) => bruno({ color: '#ffffff', shade: GRAPES[k].shade, sheen: 0.35 }))
 
 export function Grapes({ k = 0, eaten }: { k?: 0 | 1; eaten?: Set<number> }) {
   const b = useMemo(() => (made[k] ??= build(k)), [k])
