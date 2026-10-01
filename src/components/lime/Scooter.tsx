@@ -137,60 +137,39 @@ const padTex = paint(1024, 256, (g) => {
 const padMat = bruno({ map: padTex ?? undefined, color: '#ffffff', shade: '#18171c' })
 /** the pod's top, as it's seen from the deck (its front up the canvas, its right to the right), for each battery
  *  colour: the black screen (the lime, the status icons), the QR code on its plate at the rider's end */
-const HEAD_TOP = { x0: -70, x1: 46, z: 38 } // (from the steering axis at the bar, mm)
+const HEAD_TOP = { x0: -50, x1: 30, z: 30 } // (from the steering axis at the bar, mm)
 const headTop = (lime: string) =>
   paint(228, 348, (g) => {
     const r = rng(9)
     g.fillStyle = LOOK.green
     g.fillRect(0, 0, 228, 348)
-    // the screen: a black glass oval, round at its front
+    // the screen: a black glass oval, round at its front, the lime on it in the battery's colour
     g.fillStyle = '#121215'
     g.beginPath()
-    g.moveTo(36, 230)
-    g.lineTo(36, 92)
-    g.arc(114, 92, 78, Math.PI, 0)
-    g.lineTo(192, 230)
-    g.quadraticCurveTo(192, 252, 170, 252)
-    g.lineTo(58, 252)
-    g.quadraticCurveTo(36, 252, 36, 230)
+    g.moveTo(40, 226)
+    g.lineTo(40, 112)
+    g.arc(114, 112, 74, Math.PI, 0)
+    g.lineTo(188, 226)
+    g.quadraticCurveTo(188, 248, 166, 248)
+    g.lineTo(62, 248)
+    g.quadraticCurveTo(40, 248, 40, 226)
     g.fill()
     g.fillStyle = 'rgba(255,255,255,0.07)'
-    g.fillRect(44, 60, 40, 180)
-    // the lime: its rind, six segments, in the battery's colour
+    g.fillRect(48, 70, 36, 170)
     g.strokeStyle = lime
     g.fillStyle = lime
-    g.lineWidth = 6
+    g.lineWidth = 8
     g.beginPath()
-    g.arc(90, 100, 38, 0, Math.PI * 2)
+    g.arc(114, 150, 52, 0, Math.PI * 2)
     g.stroke()
     for (let i = 0; i < 6; i++) {
-      const a0 = (i / 6) * Math.PI * 2 + 0.16
-      const a1 = ((i + 1) / 6) * Math.PI * 2 - 0.16
+      const a0 = (i / 6) * Math.PI * 2 + 0.15
+      const a1 = ((i + 1) / 6) * Math.PI * 2 - 0.15
       g.beginPath()
-      g.moveTo(90 + Math.cos((a0 + a1) / 2) * 6, 100 + Math.sin((a0 + a1) / 2) * 6)
-      g.arc(90, 100, 29, a0, a1)
+      g.moveTo(114 + Math.cos((a0 + a1) / 2) * 8, 150 + Math.sin((a0 + a1) / 2) * 8)
+      g.arc(114, 150, 40, a0, a1)
       g.closePath()
       g.fill()
-    }
-    // its status icons: amber, red
-    const icon = (x: number, y: number, c: string) => {
-      g.fillStyle = c
-      g.beginPath()
-      g.arc(x, y, 10, 0, Math.PI * 2)
-      g.fill()
-      g.fillStyle = '#121215'
-      g.fillRect(x - 5, y - 1.5, 10, 3)
-    }
-    icon(160, 104, '#f29a2e')
-    icon(162, 150, '#e8463c')
-    icon(124, 176, '#f29a2e')
-    icon(80, 176, '#e8463c')
-    g.strokeStyle = '#d9d9d4'
-    g.lineWidth = 2.5
-    for (const rr of [5, 9]) {
-      g.beginPath()
-      g.arc(120, 150, rr, -0.7, 0.7)
-      g.stroke()
     }
     // the QR code on its steel plate, at the rider's end
     g.fillStyle = '#cfd3d8'
@@ -297,48 +276,54 @@ function build() {
     capsule([axis(760)[0] + 12, 760, 0], [axis(800)[0] + 12, 800, 0], STEM.r - 2),
   )
   const stem = mesh(stemSdf, [760, 570, -60], [1000, 1110, 60], 3.5)
-  // the bars: one smooth green bar, an arc swept gently back from the pod in its middle out to the black grips;
-  // the pod on the stem (the screen and QR code on its top, the headlight in its front)
+  // the head: the stem flaring up and forward into a wedge under the bar (the headlight in its face), a small
+  // pod on the bar's top (the screen, the QR code), the bar one smooth arc swept gently back to the black grips,
+  // the brake levers lying in front of the grips
   const cx = axis(BARS.y)[0]
   const zEnd = BARS.half - BARS.grip
-  /** the bar's line: x back by the square of how far out it is (so it leaves the pod straight across) */
-  const barAt = (s: number, t: number): V3 => [cx - BARS.sweep * t * t, BARS.y - 3 * t * t, s * zEnd * t]
+  /** the bar's line: x back by the square of how far out it is (so it leaves the head straight across) */
+  const barAt = (s: number, t: number): V3 => [cx + 4 - BARS.sweep * t * t, BARS.y - 3 * t * t, s * zEnd * t]
   const tip = (s: number) => {
     const p = barAt(s, 1)
     const d = new Vector3(-2 * BARS.sweep, 0, s * zEnd).normalize()
-    return { p, d }
+    const fwd = s > 0 ? new Vector3(d.z, 0, -d.x) : new Vector3(-d.z, 0, d.x)
+    return { p, d, fwd }
   }
   const barSdf = union(
-    14,
-    // the pod: an oval along the bar's middle, the stem coming up into it
-    box([cx - 12, BARS.y + 4, 0], [58, 20, 40], 19),
-    cylinder(axis(BARS.y - 80), axis(BARS.y - 4), STEM.r + 2, 6),
-    ...[-1, 1].flatMap((s) => Array.from({ length: 12 }, (_, i) => capsule(barAt(s, i / 12), barAt(s, (i + 1) / 12), 16))),
+    16,
+    cylinder(axis(BARS.y - 140), axis(BARS.y - 30), STEM.r + 1, 6),
+    box([cx + 12, BARS.y - 26, 0], [32, 30, 46], 16, 0.22),
+    box([cx - 8, BARS.y + 4, 0], [38, 13, 29], 12),
+    ...[-1, 1].flatMap((s) => Array.from({ length: 12 }, (_, i) => capsule(barAt(s, i / 12), barAt(s, (i + 1) / 12), 17.5 - 2.5 * (i / 12)))),
   )
-  const bars = mesh(barSdf, [cx - 110, BARS.y - 90, -BARS.half + 70], [cx + 70, BARS.y + 30, BARS.half - 70], 3, (p) => {
+  const bars = mesh(barSdf, [cx - 100, BARS.y - 160, -BARS.half + 80], [cx + 70, BARS.y + 30, BARS.half - 80], 3, (p) => {
     const v = (p.x - cx - HEAD_TOP.x0) / (HEAD_TOP.x1 - HEAD_TOP.x0)
-    return [Math.min(1, Math.max(0, (p.z + HEAD_TOP.z) / (2 * HEAD_TOP.z))), p.y > BARS.y + 12 ? Math.min(1, Math.max(0, v)) : 0]
+    return [Math.min(1, Math.max(0, (p.z + HEAD_TOP.z) / (2 * HEAD_TOP.z))), p.y > BARS.y + 13 ? Math.min(1, Math.max(0, v)) : 0]
   })
+  const at = (p: V3, d: Vector3, a: number, fwd: Vector3, b: number, dy: number): V3 => [p[0] + d.x * a + fwd.x * b, p[1] + dy, p[2] + d.z * a + fwd.z * b]
   const grips = mesh(
     union(
-      4,
+      5,
       ...[-1, 1].map((s) => {
         const { p, d } = tip(s)
-        return cylinder([p[0] - d.x * 4, p[1], p[2] - d.z * 4], [p[0] + d.x * BARS.grip, p[1], p[2] + d.z * BARS.grip], 18.5, 6)
+        return cylinder([p[0] - d.x * 4, p[1], p[2] - d.z * 4], [p[0] + d.x * BARS.grip, p[1], p[2] + d.z * BARS.grip], 18, 6)
       }),
-      // the brake levers: from their clamps by the grips, forward and out along them
+      // the brake levers: a clamp at the grip's inner end, its blade lying along in front of the grip, its end turned down
       ...[-1, 1].flatMap((s) => {
-        const { p, d } = tip(s)
-        const c: V3 = [p[0] + d.x * 6 + 14, p[1] + 2, p[2] + d.z * 6]
-        return [box(c, [14, 15, 13], 6), capsule([c[0] + 10, c[1] - 4, c[2]], [p[0] + d.x * 96 + 30, p[1] - 12, p[2] + d.z * 96], 5)]
+        const { p, d, fwd } = tip(s)
+        return [
+          box(at(p, d, 4, fwd, 12, 2), [18, 18, 16], 7),
+          capsule(at(p, d, 10, fwd, 26, -2), at(p, d, 88, fwd, 34, -8), 5.5),
+          capsule(at(p, d, 88, fwd, 34, -8), at(p, d, 100, fwd, 30, -20), 5),
+        ]
       }),
     ),
-    [cx - 220, BARS.y - 40, -BARS.half - 30],
-    [cx + 80, BARS.y + 30, BARS.half + 30],
+    [cx - 220, BARS.y - 50, -BARS.half - 40],
+    [cx + 80, BARS.y + 30, BARS.half + 40],
     3,
   )
-  // the headlight: a rounded lens in the pod's front, under its lip; the stem boss's lens
-  const lamp = mesh(union(0, box([cx + 46, BARS.y - 4, 0], [4, 10, 18], 4), sphere([axis(780)[0] + 12 + STEM.r - 4, 780, 0], 8)), [cx + 30, 760, -30], [cx + 60, BARS.y + 20, 30], 1.5)
+  // the headlight: a rounded lens in the wedge's face; the stem boss's lens
+  const lamp = mesh(union(0, box([cx + 44, BARS.y - 22, 0], [4, 13, 21], 5, 0.22), sphere([axis(780)[0] + 12 + STEM.r - 4, 780, 0], 8)), [cx + 20, 760, -30], [cx + 60, BARS.y + 10, 30], 1.5)
   // the fork: its crown under the head, a leg each side down to the axle (grey sleeves over chrome)
   const crownY = HEAD.lo - 22
   const forkSdf = union(
