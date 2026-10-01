@@ -137,7 +137,8 @@ function Spread() {
       <group {...at(LAYOUT.flowers)}>
         <Flowers />
       </group>
-      <Butterflies at={() => FLOWERS_AT} scale={1} />
+      {/* (the butterflies: off for now) */}
+      {false && <Butterflies at={() => FLOWERS_AT} scale={1} />}
     </>
   )
 }

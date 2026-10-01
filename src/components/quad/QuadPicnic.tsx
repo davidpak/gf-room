@@ -28,6 +28,9 @@ import { onWalk, SET } from './set'
 import type { CarState } from './Car'
 import { Static } from '../../lib/render/Static'
 
+/** the sparrows and the butterflies: off for now (flip on to bring them back) */
+const CRITTERS = false
+
 /**
  * The picnic on the Quad (../picnic), on the open lawn inside the V: the gingham blanket laid on the grass
  * (it stays put), the willow basket by its near corner, two books stacked, The Little Prince open face up.
@@ -268,7 +271,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       {/* the bread thrown, and the ducks */}
       <Feed scale={K} />
       <Ducks scale={K} home={DUCK_HOME} ground={ground} avoid={() => DUCK_AVOID} offLimits={(x, z) => onCloth(x, z, 120) || onWalk(x, z, 30)} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />
-      <Sparrows scale={K} perches={SPARROW_PERCHES} near={SPARROW_NEAR} ground={ground} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />
+      {CRITTERS && <Sparrows scale={K} perches={SPARROW_PERCHES} near={SPARROW_NEAR} ground={ground} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />}
       <Prompts items={[prompt]} far={9000} />
     </>
   )
@@ -420,6 +423,7 @@ function Spread({ car }: { car: { current: CarState } }) {
         </group>
         <CylinderCollider args={[(VASE.h / 2) * K, VASE.r * K]} position={[0, (VASE.h / 2) * K, 0]} mass={0.1} friction={0.8} />
       </LiveProp>
+      {CRITTERS && (
       <Butterflies
         at={() => {
           const b = liveBody('picnicflowers')
@@ -429,6 +433,7 @@ function Spread({ car }: { car: { current: CarState } }) {
         }}
         scale={K}
       />
+      )}
       {/* the lemonade poured, a thin stream from the spout */}
       <group ref={stream} visible={false}>
         <mesh>
