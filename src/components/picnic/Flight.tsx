@@ -8,7 +8,7 @@ import { Sandwich } from './Sandwich'
  * lie on the blanket (where it's handed on: to the physics as a toy in the Quad, or left lying on the
  * gallery page). `from` and `to` are world matrices (their scale the sandwich's).
  */
-export type Flight = { id: number; half: 0 | 1; from: Matrix4; to: Matrix4 }
+export type Flight = { id: number; half: 0 | 1; from: Matrix4; to: Matrix4; /** the height (world) it rises to first, clear of the basket */ clear: number }
 const DUR = 0.85
 
 function Flying({ f, onLand }: { f: Flight; onLand: (f: Flight) => void }) {
@@ -22,11 +22,11 @@ function Flying({ f, onLand }: { f: Flight; onLand: (f: Flight) => void }) {
     const p3 = new Vector3()
     const q3 = new Quaternion()
     f.to.decompose(p3, q3, new Vector3())
-    const k = s.x // (the scale: real mm to the world)
-    // straight up out of the basket first, then over and down
-    const p1 = p0.clone().add(new Vector3(0, 230 * k, 0))
-    const p2 = p3.clone().add(new Vector3(0, 170 * k, 0)).lerp(p1, 0.25)
-    return { p0, p1, p2, p3, q0, q3, s }
+    // straight up out of the basket, clear of its rim; then over in an arc and down onto the blanket
+    const p1 = new Vector3(p0.x, f.clear, p0.z)
+    const c = p1.clone().lerp(p3, 0.5)
+    c.y = f.clear + (f.clear - p3.y) * 0.35
+    return { p0, p1, c, p3, q0, q3, s }
   }, [f])
   const _p = useMemo(() => new Vector3(), [])
   const _q = useMemo(() => new Quaternion(), [])
@@ -37,15 +37,16 @@ function Flying({ f, onLand }: { f: Flight; onLand: (f: Flight) => void }) {
     if (!o || landed.current) return
     t.current = Math.min(1, t.current + dt / DUR)
     const u = t.current
-    // its path: eased in and out, and its height up off the bezier a little (a lift, then a settle)
-    const e = u * u * (3 - 2 * u)
-    const a = 1 - e
-    const { p0, p1, p2, p3, q0, q3, s } = path
-    _p.set(0, 0, 0)
-      .addScaledVector(p0, a * a * a)
-      .addScaledVector(p1, 3 * a * a * e)
-      .addScaledVector(p2, 3 * a * e * e)
-      .addScaledVector(p3, e * e * e)
+    const ease = (x: number) => x * x * (3 - 2 * x)
+    const e = ease(u)
+    const { p0, p1, c, p3, q0, q3, s } = path
+    if (u < 0.38) _p.lerpVectors(p0, p1, ease(u / 0.38))
+    else {
+      // (a quadratic arc from over the basket to the blanket: it only drops once it's out past the rim)
+      const v = ease((u - 0.38) / 0.62)
+      const a = 1 - v
+      _p.set(0, 0, 0).addScaledVector(p1, a * a).addScaledVector(c, 2 * a * v).addScaledVector(p3, v * v)
+    }
     // turning to lie as it'll land, with a little tip as it swings over
     _q.copy(q0).slerp(q3, Math.min(1, e * 1.15))
     _tilt.setFromAxisAngle(new Vector3(1, 0, 0), Math.sin(Math.PI * u) * 0.35)

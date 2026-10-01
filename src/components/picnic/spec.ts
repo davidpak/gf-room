@@ -4,7 +4,10 @@
  *
  * Sources
  *   [B]  picnic blankets as they're sold: 60 × 80" (1520 × 2030) the usual size for two to four
- *   [P]  the basket after Picnic Time's Piccadilly (picnictime.com, amazon.com): handwoven willow, 16" long,
+ *   [W]  the basket after Wickerwise's woodchip picnic basket (amazon.com): 14 1/4 × 9 × 7 1/4", woven
+ *        woodchip, two folding wooden handles riveted on in brass, a gingham liner folded over its rim and
+ *        tied with bows; [W'] its handles and ties measured off the product photo (rivets at ±88 of its 362,
+ *        the ties at ±62, the handles meeting over its middle). Before it: [P] Picnic Time's Piccadilly, 16" long,
  *        9 1/2" deep, 11" tall to its rim and lids, 14 1/2" to the top of its handle; a double lid (two flaps
  *        hinged on a fixed middle strip, opening out to the sides), red gingham lining, a plate strapped
  *        under each lid, leatherette closures
@@ -19,17 +22,16 @@ const IN = 25.4
 
 export const BLANKET = { w: 60 * IN, l: 80 * IN, t: 3, check: 64 } // [B] 1524 × 2032; checks ~2.5"
 export const BASKET = {
-  l: 16 * IN, // [P] 406
-  d: 9.5 * IN, // [P] 241
-  h: 11 * IN, // [P] 279 to the top of its lids
-  handle: 14.5 * IN, // [P] 368 to the top of its handle
-  taper: 12, // (it's a little narrower at its foot than its rim, all round)
-  rim: 22, // the wrapped rim round its top
-  spine: 34, // the fixed strip down its middle the lids hinge on
-  lid: 16, // a lid's thickness
-  wall: 10,
+  l: 14.25 * IN, // [W] 362 across
+  d: 9 * IN, // [W] 229 deep
+  h: 7.25 * IN, // [W] 184 to its rim
+  taper: 14, // (a little narrower at its foot than its rim, all round)
+  wall: 8, // the woodchip's thickness
+  rim: 12, // the doubled band round its top
+  handle: { w: 32, t: 5, rise: 235, x: 88, lean: 0.29 }, // [W'] flat wooden straps riveted each side, swung up they lean in to meet
+  overhang: 46, // the liner folded down over its rim outside
+  bow: 62, // the liner's ties, each side, just in from the handles
 }
-export const PLATE = { r: 44, t: 5 } // (a side plate strapped under each lid: its own width)
 export const SANDWICH = { side: 110, bread: 12, filling: 14, n: 4 } // [S] four halves, stood up in a row
 export const BOOKS = [
   { title: 'Pride and Prejudice', author: 'Jane Austen', w: 129, h: 198, t: 26, cover: '#8fae8c', ink: '#f3e2b0' }, // [K]

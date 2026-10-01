@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, Matrix4, PCFSoftShadowMap, Quaternion, SRGBColorSpace, Vector3, type Group } from 'three'
 import { LOOK, bruno } from '../quad/bruno'
-import { Basket, sandwichInBasket, SANDWICH_AT } from './Picnic'
+import { Basket, CLEAR, sandwichInBasket, SANDWICH_AT } from './Picnic'
 import { Blanket } from './Blanket'
 import { ClosedBook, OpenBook } from './Books'
 import { Flights, type Flight } from './Flight'
@@ -12,9 +12,9 @@ import { LAYOUT } from './layout'
 
 /**
  * The picnic on its own (gallery first), full size, in the Quad's evening light: the gingham blanket, the
- * basket (click it to open its lids; click a sandwich to lift it out onto the blanket), two books stacked,
+ * basket (click it to swing its handles down; click a sandwich to lift it out onto the blanket), two books stacked,
  * and The Little Prince open (click its right page to turn it, its left to turn back).
- * &cam=x,y,z&at=x,y,z to look closely; &view=open starts with the basket's lids up.
+ * &cam=x,y,z&at=x,y,z to look closely; &view=open starts with the basket's handles down.
  */
 function sky() {
   const c = document.createElement('canvas')
@@ -57,7 +57,8 @@ function Scene() {
     const [x, z, r] = LAYOUT.landing[k]
     const to = new Matrix4().compose(new Vector3(x, LAYOUT.y + 2, z), new Quaternion().setFromAxisAngle(up, r), new Vector3(1, 1, 1))
     setPresent((p) => p.map((v, i) => (i === k ? false : v)))
-    setFlights((f) => [...f, { id: next.current++, half: SANDWICH_AT[k][4], from, to }])
+    const clear = g.localToWorld(new Vector3(0, CLEAR, 0)).y
+    setFlights((f) => [...f, { id: next.current++, half: SANDWICH_AT[k][4], from, to, clear }])
   }
   return (
     <>

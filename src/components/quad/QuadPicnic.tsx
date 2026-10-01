@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { CuboidCollider } from '@react-three/rapier'
+import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { Euler, Matrix4, Quaternion, Vector3, type Group } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
 import { Prompts, type PromptItem } from '../prompt/Prompts'
-import { Basket, sandwichInBasket, SANDWICH_AT } from '../picnic/Picnic'
+import { Basket, CLEAR, sandwichInBasket, SANDWICH_AT } from '../picnic/Picnic'
 import { Blanket } from '../picnic/Blanket'
 import { ClosedBook, OpenBook, OPEN_BOOK } from '../picnic/Books'
 import { Flights, type Flight } from '../picnic/Flight'
 import { Sandwich, SANDWICH_T } from '../picnic/Sandwich'
 import { LAYOUT } from '../picnic/layout'
-import { BASKET, BOOKS } from '../picnic/spec'
+import { BASKET, BLANKET, BOOKS } from '../picnic/spec'
 import { LiveProp, setPrompt } from './Physical'
 import { clickSpot, frameAround, useLook, type Spot } from './look'
 import { onReset } from './reset'
@@ -98,7 +98,8 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
     const [x, z, r] = LAYOUT.landing[k]
     const to = new Matrix4().compose(place(x, LAYOUT.y + 2, z), new Quaternion().setFromAxisAngle(up, AT.rot + r), new Vector3(K, K, K))
     setPresent((p) => p.map((v, i) => (i === k ? false : v)))
-    setFlights((f) => [...f, { id: next.current++, half: SANDWICH_AT[k][4], from, to }])
+    const clear = g.localToWorld(new Vector3(0, CLEAR, 0)).y
+    setFlights((f) => [...f, { id: next.current++, half: SANDWICH_AT[k][4], from, to, clear }])
   }
   const land = (f: Flight) => {
     const p = new Vector3()
@@ -138,6 +139,10 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       <group position={[AT.x, LAWN, AT.z]} rotation={[0, AT.rot, 0]} scale={K}>
         <Blanket />
       </group>
+      {/* (its top, solid: what's set down on it rests on the cloth, not down in it on the grass) */}
+      <RigidBody type="fixed" colliders={false} position={[AT.x, LAWN, AT.z]} rotation={[0, AT.rot, 0]}>
+        <CuboidCollider args={[(BLANKET.w / 2) * K, 1, (BLANKET.l / 2) * K]} position={[0, LAYOUT.y * K - 1, 0]} friction={0.9} />
+      </RigidBody>
       {/* the basket: click it to go in and lift its lids */}
       <LiveProp id="picnicbasket" label="" set="picnic" at={home(LAYOUT.basket.x, LAYOUT.y, LAYOUT.basket.z, LAYOUT.basket.rot)} car={car} lift={0} feelAlong={[-0.25 * l * K, 0.25 * l * K]} feelR={(d / 2) * K}>
         <group ref={basketModel} scale={K} onPointerOver={pointer} onPointerOut={unpointer}>

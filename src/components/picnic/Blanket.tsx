@@ -86,11 +86,18 @@ const CREASES: { a: [number, number]; b: [number, number]; h: number; w: number 
   { a: [LAYOUT.basket.x + 170, LAYOUT.basket.z - 60], b: [LAYOUT.basket.x + 420, LAYOUT.basket.z - 120], h: 4, w: 13 },
   { a: [-380, 120], b: [260, 640], h: 4, w: 30 },
 ]
+/** where things stand on it: x, z, how far round */
+const FLAT: [number, number, number][] = [
+  [LAYOUT.basket.x, LAYOUT.basket.z, 190],
+  [LAYOUT.stack[0].x, LAYOUT.stack[0].z, 110],
+  [LAYOUT.open.x, LAYOUT.open.z, 180],
+]
 function height(x: number, z: number) {
   let y = T / 2 + 3 + 3 * Math.sin(x * 0.0045 + 0.7) * Math.sin(z * 0.0032 + 1.9) + 1.4 * Math.sin(x * 0.011 + z * 0.007)
-  // flattened where the basket stands on it
-  const bd = Math.hypot(x - LAYOUT.basket.x, z - LAYOUT.basket.z)
-  y *= Math.min(1, Math.max(0.15, (bd - 160) / 260))
+  // pressed flat where things stand on it (the basket, the books): down to just under them
+  let flat = 1
+  for (const [fx, fz, r] of FLAT) flat = Math.min(flat, Math.max(0, (Math.hypot(x - fx, z - fz) - r) / 160))
+  y = LAYOUT.y - 1 + (y - (LAYOUT.y - 1)) * flat
   for (const c of CREASES) {
     const ax = c.a[0]
     const az = c.a[1]
