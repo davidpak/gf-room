@@ -63,3 +63,8 @@ export const POT = { r: 40, h: 68, rim: 10 }
 
 /** the pencils' colours, the watercolours' (the paints, and a few more) */
 export const PENCIL_COLORS = ['#e2574c', '#f08a4b', '#f4c84a', '#9ccf5f', '#3f9a5c', '#4bb4c9', '#3b6fc4', '#7b5cc4', '#e57fb0', '#8a5a44', '#6b6b6b', '#2f2a3a']
+
+/** [A] a sheet of US Letter (8.5 × 11"), folded into a dart: its keel this deep, each layer this thick (drawn: the
+ *  toy look, and so stacked layers never fight); the sheets' colours */
+export const PAPER = { w: 8.5 * IN, h: 11 * IN, keel: 28, layer: 0.35 }
+export const PAPER_COLORS = ['#f8c9d4', '#bfe6c8', '#d4c6f0', '#f7e3a6']
