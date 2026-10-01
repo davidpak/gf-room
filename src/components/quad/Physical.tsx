@@ -149,8 +149,12 @@ export function setPrompt(set: string, label: string, at: (o: Vector3) => Vector
 
 /** a loose thing of the Quad's: resting at home (held fast there till something moves it), a toy for
  *  the hand and the car, a prompt to put it back (or, one of a `set`, its set's) */
-export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, set, children }: { id: string; label: string; at: { x: number; y: number; z: number; rot: number }; car: { current: CarState }; lift: number; feelAlong?: number[]; feelPts?: [number, number][]; feelR: number; set?: string; children: ReactNode }) {
-  const home = useMemo(() => new Matrix4().compose(new Vector3(at.x, at.y, at.z), new Quaternion().setFromEuler(new Euler(0, at.rot, 0)), new Vector3(1, 1, 1)), [at])
+export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, set, pose, children }: { id: string; label: string; at: { x: number; y: number; z: number; rot: number; q?: Quaternion }; car: { current: CarState }; lift: number; feelAlong?: number[]; feelPts?: [number, number][]; feelR: number; set?: string; pose?: { current: { p: Vector3; q: Quaternion } | null }; children: ReactNode }) {
+  // (home turned about the vertical by `rot`, or any way at all by `q`: the guitar leans)
+  const home = useMemo(() => new Matrix4().compose(new Vector3(at.x, at.y, at.z), at.q ?? new Quaternion().setFromEuler(new Euler(0, at.rot, 0)), new Vector3(1, 1, 1)), [at])
+  // held up somewhere by its owner (`pose`: the guitar, up to be played): there it goes and stays, and
+  // when it's let go it flies home
+  const posed = useRef(false)
   const perch = usePerch({
     key: id,
     label,
@@ -207,6 +211,29 @@ export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, 
     if (!body) return
     const s = perch.st.current
     const c = car.current
+    const want = pose?.current
+    if (want) {
+      if (!posed.current) {
+        posed.current = true
+        ride.current = null
+        stowed.delete(id)
+        perch.fly.current = null
+        s.perched = false
+        settle.current = false
+        body.setBodyType(perch.rapier.RigidBodyType.KinematicPositionBased, true)
+      }
+      // (glides there, and holds it)
+      const t = body.translation()
+      const r = body.rotation()
+      body.setNextKinematicTranslation(_p.set(t.x, t.y, t.z).lerp(want.p, 0.16))
+      body.setNextKinematicRotation(_q.set(r.x, r.y, r.z, r.w).slerp(want.q, 0.16))
+      return
+    }
+    if (posed.current) {
+      posed.current = false
+      perch.flyHome()
+      return
+    }
     // the car coming at it: it's let go (loose) so the car can shove it
     if (s.perched) {
       const d = Math.hypot(c.x - at.x, c.z - at.z)
@@ -258,7 +285,7 @@ export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, 
   })
   return (
     <>
-      <Holdable ccd bodyRef={perch.body} position={[at.x, at.y, at.z]} rotation={[0, at.rot, 0]} colliders={false} linearDamping={0.4} angularDamping={0.8} hold={{ ...perch.hold, lift: 60 }} sound="none">
+      <Holdable ccd bodyRef={perch.body} position={[at.x, at.y, at.z]} rotation={at.q ? new Euler().setFromQuaternion(at.q).toArray().slice(0, 3) as [number, number, number] : [0, at.rot, 0]} colliders={false} linearDamping={0.4} angularDamping={0.8} hold={{ ...perch.hold, lift: 60 }} sound="none">
         <group {...perch.hover.bind}>{children}</group>
       </Holdable>
       {!set && <Prompts items={[perch.prompt]} far={9000} />}
