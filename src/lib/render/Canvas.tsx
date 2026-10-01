@@ -11,6 +11,7 @@ import { ready } from '../ready'
  *
  *   ?perf   the r3f-perf overlay (FPS, GPU time, draw calls); the dev menu toggles it
  */
+const DEV_PARAM = typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev')
 const SHOW_PERF = typeof location !== 'undefined' && new URLSearchParams(location.search).has('perf')
 /** (fetched only when it's asked for) */
 const Perf = lazy(() => import('r3f-perf').then((m) => ({ default: m.Perf })))
@@ -26,7 +27,7 @@ function Ready({ done }: { done: () => void }) {
   const { gl, scene, camera, get } = useThree()
   useLayoutEffect(() => ready.building(), [])
   useEffect(() => {
-    if (import.meta.env.DEV) (window as unknown as { __r3f: typeof get }).__r3f = get // (for profiling from the console)
+    if (import.meta.env.DEV || DEV_PARAM) (window as unknown as { __r3f: typeof get }).__r3f = get // (for profiling from the console; &dev on a build)
     let live = true
     const frames = (n: number) => new Promise<void>((r) => {
       const f = () => (--n <= 0 ? r() : requestAnimationFrame(f))

@@ -323,7 +323,7 @@ export function LiveProps({ car }: { car: { current: CarState } }) {
       ))}
       {/* the photo shoot's kit (./ShootSet) */}
       {[...shootProps(), cookieSignProp()].map((p) => (
-        <LiveProp key={p.id} id={p.id} label={p.label} at={p.at} car={car} lift={p.lift} feelAlong={p.feelAlong} feelR={p.feelR} set={'set' in p ? (p.set as string) : undefined}>
+        <LiveProp key={p.id} id={p.id} label={p.label} at={p.at} car={car} lift={p.lift} feelAlong={p.feelAlong} feelPts={'feelPts' in p ? p.feelPts : undefined} feelR={p.feelR} set={'set' in p ? (p.set as string) : undefined}>
           {p.id.includes('laptop') ? p.node : <Static>{p.node}</Static>}
           {p.colliders}
         </LiveProp>

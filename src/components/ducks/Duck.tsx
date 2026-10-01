@@ -1,3 +1,4 @@
+import { Static } from '../../lib/render/Static'
 import { useMemo, useRef, type ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { BufferAttribute, Color, CylinderGeometry, ExtrudeGeometry, Shape, SphereGeometry, TorusGeometry, type Group } from 'three'
@@ -224,8 +225,10 @@ export function Duck({ kind, pose, children }: { kind: DuckKind; pose: { current
       {/* its legs and webbed feet (stepping) */}
       {[-1, 1].map((sz, i) => (
         <group key={sz} ref={(o) => void (rig.current.legs[i] = o)} position={[S.legX, S.leg, sz * S.legZ]}>
-          <mesh geometry={g.leg} material={ORANGE} position={[0, -S.leg / 2 + S.leg * 0.2, 0]} scale={[1, 1.4, 1]} castShadow />
-          <mesh geometry={g.foot} material={ORANGE} position={[-S.leg * 0.08, -S.leg, 0]} rotation={[0, sz * 0.15, 0]} castShadow />
+          <Static>
+            <mesh geometry={g.leg} material={ORANGE} position={[0, -S.leg / 2 + S.leg * 0.2, 0]} scale={[1, 1.4, 1]} castShadow />
+            <mesh geometry={g.foot} material={ORANGE} position={[-S.leg * 0.08, -S.leg, 0]} rotation={[0, sz * 0.15, 0]} castShadow />
+          </Static>
         </group>
       ))}
       <group ref={(o) => void (rig.current.body = o)} position={[0, S.y, 0]}>
@@ -254,6 +257,8 @@ export function Duck({ kind, pose, children }: { kind: DuckKind; pose: { current
           <mesh geometry={g.neck} material={kind === 'drake' ? DRAKE.head : m.head} position={[hr * 0.12, S.neckLen / 2, 0]} rotation={[0, 0, -0.12]} castShadow />
           {kind === 'drake' && <mesh geometry={g.collar} material={WHITE} position={[hr * 0.05, S.neckLen * 0.2, 0]} rotation={[Math.PI / 2, 0.12, 0]} />}
           <group ref={(o) => void (rig.current.head = o)} position={[hr * 0.3, S.neckLen, 0]}>
+            {/* (its head drawn as a few meshes, not a dozen: merged as it turns; its jaw left to move) */}
+            <Static>
             <mesh geometry={g.head} material={m.head} scale={[1.18, chick ? 1 : 0.95, 0.88]} castShadow />
             {kind === 'hen' && <mesh geometry={g.head} material={HEN.crown} position={[-hr * 0.06, hr * 0.2, 0]} scale={[1.14, 0.84, 0.84]} />}
             {/* its eyes (and the hen's and ducklings' dark stripe through them) */}
@@ -268,10 +273,11 @@ export function Duck({ kind, pose, children }: { kind: DuckKind; pose: { current
             <group position={[hr * 0.95, -hr * 0.12, 0]} rotation={[0, 0, -0.12]}>
               <mesh geometry={g.bill} material={m.bill} castShadow />
               {kind === 'hen' && <mesh geometry={g.bill} material={HEN.saddle} position={[S.bill * 0.22, 0.6, 0]} scale={[0.45, 1.02, 0.6]} />}
-              <group ref={(o) => void (rig.current.jaw = o)}>
+              <group ref={(o) => void (rig.current.jaw = o)} userData={{ live: true }}>
                 <mesh geometry={g.jaw} material={m.bill} />
               </group>
             </group>
+            </Static>
           </group>
         </group>
       </group>

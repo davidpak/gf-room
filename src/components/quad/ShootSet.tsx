@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { CuboidCollider } from '@react-three/rapier'
-import { CanvasTexture, CylinderGeometry, ExtrudeGeometry, Path, Quaternion, SRGBColorSpace, Shape, SphereGeometry, Vector3, type BufferGeometry, type Material } from 'three'
+import { CapsuleCollider, CuboidCollider } from '@react-three/rapier'
+import { CanvasTexture, CylinderGeometry, Euler, ExtrudeGeometry, Path, Quaternion, SRGBColorSpace, Shape, SphereGeometry, Vector3, type BufferGeometry, type Material } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from './bruno'
 import { byName, usePhotos } from './Photos'
@@ -295,8 +295,26 @@ export function Laptop() {
 }
 
 // ---- the set, as loose things for ./Physical (visual + colliders, in the set's toy mm)
-export type ShootProp = { id: string; label: string; at: { x: number; y: number; z: number; rot: number }; lift: number; feelAlong: number[]; feelR: number; node: ReactNode; colliders: ReactNode }
+export type ShootProp = { id: string; label: string; at: { x: number; y: number; z: number; rot: number }; lift: number; feelAlong: number[]; feelPts?: [number, number][]; feelR: number; node: ReactNode; colliders: ReactNode }
 const box = (half: V3, at: V3, mass: number) => <CuboidCollider args={half.map((v) => v * K) as V3} position={at.map((v) => v * K) as V3} mass={mass} friction={0.8} />
+/** a leg, solid: a capsule from its top down to its foot (real mm, the set's frame) */
+function leg(top: V3, foot: V3, r: number, mass: number, key: number) {
+  const a = new Vector3(...top).multiplyScalar(K)
+  const b = new Vector3(...foot).multiplyScalar(K)
+  b.y += r * K // (its round end resting on the ground)
+  const d = b.clone().sub(a)
+  const q = new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), d.clone().normalize())
+  const e = new Euler().setFromQuaternion(q)
+  return <CapsuleCollider key={key} args={[d.length() / 2, r * K]} position={a.clone().add(b).multiplyScalar(0.5).toArray()} rotation={[e.x, e.y, e.z]} mass={mass} friction={0.8} />
+}
+/** where the car feels a three-legged thing: its middle, each foot, halfway down each leg (world mm, its frame) */
+const legFeel = (ls: { top: V3; foot: V3 }[]): [number, number][] => [[0, 0], ...ls.flatMap(({ top, foot }) => [[foot[0] * K, foot[2] * K] as [number, number], [((top[0] + foot[0]) / 2) * K, ((top[2] + foot[2]) / 2) * K] as [number, number]])]
+const TRIPOD_LEGS = legs(1270, 50, 560, 0.35)
+const SOFTBOX_LEGS = legs(460, 30, 560)
+const CSTAND_LEGS = [0, 1, 2].map((i) => {
+  const a = 0.4 + (i / 3) * Math.PI * 2
+  return { top: [Math.sin(a) * 30, 330 - i * 70, Math.cos(a) * 30] as V3, foot: [Math.sin(a) * 620, 12, Math.cos(a) * 620] as V3 }
+})
 const scaled = (n: ReactNode) => <group scale={K}>{n}</group>
 export function shootProps(): ShootProp[] {
   const S = SET.shoot
@@ -308,11 +326,12 @@ export function shootProps(): ShootProp[] {
       at: { ...S.camera, y: LAWN },
       lift: 1800 * K,
       feelAlong: [0],
-      feelR: 60,
+      feelPts: legFeel(TRIPOD_LEGS),
+      feelR: 14,
       node: scaled(<TripodCamera />),
       colliders: (
         <>
-          {box([380, 20, 380], [0, 20, 0], 1.2)}
+          {TRIPOD_LEGS.map((l, i) => leg(l.top, l.foot, 22, 0.4, i))}
           {box([40, 650, 40], [0, 700, 0], 0.4)}
           {box([80, 90, 130], [0, 1560, -40], 0.6)}
         </>
@@ -324,11 +343,12 @@ export function shootProps(): ShootProp[] {
       at: { ...S.softbox, y: LAWN },
       lift: 2500 * K,
       feelAlong: [0],
-      feelR: 60,
+      feelPts: legFeel(SOFTBOX_LEGS),
+      feelR: 14,
       node: scaled(<Softbox />),
       colliders: (
         <>
-          {box([400, 20, 400], [0, 20, 0], 1.2)}
+          {SOFTBOX_LEGS.map((l, i) => leg(l.top, l.foot, 20, 0.4, i))}
           {box([30, 1000, 30], [0, 1080, 0], 0.4)}
           {box([300, 450, 200], [0, 2140, -120], 0.5)}
         </>
@@ -340,11 +360,12 @@ export function shootProps(): ShootProp[] {
       at: { ...S.cstand, y: LAWN },
       lift: 2700 * K,
       feelAlong: [0],
-      feelR: 70,
+      feelPts: legFeel(CSTAND_LEGS),
+      feelR: 14,
       node: scaled(<CStand />),
       colliders: (
         <>
-          {box([440, 20, 440], [0, 20, 0], 2)}
+          {CSTAND_LEGS.map((l, i) => leg(l.top, l.foot, 20, 0.7, i))}
           {box([30, 1200, 30], [0, 1200, 0], 0.5)}
           {box([130, 130, 500], [0, 2250, -600], 0.4)}
         </>

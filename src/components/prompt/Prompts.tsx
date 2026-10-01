@@ -86,7 +86,14 @@ const FIX_MS = 760 // the pulse and sparkles
 
 type Phase = 'in' | 'out' | 'fix'
 
-export function Prompts({ items, far = FAR }: { items: PromptItem[]; /** mm: from further away it keeps out of the way */ far?: number }) {
+/** the prompts are off for now (too much on screen): on on their own page (?part=prompt) or with &prompts */
+const PROMPTS_ON = typeof location !== 'undefined' && (new URLSearchParams(location.search).get('part') === 'prompt' || new URLSearchParams(location.search).has('prompts'))
+
+export function Prompts(props: { items: PromptItem[]; /** mm: from further away it keeps out of the way */ far?: number }) {
+  return PROMPTS_ON ? <PromptsShown {...props} /> : null
+}
+
+function PromptsShown({ items, far = FAR }: { items: PromptItem[]; far?: number }) {
   const group = useRef<Group>(null)
   const camera = useThree((s) => s.camera)
   const [shown, setShown] = useState<{ key: string; phase: Phase } | null>(null)

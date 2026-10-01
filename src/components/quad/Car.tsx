@@ -122,11 +122,16 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
   }, [])
 
   const camAt = useRef(new Vector3(0, 0, 0))
+  const sunRef = useRef<DirectionalLight | null>(null)
+  const sunWas = useRef(new Vector3())
+  const shadowTick = useRef(0)
   // looking at a photo (./look): where the camera frames it, and how far it has glided there (0..1)
   const look = useRef({ pos: new Vector3(), at: new Vector3(), has: false, view: 0 })
   const first = useRef(true)
   useFrame(({ scene }, delta) => {
-    const sun = scene.getObjectByName('sun') as DirectionalLight | undefined
+    // (the sun, found once: looking it up by name every frame walks the whole scene)
+    if (!sunRef.current) sunRef.current = (scene.getObjectByName('sun') as DirectionalLight | undefined) ?? null
+    const sun = sunRef.current
     const dt = Math.min(delta, 1 / 30)
     const s = state.current
     const m = sim.current
@@ -298,6 +303,13 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
       sun.position.copy(LOOK.sun).multiplyScalar(4000).add(camAt.current)
       sun.target.position.set(camAt.current.x, 0, camAt.current.z)
       sun.target.updateMatrixWorld()
+      // its shadows: redrawn every frame while they move with the car (or something's being carried), else every
+      // other frame (what moves then, the ducks pottering, the petals falling, moves slowly: half the work)
+      const moved = sun.position.distanceToSquared(sunWas.current) > 0.01
+      sunWas.current.copy(sun.position)
+      shadowTick.current++
+      sun.shadow.autoUpdate = false
+      if (moved || isHolding() || shadowTick.current % 2 === 0) sun.shadow.needsUpdate = true
     }
   })
 

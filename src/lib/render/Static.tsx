@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { BufferAttribute, Matrix4, Mesh, type BufferGeometry, type Group, type Material, type Object3D } from 'three'
+import { BufferAttribute, Matrix4, Mesh, Object3D, type BufferGeometry, type Group, type Material } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 /**
@@ -32,16 +32,21 @@ function mergeable(o: Object3D): o is Mesh {
 /** the meshes under root to merge (visible all the way up, not under a live group), and a signature of them:
  *  which they are, their geometry and material, where they sit in root (so a piece swapped, reshaped or moved is
  *  merged again) */
-function collect(root: Object3D, merged: Set<Object3D>) {
-  root.updateWorldMatrix(true, true)
+function collect(from: Object3D, root: Object3D, merged: Set<Object3D>) {
   _inv.copy(root.matrixWorld).invert()
   const out: Mesh[] = []
+  // (anything else drawn in it, left as it is: its place is kept up every frame, one by one)
+  const others: Object3D[] = []
+  const drawn = (o: Object3D) => (o as Mesh).isMesh || (o as { isLine?: boolean }).isLine || (o as { isPoints?: boolean }).isPoints || (o as { isSprite?: boolean }).isSprite
   const walk = (o: Object3D) => {
-    if (!o.visible || merged.has(o) || o.userData.live) return
+    if (merged.has(o)) return
+    if (o.userData.live) return o.traverse((c) => void (drawn(c) && others.push(c)))
+    if (!o.visible) return
     if (mergeable(o)) out.push(o)
+    else if (drawn(o)) others.push(o)
     for (const c of o.children) walk(c)
   }
-  for (const c of root.children) walk(c)
+  for (const c of from.children) walk(c)
   const sig = out
     .map((m) => {
       const e = _m.multiplyMatrices(_inv, m.matrixWorld).elements
@@ -50,7 +55,7 @@ function collect(root: Object3D, merged: Set<Object3D>) {
       return `${m.id}:${m.geometry.id}:${(m.material as Material).uuid}:${h.toFixed(2)}`
     })
     .join(',')
-  return { meshes: out, sig }
+  return { meshes: out, sig, others }
 }
 
 function build(root: Group, meshes: Mesh[]) {
@@ -97,30 +102,84 @@ function build(root: Group, meshes: Mesh[]) {
   return out
 }
 
+const NOOP = () => {}
+const RAY = (o: Mesh) => Object.getPrototypeOf(o).raycast as Mesh['raycast']
+
 export function Static({ children }: { children: ReactNode }) {
   const root = useRef<Group>(null)
+  const orig = useRef<Group>(null)
   const raycaster = useThree((s) => s.raycaster)
+  const gl = useThree((s) => s.gl)
   const built = useRef<Built & { merged: Mesh[] }>({ meshes: [], sig: '', merged: [] })
   // (the pointer sees the hidden layer too)
   useEffect(() => void raycaster.layers.enable(HIDDEN), [raycaster])
+  // while it's merged, the meshes it's made of aren't redrawn, so their places aren't worked out every frame
+  // either (the scene's biggest per-frame chore): only when the pointer's over them (once a frame at most), or
+  // to check them for changes
+  const stamp = useRef(-1)
+  // what's drawn in it but not merged (a see-through jar, a swinging handle): kept in place as the scene's
+  // places are worked out, along their own lines of parents only
+  const loose = useRef<Object3D[]>([])
+  const keepLoose = () => {
+    const o = orig.current
+    if (!o || !o.parent) return
+    o.matrixWorld.multiplyMatrices(o.parent.matrixWorld, o.matrix)
+    for (const l of loose.current) {
+      if (l.matrixAutoUpdate) l.updateMatrix()
+      l.matrixWorld.multiplyMatrices(l.parent!.matrixWorld, l.matrix)
+    }
+  }
+  const thaw = () => {
+    const o = orig.current
+    if (!o) return
+    root.current?.updateWorldMatrix(true, false)
+    Object3D.prototype.updateMatrixWorld.call(o, true)
+  }
+  const fresh = () => {
+    const frame = gl.info.render.frame
+    if (stamp.current === frame) return
+    stamp.current = frame
+    thaw()
+  }
   const rebuild = () => {
     const r = root.current
-    if (!r) return
+    const o = orig.current
+    if (!r || !o) return
+    thaw()
     const b = built.current
-    const merged = new Set<Object3D>(b.merged)
-    const { meshes, sig } = collect(r, merged)
+    const { meshes, sig, others } = collect(o, r, new Set<Object3D>(b.merged))
+    // (each one's line of parents down from the wrapper, worked out once: kept up top down, no climbing)
+    const seen = new Set<Object3D>()
+    const chain: Object3D[] = []
+    for (const l of others) {
+      const up: Object3D[] = []
+      for (let p: Object3D | null = l; p && p !== o; p = p.parent) if (!seen.has(p)) up.push(p)
+      up.reverse().forEach((p) => (seen.add(p), chain.push(p)))
+    }
+    loose.current = chain
     if (sig === b.sig) return
     // put the old ones back on the drawn layer, take the old merge away
-    for (const m of b.meshes) m.layers.set(0)
+    for (const m of b.meshes) {
+      m.layers.set(0)
+      delete (m as Partial<Mesh>).raycast
+    }
     for (const m of b.merged) {
       r.remove(m)
       m.geometry.dispose()
     }
     const next = meshes.length > 1 ? build(r, meshes) : []
     if (next.length) {
-      for (const m of meshes) m.layers.set(HIDDEN)
+      for (const m of meshes) {
+        m.layers.set(HIDDEN)
+        m.raycast = function (rc, hits) {
+          fresh()
+          RAY(this).call(this, rc, hits)
+        }
+      }
       for (const m of next) r.add(m)
     }
+    if (next.length) o.updateMatrixWorld = loose.current.length ? keepLoose : NOOP
+    else delete (o as Partial<Group>).updateMatrixWorld
     built.current = { meshes: next.length ? meshes : [], sig, merged: next }
   }
   useLayoutEffect(rebuild)
@@ -136,14 +195,22 @@ export function Static({ children }: { children: ReactNode }) {
   useLayoutEffect(
     () => () => {
       const b = built.current
-      for (const m of b.meshes) m.layers.set(0)
+      for (const m of b.meshes) {
+        m.layers.set(0)
+        delete (m as Partial<Mesh>).raycast
+      }
       for (const m of b.merged) {
         m.removeFromParent()
         m.geometry.dispose()
       }
+      if (orig.current) delete (orig.current as Partial<Group>).updateMatrixWorld
       built.current = { meshes: [], sig: '', merged: [] }
     },
     [],
   )
-  return <group ref={root}>{children}</group>
+  return (
+    <group ref={root}>
+      <group ref={orig}>{children}</group>
+    </group>
+  )
 }

@@ -36,24 +36,47 @@ const PETALS = Array.from({ length: 18 }, (_, i) => ({
   sway: (i % 2 ? 1 : -1) * (20 + ((i * 11) % 30)),
 }))
 
+/** where the bar heads in each phase, and how long it takes to get there: it starts crawling at once and keeps
+ *  crawling (slowing as it goes) while the page builds, then fills the rest quickly when it's ready. One long
+ *  transition at a time, run by the compositor, so it keeps moving even while the page is too busy to draw */
+const BAR: Record<Phase, [number, number]> = {
+  code: [0.62, 4200],
+  assets: [0.7, 4800],
+  building: [0.84, 1600],
+  shaders: [0.93, 1900],
+  ready: [1, 520],
+}
+const FILLED = 620 // (ms: the bar full, a breath, then the blossom blooms and the screen fades)
+const FADE = 1000
+
 export function Loader({ part, title }: { part: string; title: string }) {
   const r = useReady()
   const done = r.phase === 'ready'
+  // the bar: where it's going and how long it takes (it never goes back)
+  const [bar, setBar] = useState<[number, number]>([0.02, 0])
+  useEffect(() => {
+    // (from the second frame, so the empty bar's been drawn and the crawl has somewhere to start from)
+    let a = 0
+    a = requestAnimationFrame(() => (a = requestAnimationFrame(() => setBar((b) => (BAR[r.phase][0] > b[0] ? BAR[r.phase] : b)))))
+    return () => cancelAnimationFrame(a)
+  }, [r.phase])
+  const [leaving, setLeaving] = useState(false)
   const [gone, setGone] = useState(false)
   useEffect(() => {
     if (!done) return
-    const t = setTimeout(() => setGone(true), 1100)
-    return () => clearTimeout(t)
+    const a = setTimeout(() => setLeaving(true), FILLED)
+    const b = setTimeout(() => setGone(true), FILLED + FADE)
+    return () => (clearTimeout(a), clearTimeout(b))
   }, [done])
   const lines = useMemo(() => [...(LINES[part] ?? []), ...LINES.any], [part])
   const [line, setLine] = useState(0)
   useEffect(() => {
-    const t = setInterval(() => setLine((l) => l + 1), 1400)
+    const t = setInterval(() => setLine((l) => l + 1), 1600)
     return () => clearInterval(t)
   }, [])
   if (gone) return null
   return (
-    <div className={`loader${done ? ' loader-done' : ''}`} aria-busy={!done} role="status">
+    <div className={`loader${leaving ? ' loader-done' : ''}`} aria-busy={!done} role="status">
       <div className="loader-petals" aria-hidden>
         {PETALS.map((p, i) => (
           <span key={i} style={{ left: `${p.left}%`, width: p.size, height: p.size, animationDelay: `${p.delay}s`, animationDuration: `${p.dur}s`, ['--sway' as string]: `${p.sway}px` }} />
@@ -70,12 +93,14 @@ export function Loader({ part, title }: { part: string; title: string }) {
         </div>
         <h2 className="loader-title">{title}</h2>
         <div className="loader-bar">
-          <div className="loader-fill" style={{ transform: `scaleX(${r.progress})` }} />
+          <div className="loader-fill" style={{ transform: `scaleX(${bar[0]})`, transitionDuration: `${bar[1]}ms` }} />
         </div>
         <div className="loader-line">
           <span key={done ? 'done' : line}>{done ? 'all set ♡' : `${lines[line % lines.length]}…`}</span>
         </div>
-        <div className="loader-phase">{PHASE[r.phase]}</div>
+        <div className="loader-phase">
+          <span key={r.phase}>{PHASE[r.phase]}</span>
+        </div>
       </div>
     </div>
   )

@@ -1,3 +1,4 @@
+import { Static } from '../../lib/render/Static'
 import { useEffect, useMemo, useRef } from 'react'
 import { type ThreeEvent } from '@react-three/fiber'
 import { CuboidCollider } from '@react-three/rapier'
@@ -95,7 +96,9 @@ export function QuadGuitar({ car }: { car: { current: CarState } }) {
           onPointerOver={(e) => (e.stopPropagation(), (document.body.style.cursor = 'pointer'))}
           onPointerOut={() => (document.body.style.cursor = '')}
         >
-          <GuitarModel playable={playing} />
+          <Static>
+            <GuitarModel playable={playing} />
+          </Static>
         </group>
         {colliders}
       </LiveProp>
@@ -103,7 +106,9 @@ export function QuadGuitar({ car }: { car: { current: CarState } }) {
         {/* (laid down, its middle at its origin, its length along z) */}
         <group scale={K}>
           <group rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, CASE.outside.l / 2 - O]}>
-            <CaseModel />
+            <Static>
+              <CaseModel />
+            </Static>
           </group>
         </group>
         <CuboidCollider args={[CASE_BOX.half[0] * K, CASE_BOX.half[1] * K, CASE_BOX.half[2] * K]} position={[0, CASE_BOX.half[1] * K, 0]} mass={0.6} friction={0.9} />

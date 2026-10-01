@@ -581,7 +581,7 @@ export function GuitarModel({ playable = true }: { playable?: boolean }) {
           <Rod a={p.pin} b={p.saddle} r={p.r} m={p.wound ? M.bronze : M.steel} />
           <Rod a={p.saddle} b={p.nut} r={p.r} m={p.wound ? M.bronze : M.steel} />
           <Rod a={p.nut} b={p.post} r={p.r} m={p.wound ? M.bronze : M.steel} />
-          <mesh ref={(m) => void (lenses.current[i] = m)} geometry={LENS} material={M.shake} visible={false} />
+          <mesh ref={(m) => void (lenses.current[i] = m)} geometry={LENS} material={M.shake} visible={false} userData={{ live: true }} />
         </group>
       ))}
       {/* the pick, tucked in the strings by the first fret */}
@@ -589,7 +589,7 @@ export function GuitarModel({ playable = true }: { playable?: boolean }) {
       {/* fingertips on the strings that are held */}
       {held.map((f, i) =>
         f ? (
-          <mesh key={i} geometry={BALL} material={M.finger} position={[stringX(i, fretU(f) - 0.3 * (fretU(f) - fretU(f - 1))), Y(fretU(f) - 0.3 * (fretU(f) - fretU(f - 1))), stringZ(fretU(f)) + 0.5]} scale={[4.2, 4.2, 2.2]} />
+          <mesh key={i} geometry={BALL} material={M.finger} userData={{ live: true }} position={[stringX(i, fretU(f) - 0.3 * (fretU(f) - fretU(f - 1))), Y(fretU(f) - 0.3 * (fretU(f) - fretU(f - 1))), stringZ(fretU(f)) + 0.5]} scale={[4.2, 4.2, 2.2]} />
         ) : null,
       )}
       {/* where you play it: over the strings, the whole length of them (sweep over the soundhole to strum, click the board to fret) */}
