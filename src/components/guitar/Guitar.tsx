@@ -455,10 +455,11 @@ export function GuitarModel({ playable = true }: { playable?: boolean }) {
     let n = 1
     while (n < FRETS && fretU(n) < u) n++
     const next = heldRef.current.slice()
-    next[i] = next[i] === n ? 0 : n
+    const lift = next[i] === n // (its fingertip clicked again: let go, quietly)
+    next[i] = lift ? 0 : n
     heldRef.current = next
     setHeld(next)
-    sound(i, 0.7)
+    if (!lift) sound(i, 0.7)
   }
 
   // ---- the strings shaking: a blur along the part that rings (from the fret it's held at, or the nut)
