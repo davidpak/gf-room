@@ -46,8 +46,9 @@ const play = (() => {
   m.decompose(p, q, new Vector3())
   return { p, q }
 })()
-/** the case: on the grass to the tree's west, its head end toward the tree, its lid open away from you */
-const CASE_AT = { x: TRUNK.x - 300, y: LAWN, z: TRUNK.z + 190, rot: -Math.PI / 2 + 0.2 }
+/** the case: on the grass by the tree, set down on a slant, its head end toward the trunk (where the guitar's
+ *  been taken out and leant), its lid open on the side away from you */
+const CASE_AT = { x: TRUNK.x - 220, y: LAWN, z: TRUNK.z + 170, rot: -Math.PI / 2 + 0.6 }
 const O = (CASE.outside.w - 397) / 2 // (how far its shell stands out round the body)
 
 export function QuadGuitar({ car }: { car: { current: CarState } }) {
