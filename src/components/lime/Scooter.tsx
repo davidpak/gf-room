@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react'
 import { DoubleSide, Quaternion, Vector3, type BufferGeometry, type Material } from 'three'
 import { bruno } from '../quad/bruno'
 import { paint, rng } from '../picnic/paint'
-import { bar, box, capsule, carve, cylinder, mesh, slab, smax, sphere, union, type Sdf } from '../../lib/sdf/sdf'
+import { bar, box, capsule, carve, coarse, cylinder, mesh, slab, smax, sphere, union, type Sdf } from '../../lib/sdf/sdf'
 import { ARMS, AX, BARS, BATTERY, BEAM, DECK, HEAD, HOOD, LOOK, STEER_TOP, STEM, WHEELS } from './scooterSpec'
 
 /**
@@ -238,7 +238,7 @@ function rim(c: V3, r: number, w: number): Sdf {
 }
 
 type Built = ReturnType<typeof build>
-let made: Built | null = null
+const made: Record<number, Built> = {}
 function build() {
   const t0 = performance.now()
   // the frame: the beam down from the head into the deck, the head tube, the arms back to the rear axle
@@ -376,8 +376,8 @@ function Steered({ angle, children }: { angle: number; children: ReactNode }) {
   )
 }
 
-export function Scooter({ steer = 0, spin = 0, battery = 0.8 }: { steer?: number; spin?: number; battery?: number }) {
-  const g = useMemo(() => (made ??= build()), [])
+export function Scooter({ steer = 0, spin = 0, battery = 0.8, detail = 1 }: { steer?: number; spin?: number; battery?: number; /** 2: half as fine (seen small, in the Quad) */ detail?: number }) {
+  const g = useMemo(() => (made[detail] ??= coarse(detail, build)), [detail])
   const m = (geo: BufferGeometry, mat: Material, shadow = true) => <mesh geometry={geo} material={mat} castShadow={shadow} receiveShadow />
   return (
     <group>

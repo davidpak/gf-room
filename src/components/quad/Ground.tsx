@@ -1,7 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { BufferGeometry, CanvasTexture, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, InstancedMesh, Object3D, RepeatWrapping, SRGBColorSpace, Shape } from 'three'
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { BufferGeometry, CanvasTexture, Color, DoubleSide, ExtrudeGeometry, Float32BufferAttribute, InstancedMesh, Object3D, RepeatWrapping, SRGBColorSpace, Shape, ShapeGeometry, Vector3 } from 'three'
 import { bruno } from './bruno'
 import { PADS, SET, inIsland, keepClear, onWalk, paveOwner, paveSdf, walkSdf } from './set'
 
@@ -465,8 +464,66 @@ function weaveBricks() {
   return out
 }
 
+/** a brick (a unit box, its middle at the origin): its top, its top edges chamfered, its sides; no bottom (it lies
+ *  on the ground). 18 triangles where a rounded box took 300 (there are ten thousand of them); its chamfer's
+ *  normals run from up to out, so it shades round */
+function brickGeometry(c = 0.12) {
+  const pos: number[] = []
+  const nor: number[] = []
+  const idx: number[] = []
+  const v = (x: number, y: number, z: number, nx: number, ny: number, nz: number) => {
+    pos.push(x, y, z)
+    nor.push(nx, ny, nz)
+    return pos.length / 3 - 1
+  }
+  const h = 0.5
+  const i = h - c
+  // the top
+  const t = [v(-i, h, -i, 0, 1, 0), v(i, h, -i, 0, 1, 0), v(i, h, i, 0, 1, 0), v(-i, h, i, 0, 1, 0)]
+  idx.push(t[0], t[2], t[1], t[0], t[3], t[2])
+  // each side: its chamfer (from the top's edge, normal up, to the rim, normal out) and its face down to the ground
+  const sides: [number, number][] = [
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+    [0, -1],
+  ]
+  for (const [ox, oz] of sides) {
+    // (along the side: from its left to its right, looking at it from outside)
+    const ax = oz
+    const az = -ox
+    const top0 = v(ox * i - ax * i, h, oz * i - az * i, 0, 1, 0)
+    const top1 = v(ox * i + ax * i, h, oz * i + az * i, 0, 1, 0)
+    const rim0 = v(ox * h - ax * h, i, oz * h - az * h, ox, 0, oz)
+    const rim1 = v(ox * h + ax * h, i, oz * h + az * h, ox, 0, oz)
+    const bot0 = v(ox * h - ax * h, -h, oz * h - az * h, ox, 0, oz)
+    const bot1 = v(ox * h + ax * h, -h, oz * h + az * h, ox, 0, oz)
+    idx.push(top0, rim0, rim1, top0, rim1, top1, rim0, bot0, bot1, rim0, bot1, rim1)
+  }
+  const g = new BufferGeometry()
+  g.setAttribute('position', new Float32BufferAttribute(pos, 3))
+  g.setAttribute('normal', new Float32BufferAttribute(nor, 3))
+  g.setIndex(idx)
+  // (wound so each face looks out)
+  const ix = g.index!.array as Uint16Array
+  const a = new Vector3()
+  const b = new Vector3()
+  const cc = new Vector3()
+  const n = new Vector3()
+  const p = g.attributes.position
+  const nn = g.attributes.normal
+  for (let k = 0; k < ix.length; k += 3) {
+    a.fromBufferAttribute(p, ix[k])
+    b.fromBufferAttribute(p, ix[k + 1])
+    cc.fromBufferAttribute(p, ix[k + 2])
+    n.subVectors(b, a).cross(cc.sub(a))
+    if (n.dot(new Vector3().fromBufferAttribute(nn, ix[k])) < 0) [ix[k + 1], ix[k + 2]] = [ix[k + 2], ix[k + 1]]
+  }
+  return g
+}
+
 export function Walks() {
-  const brick = useMemo(() => new RoundedBoxGeometry(1, 1, 1, 2, 0.12), [])
+  const brick = useMemo(() => brickGeometry(), [])
   const bricks = useMemo(() => [...borderBricks(), ...seamBricks(), ...weaveBricks()].filter((b) => inIsland(b.x, b.z, 30)), [])
   const mesh = useRef<InstancedMesh>(null)
   useLayoutEffect(() => {
@@ -484,7 +541,7 @@ export function Walks() {
     m.instanceMatrix.needsUpdate = true
     if (m.instanceColor) m.instanceColor.needsUpdate = true
   }, [bricks])
-  return <instancedMesh ref={mesh} args={[brick, BRICK, bricks.length]} castShadow receiveShadow />
+  return <instancedMesh ref={mesh} args={[brick, BRICK, bricks.length]} receiveShadow />
 }
 
 // ---- the petals
@@ -497,7 +554,7 @@ function petalGeometry() {
   s.lineTo(0, 9.6)
   s.lineTo(1.4, 11)
   s.bezierCurveTo(6, 9, 5, 3, 0, 0)
-  const g = new ExtrudeGeometry(s, { depth: 0.1, bevelEnabled: false })
+  const g = new ShapeGeometry(s, 4)
   g.rotateX(-Math.PI / 2)
   g.computeVertexNormals()
   const n = g.attributes.normal

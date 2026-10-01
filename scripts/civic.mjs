@@ -3,7 +3,8 @@
  *
  *   in    photos/../public/reference/2016-honda-civic.zip's model.dae, unpacked (the path as an argument):
  *         "2016 Honda Civic" by Icons of Denmark (SketchUp, from Sketchfab); COLLADA, in inches, Z up
- *   out   public/models/civic.glb (git-ignored with the download: its licence to check before it ships)
+ *   out   public/models/civic.glb (git-ignored with the download: its licence to check before it ships); then
+ *         `npm run civic:compress` packs it with meshopt (12 MB to 3.5 MB; three decodes it as it loads)
  *
  * What it does:
  *   - every piece baked into the car's frame, in real mm: +z forward, +y up, the tyres on the ground at

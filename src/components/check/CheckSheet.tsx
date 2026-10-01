@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { OrbitControls, OrthographicCamera, PerspectiveCamera, View } from '@react-three/drei'
 import { PCFShadowMap, Vector3 } from 'three'
 

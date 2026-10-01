@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, Matrix4, PCFSoftShadowMap, Quaternion, SRGBColorSpace, Vector3, type Group } from 'three'
 import { LOOK, bruno } from '../quad/bruno'

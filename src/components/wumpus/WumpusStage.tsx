@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { RoundedBox } from '@react-three/drei'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { PCFShadowMap, Vector3, type Group } from 'three'

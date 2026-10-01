@@ -1,4 +1,4 @@
-import { Canvas } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { ToyControls } from '../stage/ToyControls'
 import { PCFShadowMap, Vector3 } from 'three'
 import { CheckSheet } from '../check/CheckSheet'

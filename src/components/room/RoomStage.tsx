@@ -1,5 +1,6 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { CanvasTexture, MeshStandardMaterial, PCFShadowMap, SRGBColorSpace, Vector3 } from 'three'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { useDeskMotor } from '../../lib/motor'

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, bruno } from '../quad/bruno'

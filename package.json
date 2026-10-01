@@ -11,7 +11,8 @@
     "blender:desk": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" -b --python blender/build_desk.py",
     "blender:keypad": "\"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe\" -b --python blender/build_keypad.py",
     "photos": "node scripts/photos.mjs",
-    "civic": "node --max-old-space-size=8192 scripts/civic.mjs"
+    "civic": "node --max-old-space-size=8192 scripts/civic.mjs",
+    "civic:compress": "npx -y @gltf-transform/cli@4 meshopt public/models/civic.glb public/models/civic.glb --level medium"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

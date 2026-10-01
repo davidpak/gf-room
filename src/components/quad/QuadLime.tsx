@@ -30,7 +30,7 @@ export function QuadLime({ car }: { car: { current: CarState } }) {
       {SET.lime.scooters.map((g, i) => (
         <LiveProp key={i} id={`scooter${i}`} label="Stand the scooter up" at={{ x: g.x, y: PAVING, z: g.z, rot: g.rot }} car={car} lift={0} feelAlong={[0, 0.5 * (SC.x1 + SC.x0) * K, SC.x1 * K * 0.9]} feelR={(SC.w / 2) * K}>
           <group scale={K}>
-            <Scooter />
+            <Scooter detail={2} />
           </group>
           <CuboidCollider args={[((SC.x1 - SC.x0) / 2) * K, (SC.y1 / 2) * K, (SC.w / 2) * K]} position={[((SC.x1 + SC.x0) / 2) * K, (SC.y1 / 2) * K, 0]} mass={0.8} friction={0.8} />
           <CuboidCollider args={[50 * K, SC.stem.h * K, (SC.stem.w / 2) * K]} position={[SC.stem.x * K, SC.stem.y * K, 0]} mass={0.2} friction={0.8} />

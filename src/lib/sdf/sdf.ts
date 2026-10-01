@@ -198,7 +198,20 @@ export function normal(f: Sdf, x: number, y: number, z: number, out: Vector3, e 
  * surface along the gradient; normals are the gradient. `uv` (optional) gives each vertex its texture
  * coordinates from its position and normal (for painting markings on).
  */
+let DETAIL = 1
+/** meshes made inside fn come out k times coarser (a thing seen small: fewer triangles, quicker to make); fine
+ *  parts (cells of 2.5 mm or less) keep theirs, so thin things don't break up */
+export function coarse<T>(k: number, fn: () => T): T {
+  const was = DETAIL
+  DETAIL = k
+  try {
+    return fn()
+  } finally {
+    DETAIL = was
+  }
+}
 export function mesh(f: Sdf, min: V3, max: V3, cell: number, uv?: (p: Vector3, n: Vector3) => [number, number]) {
+  cell *= DETAIL === 1 || cell <= 2.5 ? 1 : cell <= 3 ? Math.min(1.5, DETAIL) : DETAIL
   const nx = Math.ceil((max[0] - min[0]) / cell) + 1
   const ny = Math.ceil((max[1] - min[1]) / cell) + 1
   const nz = Math.ceil((max[2] - min[2]) / cell) + 1

@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { OrbitControls } from '@react-three/drei'
 import { PCFShadowMap, Vector3 } from 'three'
 import { CheckSheet } from '../check/CheckSheet'

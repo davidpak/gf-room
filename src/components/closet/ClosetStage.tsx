@@ -1,4 +1,4 @@
-import { Canvas } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { ToyControls } from '../stage/ToyControls'
 import { PCFShadowMap } from 'three'
 import { DUSK, Effects, StageLights } from '../stage/StageLights'

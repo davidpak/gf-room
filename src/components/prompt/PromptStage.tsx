@@ -1,5 +1,6 @@
 import { useMemo, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { RoundedBox } from '@react-three/drei'
 import { CuboidCollider, RigidBody, useRapier, type RapierRigidBody } from '@react-three/rapier'
 import { MeshStandardMaterial, PCFShadowMap, Quaternion, Vector3 } from 'three'

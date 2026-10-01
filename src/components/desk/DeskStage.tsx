@@ -1,5 +1,5 @@
 import { Suspense, useMemo, useRef, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { ToyControls } from '../stage/ToyControls'
 import { Matrix4, PCFShadowMap, Quaternion, Vector3, type Group } from 'three'
 import { H_MAX, H_MIN, IN, useDeskMotor } from '../../lib/motor'

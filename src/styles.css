@@ -18,15 +18,6 @@ body {
   font-size: 14px; white-space: nowrap; pointer-events: none;
   transform: translate(-50%, -100%);
 }
-.parts {
-  position: fixed; top: 16px; right: 16px; display: flex; gap: 6px;
-  font-size: 13px;
-}
-.parts a {
-  color: #e6e0ff; text-decoration: none; padding: 6px 12px; border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08); backdrop-filter: blur(6px);
-}
-.parts a.on { background: #ffd9b0; color: #2a1a3f; }
 
 /* ---- fix-it prompts (components/prompt/Prompts.tsx): a label plate sliding out from behind a
    diamond, after Bruno Simon's interactive points. The diamond's centre sits over the anchor. */
@@ -123,7 +114,6 @@ body {
 }
 
 /* hidden while the laptop's in use (the classes set display, so [hidden] has to say so) */
-.overlay[hidden],
-.parts[hidden] {
+.overlay[hidden] {
   display: none;
 }

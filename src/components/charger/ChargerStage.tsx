@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { Canvas } from '../../lib/render/Canvas'
 import { RoundedBox } from '@react-three/drei'
 import { CatmullRomCurve3, ExtrudeGeometry, Group, LatheGeometry, Mesh, MeshStandardMaterial, PCFShadowMap, TubeGeometry, Vector2, Vector3 } from 'three'
 import { CheckSheet } from '../check/CheckSheet'
