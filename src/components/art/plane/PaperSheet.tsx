@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { BallCollider, CuboidCollider, useBeforePhysicsStep, useRapier, type RapierRigidBody } from '@react-three/rapier'
 import { Group, Quaternion, Vector3 } from 'three'
@@ -23,7 +23,12 @@ import { BALL, ballGeometry, build, dashes, dist, FOLDS, H, KEEL, LAYER, LINE, L
  *                a ball    a little drag
  *
  * `k` scales it (the Quad's toy scale); its frame: the paper's own (x across, y up, -z its nose).
+ *
+ * `zoom` (the Quad, where it's a toy and too small to fold from the car): a click on it takes the camera down onto it
+ * (`open`), and only then do its folds show and take clicks; picked up, or done (a dart, a ball), the camera's let go
+ * (`close`).
  */
+type Zoom = { on: boolean; open: () => void; close: () => void }
 const _v = new Vector3()
 const _f = new Vector3()
 const _u = new Vector3()
@@ -31,8 +36,9 @@ const _w = new Vector3()
 const _q = new Quaternion()
 const UP = new Vector3(0, 1, 0)
 
-export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0 }: { at: [number, number, number]; rot?: number; color: string; k?: number; /** changed: it's laid back out where it started, flat (the same body: never one the hand might be holding swapped out) */ reset?: number }) {
-  const body = useRef<RapierRigidBody>(null)
+export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef }: { at: [number, number, number]; rot?: number; color: string; k?: number; /** changed: it's laid back out where it started, flat (the same body: never one the hand might be holding swapped out) */ reset?: number; zoom?: Zoom; bodyRef?: RefObject<RapierRigidBody | null> }) {
+  const own = useRef<RapierRigidBody>(null)
+  const body = bodyRef ?? own
   const inner = useRef<Group>(null)
   const { world } = useRapier()
   const mat = paperMat(color)
@@ -64,6 +70,16 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0 }: { at: [numb
   const done = st.current.done
   if (import.meta.env.DEV) ((window as unknown as { __paper: Record<string, unknown> }).__paper ??= {})[color] = { body, inner, st } // (for trying it from the console)
   const kind: 'sheet' | 'plane' | 'ball' = crumple.current >= 1 ? 'ball' : done.length === FOLDS.length ? 'plane' : 'sheet'
+  const folding = zoom ? zoom.on : true // (its folds show and take clicks)
+  // done (a dart, a ball) while looked at: a beat to see it, then the camera's let go
+  const zoomed = !!zoom?.on
+  const close = useRef(zoom?.close)
+  close.current = zoom?.close
+  useEffect(() => {
+    if (!zoomed || kind === 'sheet') return
+    const t = setTimeout(() => close.current?.(), 900)
+    return () => clearTimeout(t)
+  }, [zoomed, kind])
 
   const left = FOLDS.filter((f) => !done.includes(f.id))
   const ready = (f: Fold) => f.needs.every((n) => done.includes(n))
@@ -197,6 +213,10 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0 }: { at: [numb
   const local = (e: ThreeEvent<PointerEvent | MouseEvent>) => inner.current!.worldToLocal(e.point.clone())
   const over = (e: ThreeEvent<PointerEvent>) => {
     if (!near) setNear(true)
+    if (!folding) {
+      document.body.style.cursor = 'pointer'
+      return
+    }
     if (kind !== 'sheet' || anim.current || held.current) return
     const p = local(e)
     let f: Fold | null = null
@@ -221,6 +241,12 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0 }: { at: [numb
     document.body.style.cursor = ''
   }
   const click = (e: ThreeEvent<MouseEvent>) => {
+    if (zoom && !zoom.on) {
+      if (held.current) return
+      e.stopPropagation()
+      zoom.open()
+      return
+    }
     if (kind !== 'sheet' || hover == null || held.current) return
     const b = body.current
     if (b) {
@@ -234,11 +260,11 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0 }: { at: [numb
   }
 
   const lines = useMemo(() => {
-    if (kind !== 'sheet' || !near || anim.current) return []
+    if (kind !== 'sheet' || !(zoom ? zoom.on : near) || anim.current) return []
     const rank = topRank()
     return left.map((f) => ({ id: f.id, geo: dashes(f.seg, rank, st.current.bend, f.id === hover ? 1.4 : 0.8) }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, near, hover, geo, left.length])
+  }, [kind, near, hover, geo, left.length, zoom?.on])
   const ball = useMemo(ballGeometry, [])
 
   // its body, as it is now
@@ -285,6 +311,7 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0 }: { at: [numb
         onGrab: () => {
           held.current = true
           out()
+          if (zoom?.on) zoom.close() // (picked up: back to the car's view, to carry it and throw it from there)
         },
         onRelease: (b) => {
           held.current = false

@@ -15,7 +15,7 @@ import { CookieStand } from './CookieStand'
 import { QuadGuitar } from './QuadGuitar'
 import { QuadPicnic } from './QuadPicnic'
 import { QuadLime, RideHint } from './QuadLime'
-import { ART_OBSTACLES, QuadArt } from './QuadArt'
+import { QuadArt } from './QuadArt'
 import { PaintBox } from '../art/PaintBox'
 import '../art/art.css'
 import { lookBack, useLook } from './look'
@@ -66,7 +66,6 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
       ...SET.hedges.map((h) => ({ kind: 'box' as const, x: (h.x0 + h.x1) / 2, z: h.z, w: h.x1 - h.x0, d: h.d })),
       ...SET.bushes.map((b) => ({ kind: 'circle' as const, x: b.x, z: b.z, r: b.r * 0.8 })),
       { kind: 'circle' as const, x: SET.photos.easel.x, z: SET.photos.easel.z, r: 100 }, // (the bench photo's easel)
-      ...ART_OBSTACLES, // (the art corner's easel and stool)
     ],
     [],
   )
