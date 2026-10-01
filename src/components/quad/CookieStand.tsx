@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { ConvexHullCollider, CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier'
+import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier'
 import { BackSide, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, CurvePath, CylinderGeometry, DodecahedronGeometry, DoubleSide, LineCurve3, Matrix4, OctahedronGeometry, QuadraticBezierCurve3, Quaternion, RepeatWrapping, RingGeometry, SphereGeometry, SRGBColorSpace, TubeGeometry, Vector3, Euler, type Group, type Material, type Mesh } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
@@ -37,15 +37,6 @@ import { Static } from '../../lib/render/Static'
 const K = 0.16
 const TABLE = { w: 1830, d: 760, h: 740 }
 const CANOPY = { half: 1500, eave: 2100, peak: 2900, over: 60 }
-/** the roof's pyramid, for the physics: its four eave corners and its peak (toy mm) */
-const ROOF_HULL = new Float32Array(
-  [
-    ...[-1, 1].flatMap((sx) => [-1, 1].flatMap((sz) => [sx * (CANOPY.half + CANOPY.over), CANOPY.eave + 50, sz * (CANOPY.half + CANOPY.over)])),
-    0,
-    CANOPY.peak,
-    0,
-  ].map((v) => v * K),
-)
 const OVEN = { w: 411, h: 241, d: 330, x: -400 } // (Hamilton Beach's 4-slice, 31146J: 16.2 × 9.5 × 13 in; on the table, left of middle)
 const OVEN_TOY = 1.7 // (drawn bigger: it's the star, and a cookie has to be seen baking in it)
 const BAKE_S = 2.2 // (a bake, start to cookie out)
@@ -1180,10 +1171,6 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
           )),
         )}
         <CuboidCollider args={[(half + CANOPY.over) * K, 30 * K, (half + CANOPY.over) * K]} position={[0, (eave + 20) * K, 0]} mass={1.2} friction={0.6} />
-        {/* the roof's peak, the post on it and the count's board (knocked over, it lies on them, not through them) */}
-        <ConvexHullCollider args={[ROOF_HULL]} mass={0.3} friction={0.6} />
-        <CuboidCollider args={[20 * K, 170 * K, 20 * K]} position={[0, (peak + 170) * K, 0]} mass={0.05} friction={0.6} />
-        <CuboidCollider args={[750 * K, 200 * K, 30 * K]} position={[0, (peak + 440) * K, 30 * K]} mass={0.1} friction={0.6} />
       </LiveProp>
 
       {/* the table and its cloth */}
