@@ -4,12 +4,12 @@ import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, PCFSoftShadowMap, SRGBColorSpace, Vector3, type Group } from 'three'
 import { LOOK, bruno } from '../quad/bruno'
 import { GuitarModel } from './Guitar'
-import { CaseModel, Strap } from './Case'
+import { CaseModel } from './Case'
 import { leanMatrix, playMatrix } from './pose'
 
 /**
  * The guitar on its own (gallery first), full size, in the Quad's evening light: leaning on a cherry's
- * trunk with its case open on the grass beside it, its strap fallen in the grass. Hold the left button and
+ * trunk with its case open on the grass beside it. Hold the left button and
  * sweep across its strings over the soundhole to strum; click the fingerboard to hold a string down at
  * that fret (click again to let go).
  *
@@ -71,7 +71,6 @@ function Scene() {
       <group ref={guitar} matrix={pose} matrixAutoUpdate={false}>
         <GuitarModel />
       </group>
-      {!PLAY && <Strap guitar={guitar} scale={1} ground={0} />}
       {/* its case, open on the grass */}
       <group position={[-820, 0, 420]} rotation={[0, 0.5, 0]}>
         <group rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 540]}>

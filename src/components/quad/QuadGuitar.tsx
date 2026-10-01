@@ -3,7 +3,7 @@ import { type ThreeEvent } from '@react-three/fiber'
 import { CuboidCollider } from '@react-three/rapier'
 import { Quaternion, Vector3, type Group } from 'three'
 import { GUITAR_BOXES, GuitarModel } from '../guitar/Guitar'
-import { CASE_BOX, CaseModel, Strap } from '../guitar/Case'
+import { CASE_BOX, CaseModel } from '../guitar/Case'
 import { leanMatrix, playMatrix } from '../guitar/pose'
 import { CASE } from '../guitar/spec'
 import { LiveProp } from './Physical'
@@ -13,8 +13,7 @@ import type { CarState } from './Car'
 
 /**
  * The guitar on the Quad (../guitar): a Martin D-28 leaning back against the first cherry of the
- * clothesline (so it's there when you look at the line), its case open on the grass beside it, its strap
- * fallen in the grass. Both loose things, like the benches: knocked over by the car, carried, put back.
+ * clothesline (so it's there when you look at the line), its case open on the grass beside it. Both loose things, like the benches: knocked over by the car, carried, put back.
  *
  *   click it   the camera goes in, and the guitar comes up off the tree and holds itself flat in front of
  *              you: hold the left button and sweep across the strings over the soundhole to strum, click
@@ -100,7 +99,6 @@ export function QuadGuitar({ car }: { car: { current: CarState } }) {
         </group>
         {colliders}
       </LiveProp>
-      <Strap guitar={model} scale={K} ground={LAWN} />
       <LiveProp id="guitarcase" label="Put the case back" at={CASE_AT} car={car} lift={140} feelAlong={[-0.3 * CASE.outside.l * K, 0.3 * CASE.outside.l * K]} feelR={60}>
         {/* (laid down, its middle at its origin, its length along z) */}
         <group scale={K}>

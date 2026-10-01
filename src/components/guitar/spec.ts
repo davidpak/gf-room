@@ -146,7 +146,6 @@ export const HEAD = {
 export const NUT = { t: 6, h: 5 } // bone: 6 thick, 5 over the board
 
 // ---- what goes with it
-export const STRAP = { w: 50, t: 2.5 } // a woven 2" strap
 export const PICK = { w: 26, l: 30, t: 0.9 } // a 351 shape (medium)
 export const CASE = {
   outside: { l: 44.25 * IN, w: 18.25 * IN, h: 7.5 * IN }, // [K] 1124 × 464 × 191

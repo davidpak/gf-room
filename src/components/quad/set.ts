@@ -39,7 +39,7 @@ export const SET = {
   // the grounds crew's lawn signs ("don't climb on the trees"), out on the grass before the cherries, turned
   // a little toward the camera
   signs: [
-    { x: -3436, z: -596, rot: 0.3 }, // (across the V's west walk from the guitar and its case, the same way off it)
+    { x: -3370, z: -320, rot: 0.3 }, // (across the V's west walk from the guitar and its case, the same way off it)
     { x: 1850, z: -540, rot: 0.3 }, // (across the walk from the clothesline, out of the photos' way)
   ],
   // their photos from the Quad (./Photos): the bench photo on an easel by the bench it was taken on; the cherry

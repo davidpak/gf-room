@@ -506,7 +506,6 @@ export function GuitarModel({ playable = true }: { playable?: boolean }) {
     }
   })
 
-  const heelU = JOIN - 10
   return (
     <group>
       {/* the body: the spruce top (the soundhole cut in it), its binding, the rosewood back and sides */}
@@ -553,11 +552,9 @@ export function GuitarModel({ playable = true }: { playable?: boolean }) {
         </mesh>
       ))}
       <mesh geometry={TUBE} material={M.bone} position={[0, Y(-NUT.t / 2), (NECK.board + NUT.h) / 2 - 0.5]} rotation={[0, 0, Math.PI / 2]} scale={[NUT.t / 2, NECK.nut, (NECK.board + NUT.h) / 2 + 1]} />
-      {/* its endpin, and the strap button on its heel */}
+      {/* its endpin */}
       <mesh geometry={TUBE} material={M.ebony} position={[0, -5, -BODY.depthTail / 2]} scale={[4, 10, 4]} />
       <mesh geometry={BALL} material={M.bone} position={[0, -10, -BODY.depthTail / 2]} scale={[5, 3, 5]} />
-      <mesh geometry={TUBE} material={M.ebony} position={[0, Y(heelU), -BODY.depthHeel + 2]} rotation={[Math.PI / 2, 0, 0]} scale={[4, 8, 4]} />
-      <mesh geometry={BALL} material={M.bone} position={[0, Y(heelU), -BODY.depthHeel - 3]} scale={[5, 5, 2.5]} />
       {/* the headstock: turned back from the nut, its rosewood plate and the script, the tuners */}
       <group position={HEAD_AT} quaternion={HEAD_Q}>
         <mesh geometry={geo.head} material={M.mahogany} castShadow />

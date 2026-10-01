@@ -1,8 +1,7 @@
-import { useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { BufferAttribute, BufferGeometry, CylinderGeometry, DoubleSide, ExtrudeGeometry, Path, Shape, Vector2, Vector3, type Object3D } from 'three'
+import { useMemo } from 'react'
+import { CylinderGeometry, ExtrudeGeometry, Path, Shape, Vector2 } from 'three'
 import { bruno } from '../quad/bruno'
-import { BODY, CASE, HEAD, JOIN, NUT, OUTLINE, STRAP } from './spec'
+import { BODY, CASE, HEAD, NUT, OUTLINE } from './spec'
 import { END } from './Guitar'
 
 /**
@@ -11,9 +10,6 @@ import { END } from './Guitar'
  * shape pressed into it and the little lidded well for strings under the neck, five latches and the
  * handle down its opening side, its lid hinged back along the other. Built flat in its own frame (x
  * across, y along from the tail end, z up out of it), then laid down: `<group rotation-x={-π/2}>`.
- *
- * And the strap: tied at the endpin and the heel, hanging between them wherever the guitar is (it falls
- * to the grass and lies there when there's slack).
  */
 const SHELL = bruno({ color: '#36313d', shade: '#241f2e', sheen: 0.22 })
 const PLUSH = bruno({ color: '#6aa987', shade: '#4d6f86' })
@@ -135,77 +131,3 @@ export function CaseModel() {
 
 /** the case's size once it's laid down (real mm): for its physics */
 export const CASE_BOX = { half: [CASE.outside.w / 2, (CASE.outside.h * CASE.split) / 2, CASE.outside.l / 2] as [number, number, number] }
-
-// ---- the strap: tied at the endpin and the heel, falling slack between them
-const STRAP_MAT = bruno({ color: '#ffffff', side: DoubleSide, shade: '#9d86ad', vertexColors: true })
-const STRAP_LEN = 1150 // (real mm: an ordinary strap, let out)
-export const ENDPIN = new Vector3(0, -12, -BODY.depthTail / 2)
-export const HEEL_BUTTON = new Vector3(0, END - (JOIN - 10), -BODY.depthHeel - 5)
-/** `guitar`: the guitar's object (its frame, ./Guitar's); `scale`: the guitar's scale; `ground`: the grass's height */
-export function Strap({ guitar, scale, ground }: { guitar: { current: Object3D | null }; scale: number; ground: number }) {
-  const N = 48
-  const geo = useMemo(() => {
-    const g = new BufferGeometry()
-    g.setAttribute('position', new BufferAttribute(new Float32Array((N + 1) * 2 * 3), 3))
-    // woven stripes across it: cream, pink, sage, like the stand's canopy
-    const cols = new Float32Array((N + 1) * 2 * 3)
-    const stripe = [
-      [0.99, 0.95, 0.89],
-      [0.96, 0.7, 0.78],
-      [0.99, 0.95, 0.89],
-      [0.62, 0.78, 0.66],
-    ]
-    for (let i = 0; i <= N; i++)
-      for (let k = 0; k < 2; k++) cols.set(stripe[Math.floor(i / 3) % 4], (i * 2 + k) * 3)
-    g.setAttribute('color', new BufferAttribute(cols, 3))
-    const idx: number[] = []
-    for (let i = 0; i < N; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2)
-    g.setIndex(idx)
-    return g
-  }, [])
-  const a = useRef(new Vector3())
-  const b = useRef(new Vector3())
-  const was = useRef(new Vector3(1e9, 0, 0))
-  const wasB = useRef(new Vector3(1e9, 0, 0))
-  useFrame(() => {
-    const o = guitar.current
-    if (!o) return
-    o.updateWorldMatrix(true, false)
-    a.current.copy(ENDPIN).applyMatrix4(o.matrixWorld)
-    b.current.copy(HEEL_BUTTON).applyMatrix4(o.matrixWorld)
-    const moved = a.current.distanceTo(was.current) + b.current.distanceTo(wasB.current)
-    if (moved < 0.05 && geo.boundingSphere) return
-    was.current.copy(a.current)
-    wasB.current.copy(b.current)
-    const len = STRAP_LEN * scale
-    const d = a.current.distanceTo(b.current)
-    const sag = len > d ? Math.sqrt(len * len - d * d) * 0.48 : 0
-    const p = geo.attributes.position as BufferAttribute
-    const pt = new Vector3()
-    const prev = new Vector3()
-    const side = new Vector3()
-    const up = new Vector3(0, 1, 0)
-    const w = (STRAP.w * scale) / 2
-    for (let i = 0; i <= N; i++) {
-      const t = i / N
-      pt.lerpVectors(a.current, b.current, t)
-      pt.y -= sag * 4 * t * (1 - t)
-      pt.y = Math.max(pt.y, ground + 0.6)
-      // across it: level, square to where it runs
-      const t2 = Math.min(1, t + 1 / N)
-      prev.lerpVectors(a.current, b.current, t2)
-      prev.y -= sag * 4 * t2 * (1 - t2)
-      prev.y = Math.max(prev.y, ground + 0.6)
-      const along = i < N ? prev.sub(pt) : pt.clone().sub(b.current).negate()
-      side.crossVectors(along, up)
-      if (side.lengthSq() < 1e-8) side.set(1, 0, 0)
-      side.normalize().multiplyScalar(w)
-      p.setXYZ(i * 2, pt.x + side.x, pt.y + side.y, pt.z + side.z)
-      p.setXYZ(i * 2 + 1, pt.x - side.x, pt.y - side.y, pt.z - side.z)
-    }
-    p.needsUpdate = true
-    geo.computeVertexNormals()
-    geo.computeBoundingSphere()
-  })
-  return <mesh geometry={geo} material={STRAP_MAT} castShadow frustumCulled={false} />
-}
