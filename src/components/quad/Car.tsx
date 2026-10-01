@@ -73,6 +73,23 @@ const VIEW = typeof location !== 'undefined' ? new URLSearchParams(location.sear
 const _pos = new Vector3()
 const _at = new Vector3()
 const _tp = new Vector3()
+const _target = new Vector3()
+const _right = new Vector3()
+const _up = new Vector3()
+const _sunDir = new Vector3()
+/** the sun's shadows follow the camera in whole texels of their map, not smoothly: slid by part of a
+ *  texel, every shadow's edge would shimmer and crawl as the car drives */
+function snapToTexels(p: Vector3, sun: DirectionalLight) {
+  _sunDir.copy(LOOK.sun).normalize()
+  _right.set(0, 1, 0).cross(_sunDir).normalize() // (the shadow camera's own right and up, as lookAt makes them)
+  _up.copy(_sunDir).cross(_right)
+  const c = sun.shadow.camera
+  const texel = (c.right - c.left) / sun.shadow.mapSize.x
+  const a = Math.round(p.dot(_right) / texel) * texel
+  const b = Math.round(p.dot(_up) / texel) * texel
+  const d = p.dot(_sunDir)
+  return p.copy(_right).multiplyScalar(a).addScaledVector(_up, b).addScaledVector(_sunDir, d)
+}
 const _ta = new Vector3()
 const keys = new Set<string>()
 const MAP: Record<string, string> = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'brake', KeyR: 'reset' }
@@ -244,9 +261,9 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     }
     if (Math.abs(s.v) > 150) shutDoors() // (driving off: the doors swing shut)
     // the camera: from above and behind, always the same way round; the sun's shadow follows
-    const target = new Vector3(s.x, 0, s.z)
-    if (first.current) camAt.current.copy(target)
-    camAt.current.lerp(target, first.current ? 1 : Math.min(1, dt * 4))
+    _target.set(s.x, 0, s.z)
+    if (first.current) camAt.current.copy(_target)
+    camAt.current.lerp(_target, first.current ? 1 : Math.min(1, dt * 4))
     first.current = false
     const z = zoom.current
     // Bruno's camera: high, from the front and a little to the side, always the same way round
@@ -307,8 +324,9 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     if (lk.has && e > 0.5) shared.car.value.copy(lk.at) // (looking at a photo: the blossom opens in front of it)
     else shared.car.value.set(s.x, 150, s.z)
     if (sun) {
-      sun.position.copy(LOOK.sun).multiplyScalar(4000).add(camAt.current)
-      sun.target.position.set(camAt.current.x, 0, camAt.current.z)
+      snapToTexels(_target.set(camAt.current.x, 0, camAt.current.z), sun)
+      sun.position.copy(LOOK.sun).multiplyScalar(4000).add(_target)
+      sun.target.position.copy(_target)
       sun.target.updateMatrixWorld()
       // its shadows: redrawn every frame while they move with the car (or something's being carried), else every
       // other frame (what moves then, the ducks pottering, the petals falling, moves slowly: half the work)

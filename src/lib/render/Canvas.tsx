@@ -11,11 +11,14 @@ import { ready, stillWaiting } from '../ready'
  * nothing shows half-made or hitches when it's first looked at.
  *
  *   ?perf   the r3f-perf overlay (FPS, GPU time, draw calls); the dev menu toggles it
+ *   ?hitch  the hitch recorder (./Hitches: what each late frame was doing); the dev menu toggles it
  */
 const DEV_PARAM = typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev')
 const SHOW_PERF = typeof location !== 'undefined' && new URLSearchParams(location.search).has('perf')
+const SHOW_HITCH = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hitch')
 /** (fetched only when it's asked for) */
 const Perf = lazy(() => import('r3f-perf').then((m) => ({ default: m.Perf })))
+const Hitches = lazy(() => import('./Hitches').then((m) => ({ default: m.Hitches })))
 
 function Progress() {
   const { loaded, total } = useProgress()
@@ -131,6 +134,11 @@ export function Canvas({ children, ...props }: CanvasProps & { children?: ReactN
       {SHOW_PERF && (
         <Suspense fallback={null}>
           <Perf position="top-left" />
+        </Suspense>
+      )}
+      {SHOW_HITCH && (
+        <Suspense fallback={null}>
+          <Hitches timeGpu={!SHOW_PERF} />
         </Suspense>
       )}
     </FiberCanvas>

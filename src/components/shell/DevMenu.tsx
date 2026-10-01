@@ -10,7 +10,7 @@ import './shell.css'
 const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams()
 const go = (part: string, extra: Record<string, boolean> = {}) => {
   const q = new URLSearchParams({ part })
-  for (const [k, on] of Object.entries(extra)) if (on) q.set(k, '')
+  for (const [k, on] of Object.entries({ dev: params.has('dev'), ...extra })) if (on) q.set(k, '')
   location.search = q.toString().replace(/=(&|$)/g, '$1')
 }
 
@@ -21,6 +21,7 @@ export function DevMenu({ part }: { part: PartKey }) {
   const input = useRef<HTMLInputElement>(null)
   const check = params.has('check')
   const perf = params.has('perf')
+  const hitch = params.has('hitch')
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable
@@ -86,11 +87,14 @@ export function DevMenu({ part }: { part: PartKey }) {
           <div className="dev-toggles">
             {'check' in PARTS[part] && (
               <label>
-                <input type="checkbox" checked={check} onChange={() => go(part, { check: !check, perf })} /> verification sheet
+                <input type="checkbox" checked={check} onChange={() => go(part, { check: !check, perf, hitch })} /> verification sheet
               </label>
             )}
             <label>
-              <input type="checkbox" checked={perf} onChange={() => go(part, { check, perf: !perf })} /> performance overlay
+              <input type="checkbox" checked={perf} onChange={() => go(part, { check, perf: !perf, hitch })} /> performance overlay
+            </label>
+            <label>
+              <input type="checkbox" checked={hitch} onChange={() => go(part, { check, perf, hitch: !hitch })} /> hitch recorder
             </label>
             <span className="dev-key">` to toggle</span>
           </div>

@@ -1,9 +1,10 @@
-import { Fragment, useEffect, useMemo } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { createPortal, useFrame, type ThreeEvent } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { CanvasTexture, LatheGeometry, SRGBColorSpace, Vector2, type Group, type Material, type Mesh, type Object3D } from 'three'
 import { bruno } from '../quad/bruno'
 import { CIVIC, TOY } from './spec'
+import { addShadowProxies, shadowProxiesReady, whenShadowProxiesReady } from './shadowProxy'
 
 /**
  * David's car, the 2016 Civic LX sedan, from a real model of it (scripts/civic.mjs makes
@@ -171,11 +172,21 @@ export function CivicModel({ onWheels }: { onWheels?: (w: { node: Object3D; fron
       const name = (Array.isArray(m.material) ? m.material[0] : m.material).name
       m.material = MATS[name] ?? DARK
       // (the glass lets the light in, casting no shade; inside's lit evenly, not blotched by the roof's shadow)
-      m.castShadow = name !== 'Carro_Vidros'
+      m.castShadow = name !== 'Carro_Vidros' && name !== 'Carro_Interno' // (nor the inside: the shell's shadow covers it)
       m.receiveShadow = name !== 'Carro_Interno'
     })
     return c
   }, [scene])
+  // its shadow cast by a simplified stand-in (./shadowProxy: 500k triangles drawn into the sun's map down to a
+  // few percent of them)
+  const [simplifier, setSimplifier] = useState(shadowProxiesReady)
+  useEffect(() => void (simplifier || whenShadowProxiesReady.then(() => setSimplifier(true))), [simplifier])
+  useMemo(() => {
+    if (!simplifier) return
+    const ms: Mesh[] = []
+    car.traverse((o) => void ((o as Mesh).isMesh && ms.push(o as Mesh)))
+    addShadowProxies(ms)
+  }, [car, simplifier])
   const parts = useMemo(() => {
     const get = (n: string) => car.getObjectByName(n) as Group | undefined
     return {
