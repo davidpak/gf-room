@@ -44,9 +44,11 @@ export const CAR_SHAPE = {
     span(-HW, -WELL.x, WELL.floor, WELL.rim, -2315, WELL.z1),
     span(-WELL.x, WELL.x, WELL.floor, 950, -2315, WELL.z0), // (its back)
     span(-700, 700, 950, 1440, -1600, 1000), // (the cabin)
-    // (a skirt down to just off the ground under it all: it shoves the picnic's low things, the books, the board,
-    // the food, rather than riding over them; and nothing gets wedged under it and pressed into the ground)
-    span(-HW + 30, HW - 30, 15, 150, -2290, 2290),
+    // (a skirt under it all, down past the ground: it shoves the picnic's low things, the books, the board, the
+    // food, rather than riding over them. Down below the lawn, not just to it: up on the bricks the car rides 20 mm
+    // above the lawn beside them, and what was there slid under, to be pressed into the ground as the car came
+    // back down. The ground's fixed and the car's moved by its driving, so the two never push on each other)
+    span(-HW + 30, HW - 30, -300, 150, -2290, 2290),
   ],
   lid: span(-640, 640, WELL.rim, WELL.rim + 60, -2218, -1832),
   /** the well, for what's put in it (toy mm, the car's frame) */

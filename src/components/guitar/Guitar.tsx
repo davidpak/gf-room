@@ -138,6 +138,8 @@ const M = {
 }
 const TUBE = new CylinderGeometry(1, 1, 1, 10)
 const BALL = new SphereGeometry(1, 16, 10)
+/** for what's only to be seen: the pointer passes through it (to the strings' board behind) */
+const NO_RAY = () => {}
 const HOLE_WALL = new CylinderGeometry(1, 1, 1, 48, 1, true)
 
 // ---- its shapes, built once
@@ -581,15 +583,16 @@ export function GuitarModel({ playable = true }: { playable?: boolean }) {
           <Rod a={p.pin} b={p.saddle} r={p.r} m={p.wound ? M.bronze : M.steel} />
           <Rod a={p.saddle} b={p.nut} r={p.r} m={p.wound ? M.bronze : M.steel} />
           <Rod a={p.nut} b={p.post} r={p.r} m={p.wound ? M.bronze : M.steel} />
-          <mesh ref={(m) => void (lenses.current[i] = m)} geometry={LENS} material={M.shake} visible={false} userData={{ live: true }} />
+          <mesh ref={(m) => void (lenses.current[i] = m)} geometry={LENS} material={M.shake} visible={false} userData={{ live: true }} raycast={NO_RAY} />
         </group>
       ))}
       {/* the pick, tucked in the strings by the first fret */}
       <mesh geometry={PICK_GEO} material={M.pick} position={[2, Y(22), NECK.board + 2]} rotation={[0.22, -0.1, 0.7]} castShadow />
-      {/* fingertips on the strings that are held */}
+      {/* fingertips on the strings that are held (seen, never in the way: a click on one goes through to the board
+          below, and lets the string go) */}
       {held.map((f, i) =>
         f ? (
-          <mesh key={i} geometry={BALL} material={M.finger} userData={{ live: true }} position={[stringX(i, fretU(f) - 0.3 * (fretU(f) - fretU(f - 1))), Y(fretU(f) - 0.3 * (fretU(f) - fretU(f - 1))), stringZ(fretU(f)) + 0.5]} scale={[4.2, 4.2, 2.2]} />
+          <mesh key={i} geometry={BALL} material={M.finger} userData={{ live: true }} raycast={NO_RAY} position={[stringX(i, fretU(f) - 0.3 * (fretU(f) - fretU(f - 1))), Y(fretU(f) - 0.3 * (fretU(f) - fretU(f - 1))), stringZ(fretU(f)) + 0.5]} scale={[4.2, 4.2, 2.2]} />
         ) : null,
       )}
       {/* where you play it: over the strings, the whole length of them (sweep over the soundhole to strum, click the board to fret) */}

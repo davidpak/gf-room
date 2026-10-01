@@ -67,9 +67,11 @@ export function QuadGuitar({ car }: { car: { current: CarState } }) {
     [],
   )
   if (import.meta.env.DEV && typeof window !== 'undefined') Object.assign(window, { __guitar: { play: () => clickSpot(spot), model } }) // (for trying it from the console)
+  // (while it's being played, a click on it is the guitar's own: on its way through to the strings, not stopped here)
   const zoom = (e: ThreeEvent<MouseEvent>) => {
+    if (playing) return
     e.stopPropagation()
-    if (!playing) clickSpot(spot)
+    clickSpot(spot)
   }
   const colliders = useMemo(
     () =>

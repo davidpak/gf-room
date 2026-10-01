@@ -1,4 +1,4 @@
-import { CuboidCollider, CylinderCollider, RigidBody, useBeforePhysicsStep, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
+import { CuboidCollider, CylinderCollider, RigidBody, useAfterPhysicsStep, useBeforePhysicsStep, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
 import { openings, stowed } from '../civic/Civic'
 import { TOY } from '../civic/spec'
 import { onReset } from './reset'
@@ -12,7 +12,7 @@ import { Sign, SIGN } from './Sign'
 import { shootProps } from './ShootSet'
 import { cookieSignProp } from './CookieStand'
 import type { CAR_SHAPE, CarState, Obstacle } from './Car'
-import { PADS, SET } from './set'
+import { inIsland, PADS, SET } from './set'
 import { Static } from '../../lib/render/Static'
 
 /**
@@ -26,6 +26,10 @@ import { Static } from '../../lib/render/Static'
  *   solid       the trunks, the lamp posts, the building, the hedge and the bushes
  *   the car     a body the car's own driving moves (kinematic): it pushes what it drives into. Its
  *               trunk's a well: whatever's put in it and settles there rides along with it (held to it, kinematic) till it's picked up again or flown home
+ *   safety net  (./LiveProp, after every step) the car can't be pushed back, so now and then what's caught between
+ *               it and the ground is pressed into the lawn, or ends up inside the car's body: one that's sunk is
+ *               lifted back out of the lawn, one that's fallen through the island is sent home, one inside the
+ *               car is put out beside it
  */
 const LAWN = 4
 const PAVING = 25
@@ -76,6 +80,9 @@ export function QuadColliders() {
   )
 }
 
+/** slick: what it shoves slides along it and off it, not dragged along on its hood or roof (what's put in the
+ *  trunk is held to it, ./LiveProp, not by friction) */
+const CAR_FRICTION = 0.15
 /** the car as a body: its driving moves it (kinematic), so it shoves whatever it drives into. Its
  *  shape the body and the cabin on it, as drawn (a bench shoved up onto it rests on the roof, not in it) */
 export function CarBody({ state, shape }: { state: { current: CarState }; shape: typeof CAR_SHAPE }) {
@@ -92,11 +99,11 @@ export function CarBody({ state, shape }: { state: { current: CarState }; shape:
     lid.current?.setEnabled(!openings.trunk) // (the lid's there while it's shut)
   })
   return (
-    <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[state.current.x, 0, state.current.z]}>
+    <RigidBody ref={body} type="kinematicPosition" ccd colliders={false} position={[state.current.x, 0, state.current.z]}>
       {shape.parts.map((p, i) => (
-        <CuboidCollider key={i} args={p.half} position={p.at} friction={0.6} />
+        <CuboidCollider key={i} args={p.half} position={p.at} friction={CAR_FRICTION} />
       ))}
-      <CuboidCollider ref={lid} args={shape.lid.half} position={shape.lid.at} friction={0.6} />
+      <CuboidCollider ref={lid} args={shape.lid.half} position={shape.lid.at} friction={CAR_FRICTION} />
     </RigidBody>
   )
 }
@@ -158,6 +165,49 @@ export function setPrompt(set: string, label: string, at: (o: Vector3) => Vector
     run: () => sets.get(set)?.forEach((m) => m.home()),
   }
 }
+
+// ---- the safety net
+/** a collider's shape, read once (reading it from the physics makes a new object every time) */
+type Shape = { kind: 'box'; x: number; y: number; z: number } | { kind: 'round'; h: number; r: number; cap: boolean } | { kind: 'ball'; r: number } | { kind: 'hull'; v: Float32Array } | { kind: 'other' }
+const shapes = new Map<number, Shape>()
+function shapeOf(c: RapierCollider): Shape {
+  let k = shapes.get(c.handle)
+  if (k) return k
+  const sh = c.shape as unknown as { halfExtents?: { x: number; y: number; z: number }; halfHeight?: number; radius?: number; vertices?: Float32Array; type: number; borderRadius?: number }
+  if (sh.halfExtents) k = { kind: 'box', ...sh.halfExtents }
+  else if (sh.vertices) k = { kind: 'hull', v: sh.vertices }
+  else if (sh.halfHeight !== undefined && sh.radius !== undefined) k = { kind: 'round', h: sh.halfHeight, r: sh.radius, cap: sh.type === 2 } // (2: a capsule; else a cylinder)
+  else if (sh.radius !== undefined) k = { kind: 'ball', r: sh.radius }
+  else k = { kind: 'other' }
+  shapes.set(c.handle, k)
+  return k
+}
+/** how low a body reaches (world y): the lowest point of any of its colliders */
+function lowestOf(b: RapierRigidBody) {
+  let lo = Infinity
+  for (let i = 0; i < b.numColliders(); i++) {
+    const c = b.collider(i)
+    const k = shapeOf(c)
+    if (k.kind === 'other') continue
+    const t = c.translation()
+    const { x, y, z, w } = c.rotation()
+    // (the rotation's middle row: how far down each of its own axes reaches)
+    const r0 = 2 * (x * y + w * z)
+    const r1 = 1 - 2 * (x * x + z * z)
+    const r2 = 2 * (y * z - w * x)
+    let d = 0
+    if (k.kind === 'box') d = Math.abs(r0) * k.x + Math.abs(r1) * k.y + Math.abs(r2) * k.z
+    else if (k.kind === 'round') d = Math.abs(r1) * k.h + (k.cap ? k.r : k.r * Math.sqrt(Math.max(0, 1 - r1 * r1)))
+    else if (k.kind === 'ball') d = k.r
+    else for (let j = 0; j < k.v.length; j += 3) d = Math.max(d, -(r0 * k.v[j] + r1 * k.v[j + 1] + r2 * k.v[j + 2]))
+    lo = Math.min(lo, t.y - d)
+  }
+  return lo
+}
+/** how far into the lawn a thing may sink before it's lifted out (mm) */
+const SINK = 2
+/** below this it's fallen through the island */
+const LOST = -300
 
 /** a loose thing of the Quad's: resting at home (held fast there till something moves it), a toy for
  *  the hand and the car, a prompt to put it back (or, one of a `set`, its set's) */
@@ -295,6 +345,39 @@ export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, 
     stowed.set(id, _p.z < w.z1 + 30) // (in the trunk, or up on the roof)
     body.setBodyType(perch.rapier.RigidBodyType.KinematicPositionBased, true)
   })
+  // the safety net (only what's loose and moving: what's held, riding, at home or asleep is left be)
+  useAfterPhysicsStep(() => {
+    const body = perch.body.current
+    if (!body || !body.isDynamic() || body.isSleeping() || perch.st.current.held || perch.fly.current) return
+    const t = body.translation()
+    if (t.y < LOST) return sendHome()
+    // inside the car's body (below its roofline, not in the trunk's well): out the nearest side
+    const c = car.current
+    const dx = t.x - c.x
+    const dz = t.z - c.z
+    const ch = Math.cos(c.heading)
+    const sh = Math.sin(c.heading)
+    let lx = ch * dx - sh * dz
+    let lz = sh * dx + ch * dz
+    const up = t.y - (c.y ?? 0)
+    const w = CAR_WELL
+    const inWell = Math.abs(lx) < w.x + 10 && lz > w.z0 - 10 && lz < w.z1 + 10 && up > w.floor - 20
+    if (Math.abs(lx) < CAR_HALF.w - 5 && Math.abs(lz) < CAR_HALF.l - 5 && up < CAR_BODY_TOP && !inWell) {
+      const r = (feelR ?? 20) + 8
+      if (CAR_HALF.w - Math.abs(lx) < CAR_HALF.l - Math.abs(lz)) lx = Math.sign(lx || 1) * (CAR_HALF.w + r)
+      else lz = Math.sign(lz || 1) * (CAR_HALF.l + r)
+      body.setTranslation(_v.set(c.x + ch * lx + sh * lz, t.y, c.z - sh * lx + ch * lz), true)
+      body.setLinvel(_v.set(0, 0, 0), true)
+      return
+    }
+    // sunk into the lawn: lifted out, and no longer pressing down (over the island: one pushed off its edge falls)
+    const lo = lowestOf(body)
+    if (lo < LAWN - SINK && lo > LAWN - 120 && inIsland(t.x, t.z)) {
+      body.setTranslation(_v.set(t.x, t.y + (LAWN - lo), t.z), true)
+      const v = body.linvel()
+      if (v.y < 0) body.setLinvel(_v.set(v.x, 0, v.z), true)
+    }
+  })
   return (
     <>
       <Holdable ccd bodyRef={perch.body} position={[at.x, at.y, at.z]} rotation={at.q ? new Euler().setFromQuaternion(at.q).toArray().slice(0, 3) as [number, number, number] : [0, at.rot, 0]} colliders={false} linearDamping={0.4} angularDamping={0.8} hold={{ ...perch.hold, lift: 60 }} sound="none">
@@ -309,6 +392,8 @@ export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, 
 /** the car, for telling what's in or on it (set by LiveProps) */
 const carNow: { current: CarState | null } = { current: null }
 const CAR_HALF = { w: 1826 * TOY.k * 0.5 + 10, l: 4630 * TOY.k * 0.5 + 10, h: 1457 * TOY.k }
+/** the top of its body, below the windows (the hood, the trunk lid): under it, inside it */
+const CAR_BODY_TOP = 950 * TOY.k
 const carQ = new Quaternion()
 const carE = new Euler()
 const _v = new Vector3()

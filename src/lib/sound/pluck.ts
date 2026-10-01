@@ -6,11 +6,18 @@
  *
  *   pluck(string, hz, loud)   a string (0–5) sounds at hz; the same string plucked again stops its last
  *                             note first, as a real one would
+ *
+ * Once the last note has died away the audio is put to sleep (woken by the next pluck): left running, it
+ * would go on working through silence for as long as the page is open, and on Windows that ran alongside the
+ * drawing and cost frames long after the guitar was put down.
  */
 let ctx: AudioContext | null = null
 let out: AudioNode | null = null
 const cache = new Map<number, { buf: AudioBuffer; rate: number }>()
 const ringing: ({ src: AudioBufferSourceNode; gain: GainNode } | null)[] = []
+/** (how long after the last pluck it sleeps: the longest ring, 3.2 s, and a little) */
+const SLEEP_AFTER = 4000
+let sleep: ReturnType<typeof setTimeout> | null = null
 
 function audio() {
   if (!ctx) {
@@ -95,4 +102,9 @@ export function pluck(string: number, hz: number, loud = 0.8, delay = 0) {
   src.onended = () => {
     if (ringing[string] === me) ringing[string] = null
   }
+  if (sleep) clearTimeout(sleep)
+  sleep = setTimeout(() => {
+    sleep = null
+    if (ctx && ctx.state === 'running' && ringing.every((r) => !r)) void ctx.suspend()
+  }, SLEEP_AFTER + delay * 1000)
 }
