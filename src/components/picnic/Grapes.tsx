@@ -13,7 +13,7 @@ import { rng } from './paint'
  */
 export const GRAPES = [
   { n: 34, r: 10.5, long: 1.15, len: 150, wide: 46, color: '#a9d062', deep: '#83b347', shade: '#5f8a5e' }, // [G] green
-  { n: 30, r: 9.5, long: 1.04, len: 135, wide: 42, color: '#7c2d4e', deep: '#5a2140', shade: '#4a2846' }, // red
+  { n: 28, r: 9.5, long: 1.04, len: 118, wide: 40, color: '#7c2d4e', deep: '#5a2140', shade: '#4a2846' }, // red
 ] as const
 
 const made: Record<number, ReturnType<typeof build>> = {}

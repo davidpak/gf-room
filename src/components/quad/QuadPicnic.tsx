@@ -10,12 +10,16 @@ import { ClosedBook, OpenBook, OPEN_BOOK } from '../picnic/Books'
 import { Flights, type Flight } from '../picnic/Flight'
 import { FoodCollider, FoodModel, type Food, type FoodState } from '../picnic/food'
 import { nearestGrape } from '../picnic/Grapes'
+import { nearestBerry } from '../picnic/Strawberries'
+import { feed, tear, throwBread, WHOLE } from '../picnic/feed'
+import { Feed } from '../picnic/Toss'
+import { Ducks, ducksAt } from '../ducks/Ducks'
 import { LAYOUT } from '../picnic/layout'
 import { BASKET, BLANKET, BOOKS } from '../picnic/spec'
 import { LiveProp, setPrompt } from './Physical'
 import { clickSpot, frameAround, useLook, type Spot } from './look'
 import { onReset } from './reset'
-import { SET } from './set'
+import { onWalk, SET } from './set'
 import type { CarState } from './Car'
 
 /**
@@ -26,8 +30,12 @@ import type { CarState } from './Car'
  *
  *   the basket   click it: the camera goes in and its handles swing down; click what's in it (the wrapped
  *                subs, the grapes, the baguette) and it's lifted out, up over the rim and down onto the
- *                blanket, a toy to carry from there; click a bunch of grapes there to eat one
+ *                blanket, a toy to carry from there; click a bunch of grapes or the strawberries there to eat one
+ *   the baguette out on the blanket: click it and a piece is torn off the end you clicked nearer and thrown
+ *                to the ducks (crumbs fall where it tore)
  *   the book     click it: the camera goes in; click its right page to turn it, its left to turn back
+ *
+ * And a family of mallards (../ducks) about the lawn south of it, who come for the bread.
  *
  * At the benches' toy scale, 0.24.
  */
@@ -43,9 +51,29 @@ const home = (x: number, y: number, z: number, rot: number) => {
   return { x: p.x, y: p.y, z: p.z, rot: AT.rot + rot }
 }
 const up = new Vector3(0, 1, 0)
-/** the close looks: down into the basket from over its end, between its two lids stood up; down on the open book */
+/** a point in the world, in the blanket's frame (real mm) */
+const onCloth = (x: number, z: number, margin = 0) => {
+  const dx = x - AT.x
+  const dz = z - AT.z
+  const lx = (dx * c - dz * s) / K
+  const lz = (dx * s + dz * c) / K
+  return Math.abs(lx) < BLANKET.w / 2 + margin && Math.abs(lz) < BLANKET.l / 2 + margin
+}
+const PAVING = 25
+/** the ground's height: the blanket's top, the walks' bricks, the lawn */
+const ground = (x: number, z: number) => (onCloth(x, z) ? LAWN + LAYOUT.y * K : onWalk(x, z) ? PAVING : LAWN)
+/** the ducks' home: the lawn south of the picnic, inside the V */
+const DUCK_HOME = { x: -1000, z: 760, r: 400 }
+/** what they walk round: the trunks, and what's on the blanket */
+const DUCK_AVOID = [
+  ...SET.trees.map((t) => ({ x: t.x, z: t.z, r: 120 })),
+  { ...place(LAYOUT.basket.x, 0, LAYOUT.basket.z), r: 0.55 * BASKET.l * K },
+  { ...place(LAYOUT.stack[0].x, 0, LAYOUT.stack[0].z), r: 0.55 * BOOKS[1].h * K },
+  { ...place(LAYOUT.open.x, 0, LAYOUT.open.z), r: 0.5 * OPEN_BOOK.w * K },
+].map((p) => ({ x: p.x, z: p.z, r: p.r }))
+/** the close looks: down into the basket from over its front, its handles either side; down on the open book */
 const BASKET_ROT = AT.rot + LAYOUT.basket.rot
-const BASKET_LOOK = new Vector3(0.8 * Math.cos(BASKET_ROT) + 0.55 * Math.sin(BASKET_ROT), 1.7, -0.8 * Math.sin(BASKET_ROT) + 0.55 * Math.cos(BASKET_ROT)).normalize()
+const BASKET_LOOK = new Vector3(0.18 * Math.cos(BASKET_ROT) + 0.85 * Math.sin(BASKET_ROT), 1.7, -0.18 * Math.sin(BASKET_ROT) + 0.85 * Math.cos(BASKET_ROT)).normalize()
 const BOOK_ROT = AT.rot + LAYOUT.open.rot
 const BOOK_LOOK = new Vector3(0.12 * Math.cos(BOOK_ROT) + 0.55 * Math.sin(BOOK_ROT), 1.6, -0.12 * Math.sin(BOOK_ROT) + 0.55 * Math.cos(BOOK_ROT)).normalize()
 
@@ -61,7 +89,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
     () => ({
       key: 'picnic',
       items: [],
-      frame: (pos, at, aspect) => frameAround(pos, at, aspect, place(LAYOUT.basket.x, 150, LAYOUT.basket.z), 210, 150, BASKET_LOOK),
+      frame: (pos, at, aspect) => frameAround(pos, at, aspect, place(LAYOUT.basket.x, 140, LAYOUT.basket.z), 185, 135, BASKET_LOOK),
       hint: 'click something to lift it out',
     }),
     [],
@@ -89,13 +117,30 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
   const [flights, setFlights] = useState<Flight[]>([])
   const [taken, setTaken] = useState<{ id: number; food: Food; p: [number, number, number]; r: [number, number, number] }[]>([])
   const [food, setFood] = useState<Record<string, FoodState>>({})
+  const tears = useRef(0)
+  const held = useRef<Record<number, Group | null>>({})
   const eat = (f: Food, e: ThreeEvent<MouseEvent>) => {
-    if (f.kind !== 'grapes') return
+    if (f.kind === 'baguette') {
+      // torn: a piece off the nearer end, thrown to the ducks
+      e.stopPropagation()
+      const st = food[f.key]
+      const lo = st?.lo ?? WHOLE.lo
+      const hi = st?.hi ?? WHOLE.hi
+      const o = e.eventObject
+      o.updateWorldMatrix(true, false)
+      const n = tears.current++
+      const t = tear(lo, hi, o.worldToLocal(e.point.clone()).x, n)
+      throwBread({ from: o.matrixWorld.clone(), a: t.a, b: t.b, fromLo: t.fromLo, scale: K, ducks: ducksAt(), ground, onBlanket: (x, z) => onCloth(x, z, 60), n })
+      setFood((all) => ({ ...all, [f.key]: t.left ?? { lo: 0, hi: 0 } }))
+      if (!t.left) setTaken((all) => all.filter((x) => x.food.key !== f.key))
+      return
+    }
+    if (f.kind !== 'grapes' && f.kind !== 'strawberries') return
     e.stopPropagation()
     const local = e.eventObject.worldToLocal(e.point.clone())
     setFood((all) => {
       const eaten = new Set(all[f.key]?.eaten)
-      const i = nearestGrape(f.v as 0 | 1, local, eaten)
+      const i = f.kind === 'grapes' ? nearestGrape(f.v as 0 | 1, local, eaten) : nearestBerry(local, eaten)
       if (i < 0) return all
       eaten.add(i)
       return { ...all, [f.key]: { ...all[f.key], eaten } }
@@ -126,6 +171,8 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
     setFlights([])
     setTaken([])
     setFood({})
+    feed.clear()
+    tears.current = 0
   }
   useEffect(() => onReset(refill), [])
   const base = useMemo(() => setPrompt('picnic', 'Reset Picnic', (o) => o.copy(place(-360, 900, -500))), [])
@@ -142,7 +189,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
     }),
     [base],
   )
-  if (import.meta.env.DEV && typeof window !== 'undefined') Object.assign(window, { __picnic: { open: () => clickSpot(spot), read: () => clickSpot(bookSpot), take } }) // (for trying it from the console)
+  if (import.meta.env.DEV && typeof window !== 'undefined') Object.assign(window, { __picnic: { open: () => clickSpot(spot), read: () => clickSpot(bookSpot), take, tear: (x: number) => { const t = taken.find((t) => t.food.kind === 'baguette'); const o = t && held.current[t.id]; if (t && o) eat(t.food, { stopPropagation() {}, eventObject: o, point: o.localToWorld(new Vector3(x, 26, 0)) } as unknown as ThreeEvent<MouseEvent>) } } }) // (for trying it from the console)
 
   const { l, d, h } = BASKET
   const pointer = (e: ThreeEvent<PointerEvent>) => (e.stopPropagation(), (document.body.style.cursor = 'pointer'))
@@ -183,12 +230,15 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       <Flights flights={flights} onLand={land} />
       {taken.map((t) => (
         <Holdable key={t.id} position={t.p} rotation={t.r} colliders={false} linearDamping={0.4} angularDamping={0.7} sound="none">
-          <group scale={K} onClick={(e) => eat(t.food, e)}>
+          <group ref={(o) => void (held.current[t.id] = o)} scale={K} onClick={(e) => eat(t.food, e)}>
             <FoodModel f={t.food} state={food[t.food.key]} />
           </group>
           <FoodCollider f={t.food} state={food[t.food.key]} k={K} />
         </Holdable>
       ))}
+      {/* the bread thrown, and the ducks */}
+      <Feed scale={K} />
+      <Ducks scale={K} home={DUCK_HOME} ground={ground} avoid={() => DUCK_AVOID} offLimits={(x, z) => onCloth(x, z, 120) || onWalk(x, z, 30)} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />
       <Prompts items={[prompt]} far={9000} />
     </>
   )

@@ -161,3 +161,5 @@ export function Baguette({ lo = -HALF, hi = HALF }: { lo?: number; hi?: number }
 export const pieceLength = (n: number) => 44 + 9 * Math.sin(n * 2.3) + 4 * Math.sin(n * 5.1)
 /** its middle height and radius, for a capsule collider */
 export const BAGUETTE_R = 26
+/** its looks, for pieces of it drawn elsewhere (./Toss) */
+export const BREAD = { crust: CRUST, torn: TORN }

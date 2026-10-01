@@ -12,6 +12,7 @@ import { LAYOUT } from './layout'
 import { Sub } from './Sub'
 import { Grapes } from './Grapes'
 import { Baguette } from './Baguette'
+import { Duck, newPose, type DuckKind, type DuckPose } from '../ducks/Duck'
 
 /**
  * The picnic on its own (gallery first), full size, in the Quad's evening light: the gingham blanket, the
@@ -70,6 +71,29 @@ function Food() {
   )
 }
 
+/** &show=ducks: the drake, the hen, a duckling; standing, pecking, quacking, walking, flapping */
+function ShowDuck({ kind, at, set }: { kind: DuckKind; at: [number, number, number]; set: (p: DuckPose, t: number) => void }) {
+  const pose = useRef(newPose())
+  useFrame(({ clock }) => set(pose.current, clock.elapsedTime))
+  return (
+    <group position={at} rotation={[0, 0.5, 0]}>
+      <Duck kind={kind} pose={pose} />
+    </group>
+  )
+}
+function DuckShow() {
+  return (
+    <>
+      <ShowDuck kind="drake" at={[-500, 0, 0]} set={(p) => (p.peck = 1)} />
+      <ShowDuck kind="hen" at={[0, 0, 0]} set={(p) => (p.quack = 1)} />
+      <ShowDuck kind="duckling" at={[350, 0, 100]} set={(p) => (p.flap = 1)} />
+      <ShowDuck kind="drake" at={[-500, 0, 600]} set={(p, t) => ((p.peck = 0.5 - 0.5 * Math.cos(t * 3)), (p.look = 0))} />
+      <ShowDuck kind="hen" at={[0, 0, 600]} set={(p, t) => ((p.walk = t * 9), (p.stride = 1), (p.quack = Math.max(0, Math.sin(t * 4))))} />
+      <ShowDuck kind="duckling" at={[350, 0, 600]} set={(p, t) => ((p.walk = t * 12), (p.stride = 1), (p.flap = 0.5 + 0.5 * Math.sin(t)))} />
+    </>
+  )
+}
+
 function Scene() {
   const get = useThree((s) => s.get)
   if (import.meta.env.DEV) Object.assign(window, { __r3f: get }) // (for screenshots from the console)
@@ -116,8 +140,8 @@ function Scene() {
       <mesh material={LAWN} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[2600, 64]} />
       </mesh>
-      {SHOW === 'food' ? <Food /> : <Blanket />}
-      {SHOW !== 'food' && <group ref={basket} position={[LAYOUT.basket.x, LAYOUT.y, LAYOUT.basket.z]} rotation={[0, LAYOUT.basket.rot, 0]}>
+      {SHOW === 'food' ? <Food /> : SHOW === 'ducks' ? <DuckShow /> : <Blanket />}
+      {!SHOW && <group ref={basket} position={[LAYOUT.basket.x, LAYOUT.y, LAYOUT.basket.z]} rotation={[0, LAYOUT.basket.rot, 0]}>
         <Basket open={open} present={present} onClick={(e) => (e.stopPropagation(), setLidUp((o) => !o))} onTake={(k) => take(k)} />
       </group>}
       <Flights flights={flights} onLand={(f) => (setFlights((all) => all.filter((x) => x.id !== f.id)), setLying((l) => [...l, f]))} />
@@ -126,14 +150,16 @@ function Scene() {
           <FoodModel f={f.food} />
         </group>
       ))}
-      {LAYOUT.stack.map((b) => (
+      {!SHOW && LAYOUT.stack.map((b) => (
         <group key={b.k} position={[b.x, LAYOUT.y + b.y, b.z]} rotation={[0, b.rot, 0]}>
           <ClosedBook k={b.k} />
         </group>
       ))}
-      <group position={[LAYOUT.open.x, LAYOUT.y, LAYOUT.open.z]} rotation={[0, LAYOUT.open.rot, 0]}>
-        <OpenBook />
-      </group>
+      {!SHOW && (
+        <group position={[LAYOUT.open.x, LAYOUT.y, LAYOUT.open.z]} rotation={[0, LAYOUT.open.rot, 0]}>
+          <OpenBook />
+        </group>
+      )}
     </>
   )
 }

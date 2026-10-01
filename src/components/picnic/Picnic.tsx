@@ -1,9 +1,12 @@
 import { useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { BufferAttribute, BufferGeometry, CatmullRomCurve3, CylinderGeometry, DoubleSide, Euler, Matrix4, Quaternion, Shape, ShapeGeometry, SphereGeometry, Vector2, Vector3, type Group, type Texture } from 'three'
+import { RoundedBox } from '@react-three/drei'
+import { BufferAttribute, BufferGeometry, CatmullRomCurve3, Color, CylinderGeometry, DoubleSide, Euler, Matrix4, Quaternion, Shape, ShapeGeometry, SphereGeometry, Vector2, Vector3, type Group, type Texture } from 'three'
 import { bruno } from '../quad/bruno'
 import { BASKET } from './spec'
 import { FoodModel, type Food, type FoodState } from './food'
+import { BAGUETTE } from './Baguette'
+import { loft, orient, type Ring } from './loft'
 import { paint, rng } from './paint'
 
 /**
@@ -19,7 +22,7 @@ import { paint, rng } from './paint'
  * Its frame: its foot on y = 0, across x, deep z, its middle at the origin.
  */
 const { l: BL, d: BD, h: BH, taper, wall, rim, handle: HD, overhang, bow } = BASKET
-const OPEN_TILT = 1.15 // (how far out a handle swings before it rests on the rim)
+const OPEN_TILT = 0.32 // (how far apart the handles are pushed, out of the way)
 
 // ---- its looks
 /** woodchip: honey weavers, a little grain in them, passing over and under the darker stakes (120 mm a repeat) */
@@ -83,7 +86,7 @@ const tanTex = paint(128, 128, (g) => {
     g.fillRect(i, 0, 1, 128)
   }
 })
-const LINER = bruno({ map: tanTex ?? undefined, color: '#ffffff', shade: '#a99ab4', side: DoubleSide })
+const LINER = bruno({ map: tanTex ?? undefined, color: '#ffffff', shade: '#c4a48e', side: DoubleSide })
 const WOOD = bruno({ color: '#b97a45', shade: '#7c5c74', side: DoubleSide })
 const BRASS = bruno({ color: '#e2c071', shade: '#9a8072', sheen: 0.45 })
 const TUBE = new CylinderGeometry(1, 1, 1, 14)
@@ -175,17 +178,75 @@ function standing(x: number, z: number, lean: number, yaw: number) {
   m.setPosition(x - 30, FLOOR + 152, z)
   return m
 }
+/** the baguette's place: on its end in the corner (its bottom tip just off the floor), leaning out over the end
+ *  and back, its slashes to the front */
+const BAGUETTE_AT = (() => {
+  const q = new Quaternion().setFromEuler(new Euler(-0.2, 0, Math.PI / 2 + 0.17)).multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2))
+  const foot = new Vector3(-140, FLOOR + 8, -60)
+  const p = foot.sub(new Vector3(-BAGUETTE.l / 2 + 4, 20, 0).applyQuaternion(q))
+  return new Matrix4().compose(p, q, new Vector3(1, 1, 1))
+})()
+/** its bag (kraft paper, open at the top, crumpled round its rim; the baguette's frame): round its lower half */
+function bagGeo() {
+  const r = rng(33)
+  const ph = [r() * 6, r() * 6]
+  const rings: Ring[] = []
+  const N = 40
+  const x0 = -BAGUETTE.l / 2 - 6
+  const x1 = -BAGUETTE.l / 2 + 225
+  for (let j = 0; j <= 30; j++) {
+    const t = j / 30
+    const p: Vector3[] = []
+    const c: Color[] = []
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2
+      // (folded flat at its bottom; its top edge torn uneven and crumpled out)
+      const foot = Math.min(1, t * 9)
+      const lip = Math.max(0, (t - 0.88) / 0.12)
+      const crumple = 1 + 0.035 * Math.abs(Math.sin(a * 3 + t * 9 + ph[0])) + lip * 0.08 * Math.sin(a * 7 + ph[1])
+      const x = x0 + t * (x1 - x0) + lip * 10 * Math.sin(a * 2 + ph[0])
+      const z = Math.cos(a) * 38 * crumple * foot
+      const y = 26 + Math.sin(a) * 34 * crumple * (0.3 + 0.7 * foot)
+      p.push(new Vector3(x, y, z))
+      // kraft, its gussets darker where it's folded down the sides
+      const fold = Math.pow(Math.abs(Math.cos(a)), 12)
+      c.push(new Color('#c9a273').multiplyScalar(0.94 + r() * 0.08 - fold * 0.18))
+    }
+    rings.push({ p, c })
+  }
+  return orient(loft(rings), (m) => new Vector3(m.x, 26, 0))
+}
+const BAG = bruno({ vertexColors: true, color: '#ffffff', shade: '#8f7480', side: DoubleSide })
+/** a tea towel folded in the bottom along its front (linen, a red stripe near each edge), what's there sits on it */
+const TOWEL = { w: 318, h: 52, d: 86, z: 50 }
+const TOWEL_TOP = FLOOR + TOWEL.h
+const towelTex = paint(256, 64, (g) => {
+  g.fillStyle = '#f4ece0'
+  g.fillRect(0, 0, 256, 64)
+  for (let i = 0; i < 256; i += 2) {
+    g.fillStyle = 'rgba(150,120,90,0.07)'
+    g.fillRect(i, 0, 1, 64)
+  }
+  g.fillStyle = '#c9483f'
+  g.fillRect(0, 10, 256, 5)
+  g.fillRect(0, 19, 256, 2)
+  g.fillRect(0, 43, 256, 2)
+  g.fillRect(0, 49, 256, 5)
+})
+const TOWEL_MAT = bruno({ map: towelTex ?? undefined, color: '#ffffff', shade: '#b5a0a6' })
 /** what's in it and where (its frame, real mm) */
 export const CONTENTS: (Food & { at: Matrix4; /** how far below where it's held from it reaches (lifted out, it goes up this much further to clear the rim) */ below: number })[] = [
-  { key: 'sub0', kind: 'sub', v: 0, below: 165, at: standing(-62, -38, 0.24, 0.08) },
-  { key: 'sub1', kind: 'sub', v: 1, below: 165, at: standing(22, -42, 0.2, -0.05) },
-  { key: 'sub2', kind: 'sub', v: 2, below: 165, at: standing(106, -36, 0.27, 0.1) },
-  { key: 'grapes0', kind: 'grapes', v: 0, below: 0, at: new Matrix4().compose(new Vector3(-150, FLOOR + 34, 26), new Quaternion().setFromEuler(new Euler(0.22, -0.12, 0.05)), new Vector3(1, 1, 1)) },
-  { key: 'grapes1', kind: 'grapes', v: 1, below: 0, at: new Matrix4().compose(new Vector3(150, FLOOR + 30, 30), new Quaternion().setFromEuler(new Euler(0.2, Math.PI + 0.1, 0)), new Vector3(1, 1, 1)) },
-  // (the baguette stood in the back left corner on its end, leaning out over the end and a little back, its slashes to the front)
-  { key: 'baguette', kind: 'baguette', v: 0, below: 220, at: new Matrix4().compose(new Vector3(-174, FLOOR + 218, -70), new Quaternion().setFromEuler(new Euler(-0.13, 0, Math.PI / 2 + 0.26)).multiply(new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2)), new Vector3(1, 1, 1)) },
+  // along its back: the two subs stood up, the red grapes heaped in the corner
+  { key: 'sub0', kind: 'sub', v: 0, below: 165, at: standing(-86, -58, 0.24, 0.06) },
+  { key: 'sub1', kind: 'sub', v: 1, below: 165, at: standing(-4, -60, 0.2, -0.08) },
+  { key: 'grapes1', kind: 'grapes', v: 1, below: 0, at: new Matrix4().compose(new Vector3(40, FLOOR + 26, -50), new Quaternion().setFromEuler(new Euler(0.15, 0.08, 0.06)), new Vector3(1, 1, 1)) },
+  // along its front, up on the folded tea towel: the green grapes, the strawberries, the jam
+  { key: 'grapes0', kind: 'grapes', v: 0, below: 0, at: new Matrix4().compose(new Vector3(-170, TOWEL_TOP + 2, 40), new Quaternion().setFromEuler(new Euler(-0.18, -0.04, 0.06)), new Vector3(1, 1, 1)) },
+  { key: 'strawberries', kind: 'strawberries', v: 0, below: 0, at: new Matrix4().compose(new Vector3(22, TOWEL_TOP, 50), new Quaternion().setFromAxisAngle(Y, 0.08), new Vector3(1, 1, 1)) },
+  { key: 'jam', kind: 'jam', v: 0, below: 0, at: new Matrix4().compose(new Vector3(118, TOWEL_TOP, 50), new Quaternion().setFromAxisAngle(Y, -0.35), new Vector3(1, 1, 1)) },
+  // the baguette in its bag, stood in the back left corner, leaning out a little over the end and back
+  { key: 'baguette', kind: 'baguette', v: 0, below: 220, at: BAGUETTE_AT },
 ]
-/** where content k is in the basket's frame (real mm): for lifting it out */
 export const contentAt = (k: number) => CONTENTS[k].at
 /** how high a thing lifted out of it has to go to clear its rim (real mm, its frame) */
 export const CLEAR = BH + 70
@@ -259,7 +320,8 @@ export function Basket({ open, present, state, onTake, onClick }: { open: { curr
     const strap = ribbon(pts, HD.w, new Vector3(1, 0, 0))
     return { walls, band, linerIn, floor, fold, ties, knots, strap }
   }, [])
-  // the handles: swung up, leaning in to meet over the middle; or swung down and out onto the rim
+  const bag = useMemo(bagGeo, [])
+  // the handles: swung up, leaning in to meet over the middle; or swung out, out of the way
   const handles = useRef<(Group | null)[]>([])
   useFrame(() => {
     const o = open.current
@@ -298,6 +360,10 @@ export function Basket({ open, present, state, onTake, onClick }: { open: { curr
           ))}
         </group>
       ))}
+      {/* the folded tea towel along its front */}
+      <RoundedBox args={[TOWEL.w, TOWEL.h, TOWEL.d]} radius={14} smoothness={3} position={[0, FLOOR + TOWEL.h / 2, TOWEL.z]} material={TOWEL_MAT} receiveShadow castShadow />
+      {/* the baguette's bag (stays in it when the baguette's lifted out) */}
+      <mesh geometry={bag} material={BAG} matrix={BAGUETTE_AT} matrixAutoUpdate={false} castShadow />
       {/* what's packed in it */}
       {CONTENTS.map((c, k) =>
         present?.[k] ?? true ? (
