@@ -1,7 +1,7 @@
 /**
  * A Lime's sounds, synthesized (no audio files):
  *
- *   unlock()   the ride starting: its jingle, D (dotted quarter), F, A (eighths), the B below, C (quarters), at
+ *   unlock()   the ride starting: its jingle, D (quarter), F, A (eighths), the B below, C (quarters), at
  *              JINGLE_BPM, struck on chimes
  *   park()     the ride ending: a few notes of the chime falling, then the kickstand's click
  *
@@ -64,9 +64,9 @@ const F5 = 698.46
 const A5 = 880
 const B4 = 493.88
 const C5 = 523.25
-/** the jingle: each note and its length in beats (a dotted quarter, two eighths, two quarters) */
+/** the jingle: each note and its length in beats (a quarter, two eighths, two quarters) */
 const JINGLE: [number, number][] = [
-  [D5, 1.5],
+  [D5, 1],
   [F5, 0.5],
   [A5, 0.5],
   [B4, 1],
