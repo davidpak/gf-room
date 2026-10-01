@@ -4,9 +4,11 @@ import { OrbitControls } from '@react-three/drei'
 import { CanvasTexture, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, bruno } from '../quad/bruno'
 import { Glider } from './Glider'
+import { Scooter } from './Scooter'
 
 /**
- * The LimeGlider on its own (gallery first), full size, in the Quad's evening light, parked on its kickstand on a
+ * Lime's rentals on their own (gallery first): the LimeGlider (./Glider), the Gen4 scooter (./Scooter). The
+ * LimeGlider, full size, in the Quad's evening light, parked on its kickstand on a
  * patch of brick. &steer=0.4 turns its bars, &stand=0 folds its kickstand up, &cam=x,y,z&at=x,y,z to look closely.
  */
 function sky() {
@@ -31,7 +33,7 @@ const AT = num('at')
 const STEER = Number(q?.get('steer') ?? 0)
 const STAND = Number(q?.get('stand') ?? 1)
 
-function Scene() {
+function Scene({ which }: { which: 'glider' | 'scooter' }) {
   const background = useMemo(sky, [])
   const get = useThree((s) => s.get)
   if (import.meta.env.DEV) Object.assign(window, { __r3f: get }) // (for screenshots from the console)
@@ -59,17 +61,29 @@ function Scene() {
       <mesh material={BRICK} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[2400, 1200]} />
       </mesh>
-      <group position={[-560, 0, 0]}>
-        <Glider steer={STEER} stand={STAND} />
-      </group>
+      {which === 'glider' ? (
+        <group position={[-560, 0, 0]}>
+          <Glider steer={STEER} stand={STAND} />
+        </group>
+      ) : (
+        <group position={[-520, 0, 0]}>
+          <Scooter steer={STEER} />
+        </group>
+      )}
     </>
   )
 }
 
 export function GliderStage() {
+  return <LimeStage which="glider" />
+}
+export function ScooterStage() {
+  return <LimeStage which="scooter" />
+}
+function LimeStage({ which }: { which: 'glider' | 'scooter' }) {
   return (
     <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 10, far: 30000, position: CAM ?? [600, 1400, 3600] }}>
-      <Scene />
+      <Scene which={which} />
       <OrbitControls makeDefault target={AT ?? [0, 450, 0]} enableDamping minDistance={200} maxDistance={8000} maxPolarAngle={Math.PI / 2 - 0.05} />
     </Canvas>
   )
