@@ -28,10 +28,10 @@ import { onWalk, SET } from './set'
 import type { CarState } from './Car'
 import { Static } from '../../lib/render/Static'
 
-/** the sparrows and the butterflies: off for now (flip on to bring them back) */
-const CRITTERS = false
-/** the ducks: off for now too (the bread still tears and flies, it just lies there) */
-const DUCKS = false
+/** the sparrows and the butterflies: on (false hides them) */
+const CRITTERS = true
+/** the ducks: on (false hides them; the bread still tears and flies, it just lies there) */
+const DUCKS = true
 
 /**
  * The picnic on the Quad (../picnic), on the open lawn inside the V: the gingham blanket laid on the grass
