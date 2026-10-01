@@ -14,6 +14,7 @@ import { nearestBerry } from '../picnic/Strawberries'
 import { feed, tear, throwBread, WHOLE } from '../picnic/feed'
 import { Feed } from '../picnic/Toss'
 import { Ducks, ducksAt } from '../ducks/Ducks'
+import { Sparrows } from '../ducks/Sparrows'
 import { Board, BOARD } from '../picnic/Board'
 import { FruitBowl, BOWL } from '../picnic/FruitBowl'
 import { Lemon, LEMON, Mug, MUG, Pitcher, PITCHER } from '../picnic/Lemonade'
@@ -43,7 +44,8 @@ import type { CarState } from './Car'
  *                the lemonade: click the pitcher and it's lifted and poured into the emptier mug, click a
  *                mug to drink some; the lemons roll; the jar of wildflowers has two butterflies about it
  *
- * And a family of mallards (../ducks) about the lawn south of it, who come for the bread.
+ * And a family of mallards (../ducks) about the lawn south of it, who come for the bread; and sparrows down
+ * out of the cherries now and then, hopping about the blanket's edge after the crumbs.
  *
  * At the benches' toy scale, 0.24.
  */
@@ -72,6 +74,9 @@ const PAVING = 25
 const ground = (x: number, z: number) => (onCloth(x, z) ? LAWN + LAYOUT.y * K : onWalk(x, z) ? PAVING : LAWN)
 /** the ducks' home: the lawn south of the picnic, inside the V */
 const DUCK_HOME = { x: -1000, z: 760, r: 400 }
+/** the sparrows: up in the nearer cherries, down round the blanket */
+const SPARROW_PERCHES = [1, 2, 3].map((i) => new Vector3(SET.trees[i].x, 760, SET.trees[i].z))
+const SPARROW_NEAR = { x: AT.x, z: AT.z, r: 480, inner: 330 }
 /** what they walk round: the trunks, and what's on the blanket */
 const DUCK_AVOID = [
   ...SET.trees.map((t) => ({ x: t.x, z: t.z, r: 120 })),
@@ -254,6 +259,7 @@ export function QuadPicnic({ car }: { car: { current: CarState } }) {
       {/* the bread thrown, and the ducks */}
       <Feed scale={K} />
       <Ducks scale={K} home={DUCK_HOME} ground={ground} avoid={() => DUCK_AVOID} offLimits={(x, z) => onCloth(x, z, 120) || onWalk(x, z, 30)} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />
+      <Sparrows scale={K} perches={SPARROW_PERCHES} near={SPARROW_NEAR} ground={ground} threat={() => ({ x: car.current.x, z: car.current.z, speed: Math.abs(car.current.v) })} />
       <Prompts items={[prompt]} far={9000} />
     </>
   )

@@ -5,14 +5,14 @@ import { bruno } from '../quad/bruno'
 import { paint, rng } from './paint'
 
 /**
- * Wildflowers in a jar (../spec [W']), in real millimetres: a little glass jar of water, and in it, splaying
+ * Wildflowers in a jar (./spec [V]), in real millimetres: a little glass jar of water, and in it, splaying
  * out, daisies, pink cosmos, sprigs of lavender and clouds of baby's breath on their stems, a few leaves. And
  * (./Butterflies) two butterflies about them, now flitting round, now settled on a flower opening and
  * closing their wings.
  *
  * Its frame: standing on y = 0, its middle at the origin.
  */
-export const VASE = { r: 33, h: 96 } // [W'] a 250 ml jar
+export const VASE = { r: 33, h: 96 } // [V] a 250 ml jar
 const { r: VR, h: VH } = VASE
 
 const GLASS = bruno({ color: '#eef6f8', shade: '#a9b9c6', transparent: true, opacity: 0.3, sheen: 0.8, depthWrite: false })

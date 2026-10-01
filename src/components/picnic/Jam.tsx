@@ -4,7 +4,7 @@ import { bruno } from '../quad/bruno'
 import { paint, rng } from './paint'
 
 /**
- * A jar of strawberry jam (../spec [J]), in real millimetres: a round glass jar full of it (deep red, the
+ * A jar of strawberry jam (./spec [J]), in real millimetres: a round glass jar full of it (deep red, the
  * seeds and bits of fruit in it showing at the glass, a highlight down it), a kraft label round its front
  * written by hand, a red gingham cloth over its lid, its edge pinked, tied round with twine.
  *

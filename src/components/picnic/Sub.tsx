@@ -5,7 +5,7 @@ import { loft, orient, type Ring } from './loft'
 import { paint, rng } from './paint'
 
 /**
- * A sub half wrapped in deli paper (../spec [D]), in real millimetres: a soft sub roll (golden crust, darker on
+ * A sub half wrapped in deli paper (./spec [D]), in real millimetres: a soft sub roll (golden crust, darker on
  * its crown, pale underneath), split along one side and filled (cheese, turkey folded in, tomato, greens), cut
  * across on the bias; its cut face shows the crumb and the fillings in their layers, the greens and the turkey
  * spill out of the split along its side. White paper is wrapped round its bottom and up its sides, open at the

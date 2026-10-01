@@ -2,10 +2,9 @@ import { useMemo, useRef, type ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { BufferAttribute, Color, CylinderGeometry, ExtrudeGeometry, Shape, SphereGeometry, TorusGeometry, type Group } from 'three'
 import { bruno } from '../quad/bruno'
-import { paint, rng } from '../picnic/paint'
 
 /**
- * A mallard (../spec [M]), in real millimetres, the toy look: the drake (bottle-green head, a white collar, a
+ * A mallard (../picnic/spec [M]), in real millimetres, the toy look: the drake (bottle-green head, a white collar, a
  * chestnut breast, pale grey flanks, a black rump and the curl of black feathers over his white tail, a yellow
  * bill), the hen (mottled brown all over, a dark stripe through her eye, an orange bill blotched dark), their
  * ducklings (yellow and dark brown fluff). A blue speculum edged white on the wings of the grown ones, orange

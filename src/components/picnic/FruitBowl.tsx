@@ -7,7 +7,7 @@ import { GRAPES, SPHERE } from './Grapes'
 import { paint, rng } from './paint'
 
 /**
- * A bowl of fruit (../spec [B']), in real millimetres: a stoneware bowl in a speckled reactive glaze (cream
+ * A bowl of fruit (./spec [B']), in real millimetres: a stoneware bowl in a speckled reactive glaze (cream
  * inside, running to a soft blue at its rim, the clay bare at its foot), heaped with strawberries and loose
  * grapes, green and red. Click one to eat it (`eaten`, by index; `onEat`).
  *

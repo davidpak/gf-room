@@ -6,7 +6,7 @@ import { bruno } from '../quad/bruno'
 import { paint, rng } from './paint'
 
 /**
- * A grazing board (../spec [C]), in real millimetres: a round bamboo board (its strips of cane glued edge to
+ * A grazing board (./spec [C]), in real millimetres: a round bamboo board (its strips of cane glued edge to
  * edge, a nodes here and there, a rounded edge), laid out: crustless white triangles of ham and jam leant one
  * on the next, brown bread squares of cheese and ham, white fingers of chocolate spread and marshmallow stood
  * on their sides, a fan of salami and two slices folded, cubes of feta, and two teaspoons, one of jam, one of

@@ -17,6 +17,7 @@ import { Sub } from './Sub'
 import { Grapes } from './Grapes'
 import { Baguette } from './Baguette'
 import { Duck, newPose, type DuckKind, type DuckPose } from '../ducks/Duck'
+import { Sparrow } from '../ducks/Sparrows'
 
 /**
  * The picnic on its own (gallery first), full size, in the Quad's evening light: the gingham blanket, the
@@ -93,6 +94,12 @@ function DuckShow() {
       <ShowDuck kind="duckling" at={[350, 0, 100]} set={(p) => (p.flap = 1)} />
       <ShowDuck kind="drake" at={[-500, 0, 600]} set={(p, t) => ((p.peck = 0.5 - 0.5 * Math.cos(t * 3)), (p.look = 0))} />
       <ShowDuck kind="hen" at={[0, 0, 600]} set={(p, t) => ((p.walk = t * 9), (p.stride = 1), (p.quack = Math.max(0, Math.sin(t * 4))))} />
+      <group position={[650, 0, 300]} rotation={[0, 0.8, 0]}>
+        <Sparrow cock pose={{ current: { flap: 0, peck: 0, hop: 0, look: 0, flying: false } }} />
+      </group>
+      <group position={[650, 0, 480]} rotation={[0, 0.3, 0]}>
+        <Sparrow cock={false} pose={{ current: { flap: 0, peck: 0.7, hop: 0, look: 0, flying: false } }} />
+      </group>
       <ShowDuck kind="duckling" at={[350, 0, 600]} set={(p, t) => ((p.walk = t * 12), (p.stride = 1), (p.flap = 0.5 + 0.5 * Math.sin(t)))} />
     </>
   )

@@ -4,7 +4,7 @@ import { bruno } from '../quad/bruno'
 import { rng } from './paint'
 
 /**
- * A bunch of grapes (../spec [G]), lying on its side as it's been set down, in real millimetres: the grapes
+ * A bunch of grapes (./spec [G]), lying on its side as it's been set down, in real millimetres: the grapes
  * (green ones a little long, red ones rounder) packed round the stalk, wide at its shoulders, tapering to its
  * tip, settled flat underneath where it lies; the woody stem out of its top. Eaten grapes (`eaten`, by index)
  * are gone.

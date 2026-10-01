@@ -5,13 +5,13 @@ import { loft, type Ring } from './loft'
 import { paint, rng } from './paint'
 
 /**
- * A punnet of strawberries (../spec [P]), in real millimetres: a moulded pulp punnet (pale green, ribbed, a
+ * A punnet of strawberries (./spec [U]), in real millimetres: a moulded pulp punnet (pale green, ribbed, a
  * rolled rim), heaped with strawberries (each its own shape, glossy red, its seeds in little dimples, its green
  * star of a calyx and stalk). Eaten ones (`eaten`, by index) are gone.
  *
  * Its frame: standing on y = 0, its middle at the origin.
  */
-export const PUNNET = { top: 92, foot: 76, h: 46, wall: 2.5 } // [P] a 250 g punnet
+export const PUNNET = { top: 92, foot: 76, h: 46, wall: 2.5 } // [U] a 250 g punnet
 const { top: TOP, foot: FOOT, h: PH } = PUNNET
 
 const pulpTex = paint(128, 128, (g) => {

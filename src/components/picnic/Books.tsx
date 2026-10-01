@@ -7,7 +7,7 @@ import { BOOKS } from './spec'
 import { SERIF, paint, rng } from './paint'
 
 /**
- * The books (../spec [K]), in real millimetres, made as books are: two paperbacks, a cover wrapped round a
+ * The books (./spec [K]), in real millimetres, made as books are: two paperbacks, a cover wrapped round a
  * block of pages (its spine rounded, the cover a hair proud of the leaves, the leaves' edges lined), their
  * covers drawn here; and the little hardback lying open face up, its pages bowing up out of the gutter,
  * its cloth boards a rim round them. Click its right-hand page to turn it, its left to turn back: the leaf

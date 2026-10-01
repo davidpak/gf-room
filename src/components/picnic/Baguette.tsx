@@ -5,7 +5,7 @@ import { loft, orient, type Ring } from './loft'
 import { paint, rng } from './paint'
 
 /**
- * A demi-baguette (../spec [F]), in real millimetres: its crust golden, deeper where the oven caught it, pale
+ * A demi-baguette (./spec [F]), in real millimetres: its crust golden, deeper where the oven caught it, pale
  * and floury underneath; five slashes (grignes) along its top, each opened out pale with its ear standing up
  * along one side and caught darker; its ends drawn to blunt points. It tears: `lo` and `hi` are how much of
  * it is left (x, from -l/2 to l/2), and a torn end is ragged, its soft crumb showing.

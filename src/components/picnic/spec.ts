@@ -1,5 +1,5 @@
 /**
- * A picnic, in real millimetres: a gingham blanket on the grass, a willow basket with sandwiches in it, and
+ * A picnic, in real millimetres: a gingham blanket on the grass, a woodchip basket packed with lunch, and
  * three classics to read.
  *
  * Sources
@@ -13,7 +13,15 @@
  *        under each lid, leatherette closures
  *   [K]  the books: B-format paperbacks (129 × 198) for Pride and Prejudice (~480 pages: 26 thick) and
  *        Norwegian Wood (~390: 24); The Little Prince the small hardback (165 × 235, ~96 pages: 13)
- *   [S]  a sandwich: sandwich loaf slices ~110 square, 12 thick; cut corner to corner
+ *   And what's packed and laid out (each in its own file, its sizes there): typical sizes, as things are sold,
+ *   not one maker's measured
+ *   [D]  a sub half: a 12" hoagie roll (~300 × 80 × 58) cut in two on the bias; deli paper round it
+ *   [F]  a demi-baguette, ~420 long, 64 across, 52 high, five slashes; [G] grapes, bunches ~120-150 long
+ *   [U]  a 250 g strawberry punnet (~92 square at its top, 46 deep); [J] a 340 g jar of jam (68 across, 82 tall)
+ *   [C]  a 16" (406) round bamboo board, 20 thick; [B'] a 6 1/2" stoneware bowl
+ *   [L]  Ball's 64 oz mason jar pitcher (~116 across, ~220 tall with its lid); 16 oz mason jar mugs (80 × 132)
+ *   [V]  a 250 ml jar of wildflowers; [M] mallards ~580 long, ducklings of a week or two ~150; [S'] a house
+ *        sparrow ~150 long
  *
  * The covers are drawn here (a cloth binding and a stamped title, a blue sky with a little planet, a
  * plain red jacket), not anyone's cover art.
@@ -32,7 +40,6 @@ export const BASKET = {
   overhang: 46, // the liner folded down over its rim outside
   bow: 62, // the liner's ties, each side, just in from the handles
 }
-export const SANDWICH = { side: 110, bread: 12, filling: 14, n: 4 } // [S] four halves, stood up in a row
 export const BOOKS = [
   { title: 'Pride and Prejudice', author: 'Jane Austen', w: 129, h: 198, t: 26, cover: '#8fae8c', ink: '#f3e2b0' }, // [K]
   { title: 'Norwegian Wood', author: 'Haruki Murakami', w: 129, h: 198, t: 24, cover: '#c8423f', ink: '#fbf2e6' },

@@ -6,7 +6,7 @@ import { LAYOUT } from './layout'
 import { paint, rng } from './paint'
 
 /**
- * The picnic blanket (../spec [B], 60 × 80"), laid on the grass, a formula fitted to it (no cloth
+ * The picnic blanket (./spec [B], 60 × 80"), laid on the grass, a formula fitted to it (no cloth
  * simulation): woven red and white gingham bound round with a red binding, its stitching, a little sewn
  * label in a corner; a cream fleece back (showing where its far corner's turned back over itself). It
  * swells a little over the lawn, its edge isn't quite straight, and it creases where the basket's weight

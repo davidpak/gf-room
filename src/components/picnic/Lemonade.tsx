@@ -6,7 +6,7 @@ import { bruno } from '../quad/bruno'
 import { paint, rng } from './paint'
 
 /**
- * Lemonade (../spec [L]), in real millimetres: a mason jar pitcher of it (clear glass, a loop handle, a steel
+ * Lemonade (./spec [L]), in real millimetres: a mason jar pitcher of it (clear glass, a loop handle, a steel
  * band and lid with its spout; cloudy lemonade most of the way up, lemon wheels pressed to the glass, more
  * floating with ice and a sprig of mint), two mason jar mugs of it (each its handle, its lemon wheel on the
  * rim, a striped paper straw), and lemons. A mug's lemonade stands as high as its `level` says (0..1).
