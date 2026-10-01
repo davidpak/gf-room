@@ -5,6 +5,7 @@ import { onReset } from './reset'
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
+import { stepTime } from '../../lib/physics/World'
 import { usePerch } from '../../lib/physics/usePerch'
 import { Prompts, type PromptItem } from '../prompt/Prompts'
 import { Bench, BENCH } from './Furniture'
@@ -237,8 +238,9 @@ export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, 
       // (glides there, and holds it)
       const t = body.translation()
       const r = body.rotation()
-      body.setNextKinematicTranslation(_p.set(t.x, t.y, t.z).lerp(want.p, 0.16))
-      body.setNextKinematicRotation(_q.set(r.x, r.y, r.z, r.w).slerp(want.q, 0.16))
+      const k = 1 - Math.pow(0.84, stepTime() * 60) // (a sixth of the way a 60th of a second, whatever the step)
+      body.setNextKinematicTranslation(_p.set(t.x, t.y, t.z).lerp(want.p, k))
+      body.setNextKinematicRotation(_q.set(r.x, r.y, r.z, r.w).slerp(want.q, k))
       return
     }
     if (posed.current) {
@@ -282,8 +284,9 @@ export function LiveProp({ id, label, at, car, lift, feelAlong, feelPts, feelR, 
     const com = body.worldCom()
     _p.set(com.x - c.x, com.y - (c.y ?? 0), com.z - c.z).applyQuaternion(_q.copy(carQ).invert())
     // (in the trunk's well only: not up on the hood or roof, where the car's own moving tips it off, nor
-    // resting against its side, pushed there)
-    const inWell = Math.abs(_p.x) < w.x + 10 && _p.z > w.z0 - 10 && _p.z < w.z1 + 10 && _p.y > w.floor - 20 && _p.y < CAR_HALF.h + 260
+    // resting against its side, pushed there; nor on the lid: with it shut nothing's in the trunk, and what
+    // came to rest on top of it was taken for a load and rode along stuck to the car)
+    const inWell = openings.trunk && Math.abs(_p.x) < w.x + 10 && _p.z > w.z0 - 10 && _p.z < w.z1 + 10 && _p.y > w.floor - 20 && _p.y < CAR_HALF.h + 260
     if (!inWell) return
     const t = body.translation()
     const o = body.rotation()

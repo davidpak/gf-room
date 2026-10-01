@@ -15,7 +15,7 @@ import { Hand } from './Hand'
  *                  last two steps (smooth at any refresh rate, whatever the step): component bodies by
  *                  the library, hand-made ones (a cable's links, its plugs) with stepAlpha()
  *   timeStep       1/60 s; stages with a cable step at 1/120 (thin fast links never skip through things)
- *   contacts       firm at 1/120 steps (natural frequency 240: a cable carrying a hanging charger over the
+ *   contacts       (contactFrequency, else by the step) firm at 1/120 steps (natural frequency 240: a cable carrying a hanging charger over the
  *                  desk's edge doesn't sink into it, where the default 30 lets it sink 3 mm and more); 30 at 1/60
  *   the hand       every stage can pick things up the same way (./Hand): anything wrapped in
  *                  <Holdable> (or marked with `grabbable`) is carried, turned, lifted with the same
@@ -30,6 +30,8 @@ const PHYSICS_PRIORITY = -50 // before every other frame callback: the hand and 
 const clock = { total: 0, steps: 0, ts: 1 / 60 }
 /** how far this frame is between the last physics step and the next (0..1): draw a hand-made body at
  *  its pose before the last step blended toward its pose now by this much */
+/** seconds per physics step, now */
+export const stepTime = () => clock.ts
 export const stepAlpha = () => (clock.total - clock.steps * clock.ts) / clock.ts
 function StepClock({ timeStep }: { timeStep: number }) {
   useEffect(() => {
@@ -60,6 +62,7 @@ export function World({
   gravity = TOY_PHYSICS.gravity,
   hand = true,
   timeStep = 1 / 60,
+  contactFrequency,
 }: {
   children: ReactNode
   debug?: boolean
@@ -74,11 +77,13 @@ export function World({
   hand?: boolean
   /** seconds per physics step (smaller: steadier cables, more work) */
   timeStep?: number
+  /** how firm contacts are (natural frequency): 240 at fine steps, 30 at 1/60, unless given */
+  contactFrequency?: number
 }) {
   return (
     // the engine loads as WebAssembly: everything outside the world renders while it arrives
     <Suspense fallback={<Waiting />}>
-      <Physics gravity={[0, -gravity, 0]} lengthUnit={1000} debug={debug} numSolverIterations={solverIterations} numInternalPgsIterations={2} contactNaturalFrequency={timeStep < 1 / 90 ? 240 : 30} timeStep={timeStep} interpolate={interpolate} updatePriority={PHYSICS_PRIORITY} allowedLinearError={allowedLinearError}>
+      <Physics gravity={[0, -gravity, 0]} lengthUnit={1000} debug={debug} numSolverIterations={solverIterations} numInternalPgsIterations={2} contactNaturalFrequency={contactFrequency ?? (timeStep < 1 / 90 ? 240 : 30)} timeStep={timeStep} interpolate={interpolate} updatePriority={PHYSICS_PRIORITY} allowedLinearError={allowedLinearError}>
         <RigidBody type="fixed" colliders={false}>
           <CuboidCollider args={[6000, 50, 6000]} position={[0, floorY - 50, 0]} friction={0.9} />
         </RigidBody>

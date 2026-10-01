@@ -99,7 +99,9 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
         <LampPost key={i} slot={i} position={[l.x, 0, l.z]} />
       ))}
       {/* the physical side: the benches and signs, toys for the hand and the car (./Physical) */}
-      <World floorY={-3000}>
+      {/* (stepped at 120 a second, its contacts as soft as at 60: the car moves half as far between steps, and
+          at speed no longer jumps past a book's width and catches it inside itself) */}
+      <World floorY={-3000} timeStep={1 / 120} contactFrequency={30}>
         <QuadColliders />
         <CarBody state={car} shape={CAR_SHAPE} />
         <LiveProps car={car} />
