@@ -32,6 +32,7 @@ const CAM = num('cam')
 const AT = num('at')
 const STEER = Number(q?.get('steer') ?? 0)
 const STAND = Number(q?.get('stand') ?? 1)
+const BATTERY = Number(q?.get('battery') ?? 0.8)
 
 function Scene({ which }: { which: 'glider' | 'scooter' }) {
   const background = useMemo(sky, [])
@@ -67,7 +68,7 @@ function Scene({ which }: { which: 'glider' | 'scooter' }) {
         </group>
       ) : (
         <group position={[-520, 0, 0]}>
-          <Scooter steer={STEER} />
+          <Scooter steer={STEER} battery={BATTERY} />
         </group>
       )}
     </>

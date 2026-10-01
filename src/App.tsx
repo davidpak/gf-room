@@ -42,7 +42,7 @@ const PARTS = {
   civic: { stage: CivicStage, check: CivicStage, title: '2016 Honda Civic LX', hint: 'click a door or the trunk to open it · drag to look round · scroll to zoom' },
   guitar: { stage: GuitarStage, check: GuitarStage, title: 'Martin D-28', hint: 'hold the left button and sweep across the soundhole to strum · click a string or press 1–6 to pick it · click the fingerboard to hold a string at that fret (again to let go) · drag elsewhere to look round · scroll to zoom · &view=play: held up to play' },
   glider: { stage: GliderStage, check: GliderStage, title: 'LimeGlider', hint: 'drag to look round · scroll to zoom · &steer=0.4 turns its bars · &stand=0 folds its kickstand' },
-  scooter: { stage: ScooterStage, check: ScooterStage, title: 'Lime Gen4 scooter', hint: 'drag to look round · scroll to zoom · &steer=0.4 turns its bars' },
+  scooter: { stage: ScooterStage, check: ScooterStage, title: 'Lime Gen4 scooter', hint: 'drag to look round · scroll to zoom · &steer=0.4 turns its bars · &battery=0.3 (or 0.1) for a yellow (or red) lime' },
   picnic: { stage: PicnicStage, check: PicnicStage, title: 'A picnic', hint: 'click the basket to open its lids · click a sandwich to take it · drag to look round · scroll to zoom' },
   prompt: { stage: PromptStage, check: PromptStage, title: 'Fix-it prompts', hint: 'click a prompt · carry a block away and its prompt comes back when it settles · press the wheel and drag to look' },
 } as const

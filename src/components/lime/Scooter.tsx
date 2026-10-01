@@ -10,10 +10,11 @@ import { ARMS, AX, BARS, BATTERY, BEAM, DECK, HEAD, HOOD, LOOK, STEER_TOP, STEM,
  * whose pieces flow into each other with fillets: the grey frame (the broad beam down from the head into the low
  * deck, the arms back to the rear axle) with "Lime" down its sides and the slice on its front, the battery
  * standing behind the beam with its handle, the black hood over the rear hub motor with its tail light and plate,
- * the green stem with its collars and the box on its front, the swept-back bars with their grips, levers and the
- * display, the suspended fork, the front fender, 12" and 10" balloon tyres, the grip pad on the deck.
+ * the green stem with its collars and the box on its front, the green T head on it (the QR code on its plate, the
+ * screen with the lime that shows the battery, the headlight in its front) and its arms out to the black grips, the suspended fork, the front fender, 12" and 10" balloon tyres, the grip pad on the deck.
  *
- * `steer` turns the front round the steering axis (+ to its left), `spin` the wheels.
+ * `steer` turns the front round the steering axis (+ to its left), `spin` the wheels; `battery` (0..1) colours the
+ * lime on its screen (green, yellow, red).
  *
  * Its frame: x forward, y up, z to its right; the ground at y = 0, the rear axle at x = 0.
  */
@@ -134,30 +135,80 @@ const padTex = paint(1024, 256, (g) => {
   g.fillText('Lime', 330, 132)
 })
 const padMat = bruno({ map: padTex ?? undefined, color: '#ffffff', shade: '#18171c' })
-const screenTex = paint(128, 128, (g) => {
-  g.fillStyle = '#16161a'
-  g.fillRect(0, 0, 128, 128)
-  g.fillStyle = '#1f3b2a'
-  g.beginPath()
-  g.roundRect(24, 24, 80, 80, 12)
-  g.fill()
-  g.strokeStyle = LOOK.green
-  g.fillStyle = LOOK.green
-  g.lineWidth = 5
-  g.beginPath()
-  g.arc(64, 64, 26, 0, Math.PI * 2)
-  g.stroke()
-  for (let i = 0; i < 6; i++) {
-    const a0 = (i / 6) * Math.PI * 2 + 0.14
-    const a1 = ((i + 1) / 6) * Math.PI * 2 - 0.14
+/** the T head's top, as it's seen from the deck (its front up the canvas, its right to the right), for each
+ *  battery colour */
+const HEAD_TOP = { x0: -78, x1: 74, z: 60 } // (from the steering axis at the bar, mm)
+const headTop = (lime: string) =>
+  paint(240, 300, (g) => {
+    const r = rng(9)
+    g.fillStyle = LOOK.green
+    g.fillRect(0, 0, 240, 300)
+    // the QR code on its plate
+    g.fillStyle = '#cfd3d8'
     g.beginPath()
-    g.moveTo(64, 64)
-    g.arc(64, 64, 19, a0, a1)
-    g.closePath()
+    g.roundRect(78, 22, 84, 76, 8)
     g.fill()
-  }
-})
-const screenMat = bruno({ map: screenTex ?? undefined, color: '#ffffff', shade: '#16161a', lit: 1.2 })
+    g.fillStyle = '#f2f2ee'
+    g.fillRect(92, 30, 56, 56)
+    g.fillStyle = '#1b1b1f'
+    for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) if (r() < 0.5) g.fillRect(96 + x * 5.3, 34 + y * 5.3, 5.3, 5.3)
+    for (const [x, y] of [
+      [96, 34],
+      [129, 34],
+      [96, 67],
+    ]) {
+      g.fillStyle = '#1b1b1f'
+      g.fillRect(x, y, 15, 15)
+      g.fillStyle = '#f2f2ee'
+      g.fillRect(x + 3, y + 3, 9, 9)
+      g.fillStyle = '#1b1b1f'
+      g.fillRect(x + 5, y + 5, 5, 5)
+    }
+    g.fillStyle = '#8a9099'
+    for (const [x, y] of [
+      [84, 28],
+      [156, 28],
+      [84, 92],
+      [156, 92],
+    ]) {
+      g.beginPath()
+      g.arc(x, y, 3.5, 0, Math.PI * 2)
+      g.fill()
+    }
+    // the screen: a black glass tombstone, its round end to the front
+    g.fillStyle = '#121215'
+    g.beginPath()
+    g.moveTo(66, 280)
+    g.lineTo(66, 160)
+    g.arc(120, 160, 54, Math.PI, 0)
+    g.lineTo(174, 280)
+    g.quadraticCurveTo(174, 292, 162, 292)
+    g.lineTo(78, 292)
+    g.quadraticCurveTo(66, 292, 66, 280)
+    g.fill()
+    g.fillStyle = 'rgba(255,255,255,0.08)'
+    g.fillRect(70, 130, 50, 150)
+    // the NFC mark: waves and a card
+    g.strokeStyle = lime
+    g.lineWidth = 2.5
+    for (const rr of [5, 9, 13]) {
+      g.beginPath()
+      g.arc(108, 196, rr, -0.7, 0.7)
+      g.stroke()
+    }
+    g.strokeRect(124, 189, 12, 15)
+    // the lime: six segments round a little middle
+    g.fillStyle = lime
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 2
+      g.beginPath()
+      g.ellipse(120 + Math.cos(a) * 15, 244 + Math.sin(a) * 15, 9.5, 7, a, 0, Math.PI * 2)
+      g.fill()
+    }
+  })
+/** the battery's colour on the screen: green, yellow, red */
+const BATTERY_COLOURS = ['#39d52a', '#f2cf2a', '#e8463c']
+const headMats = BATTERY_COLOURS.map((c) => bruno({ map: headTop(c) ?? undefined, color: '#ffffff', shade: '#3d7a58', sheen: 0.4, lit: 1.1 }))
 const plateTex = paint(256, 128, (g) => {
   g.fillStyle = '#f2f2ee'
   g.fillRect(0, 0, 256, 128)
@@ -234,37 +285,45 @@ function build() {
   const stemSdf = union(
     10,
     cylinder(axis(STEM.lo), axis(STEM.hi), STEM.r, 4),
-    ...STEM.collars.map(([a, b]) => cylinder(axis(a), axis(b), STEM.r + 7, 6)),
+    ...STEM.collars.map(([a, b]) => cylinder(axis(a), axis(b), STEM.r + 6, 6)),
     slab(STEM_BOX.pts, STEM_BOX.w, 16, 0, 6),
   )
   const stem = mesh(stemSdf, [760, 570, -60], [1000, 1110, 60], 3.5)
-  // the bars: swept back from the clamp, the grips, the brake levers, the display on the clamp
+  // the bars: the green T head on the stem (the screen and QR code on its top, the headlight in its front),
+  // green arms out to the grips, the black grips and levers
   const cx = axis(BARS.y)[0]
-  const barPts = (s: number): V3[] => [
-    [cx, BARS.y, 0],
-    [cx - 14, BARS.y, s * 110],
-    [cx - 60, BARS.y - 2, s * 190],
-    [cx - BARS.sweep * 0.7, BARS.y - 4, s * 240],
+  const arm = (s: number): V3[] => [
+    [cx + 22, BARS.y, s * 46],
+    [cx + 10, BARS.y, s * 150],
+    [cx - BARS.sweep, BARS.y - 3, s * (BARS.half - BARS.grip)],
   ]
-  const barSdf = union(
-    10,
+  const headSdf = union(
+    18,
+    box([cx + 26, BARS.y + 2, 0], [46, 20, 58], 18),
+    box([cx - 36, BARS.y + 2, 0], [42, 20, 46], 26),
+    cylinder(axis(BARS.y - 70), axis(BARS.y - 4), STEM.r + 4, 6),
     ...[-1, 1].flatMap((s) => {
-      const p = barPts(s)
-      return [capsule(p[0], p[1], 14), capsule(p[1], p[2], 14), capsule(p[2], p[3], 14)]
+      const p = arm(s)
+      return [capsule(p[0], p[1], 17), capsule(p[1], p[2], 16)]
     }),
-    box([cx - 6, BARS.y + 8, 0], [34, 22, 46], 12),
-    ...[-1, 1].map((s) => capsule([cx - 36, BARS.y + 2, s * 172], [cx - 88, BARS.y - 16, s * 296], 5)),
-    ...[-1, 1].map((s) => box([cx - 46, BARS.y + 2, s * 170], [16, 20, 14], 6)),
   )
-  const bars = mesh(barSdf, [cx - 160, BARS.y - 50, -310], [cx + 60, BARS.y + 50, 310], 3)
+  const bars = mesh(headSdf, [cx - 110, BARS.y - 80, -BARS.half + 60], [cx + 90, BARS.y + 30, BARS.half - 60], 3, (p, n) =>
+    // (laid on from above, its edges all green so nothing smears where it runs out)
+    [Math.min(1, Math.max(0, (p.z + HEAD_TOP.z) / (2 * HEAD_TOP.z))), n.y > -0.2 ? Math.min(1, Math.max(0, (p.x - cx - HEAD_TOP.x0) / (HEAD_TOP.x1 - HEAD_TOP.x0))) : 0],
+  )
   const grips = mesh(
-    union(4, ...[-1, 1].map((s) => cylinder([cx - BARS.sweep * 0.7, BARS.y - 4, s * 240], [cx - BARS.sweep * 0.7 - 50, BARS.y - 5, s * (240 + BARS.grip)], 17, 6))),
-    [cx - 230, BARS.y - 40, -380],
-    [cx - 60, BARS.y + 30, 380],
+    union(
+      4,
+      ...[-1, 1].map((s) => cylinder([cx - BARS.sweep, BARS.y - 3, s * (BARS.half - BARS.grip - 6)], [cx - BARS.sweep - 14, BARS.y - 4, s * BARS.half], 18.5, 6)),
+      ...[-1, 1].map((s) => capsule([cx + 26, BARS.y + 4, s * 128], [cx - 12, BARS.y - 12, s * (BARS.half - 30)], 5)),
+      ...[-1, 1].map((s) => box([cx + 18, BARS.y + 4, s * 122], [16, 16, 14], 6)),
+    ),
+    [cx - 120, BARS.y - 40, -BARS.half - 20],
+    [cx + 60, BARS.y + 30, BARS.half + 20],
     3,
   )
-  // the display: on the clamp, its screen up
-  const display = mesh(box([cx + 4, BARS.y + 36, 0], [26, 8, 30], 6), [cx - 30, BARS.y + 20, -40], [cx + 40, BARS.y + 52, 40], 1.5, (p, n) => (n.y > 0.7 ? [(p.z + 28) / 56, (p.x - cx + 24) / 56] : [0.02, 0.02]))
+  // the headlight: an oval lens across the head's front
+  const lamp = mesh(capsule([cx + 70, BARS.y + 2, -24], [cx + 70, BARS.y + 2, 24], 10), [cx + 50, BARS.y - 20, -45], [cx + 90, BARS.y + 25, 45], 1.5)
   // the fork: its crown under the head, a leg each side down to the axle (grey sleeves over chrome)
   const crownY = HEAD.lo - 22
   const forkSdf = union(
@@ -298,7 +357,7 @@ function build() {
   // the kickstand: folded up under the deck on its left
   const kick = mesh(union(6, capsule([520, DECK.bottom - 8, -62], [330, DECK.bottom - 12, -70], 9), sphere([520, DECK.bottom - 8, -62], 13)), [300, DECK.bottom - 40, -100], [560, DECK.bottom + 20, -30], 3)
   console.info(`scooter sculpted in ${Math.round(performance.now() - t0)} ms`)
-  return { frame, battery, hood, stem, bars, grips, display, fork, stanchions, fender, front, rear, pad, kick }
+  return { frame, battery, hood, stem, bars, grips, lamp, fork, stanchions, fender, front, rear, pad, kick }
 }
 
 /** the front (fork, wheel, fender, stem, bars) turned round the steering axis */
@@ -317,7 +376,7 @@ function Steered({ angle, children }: { angle: number; children: ReactNode }) {
   )
 }
 
-export function Scooter({ steer = 0, spin = 0 }: { steer?: number; spin?: number }) {
+export function Scooter({ steer = 0, spin = 0, battery = 0.8 }: { steer?: number; spin?: number; battery?: number }) {
   const g = useMemo(() => (made ??= build()), [])
   const m = (geo: BufferGeometry, mat: Material, shadow = true) => <mesh geometry={geo} material={mat} castShadow={shadow} receiveShadow />
   return (
@@ -361,9 +420,9 @@ export function Scooter({ steer = 0, spin = 0 }: { steer?: number; spin?: number
           {m(g.front.rim, M.black)}
         </group>
         {m(g.stem, M.green)}
-        {m(g.bars, M.black)}
+        {m(g.bars, headMats[battery > 0.5 ? 0 : battery > 0.2 ? 1 : 2])}
         {m(g.grips, M.rubber)}
-        {m(g.display, screenMat)}
+        {m(g.lamp, M.lens, false)}
       </Steered>
     </group>
   )
