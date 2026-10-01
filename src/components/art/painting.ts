@@ -9,12 +9,14 @@ import { CANVAS } from './spec'
  *   the brush   bristles, not a pen: each dab a little fan of soft strokes across the way it's going, each bristle
  *               its own shade of the colour, laid thinner as the brush runs dry along the stroke
  *   kept        in this browser (localStorage), saved a moment after each stroke; undo (the last few strokes),
- *               and a fresh canvas (back to the underpainting)
+ *               and a fresh canvas (blank, primed white)
  */
 const W = 768
 const H = Math.round((W * CANVAS.h) / CANVAS.w) // (its shape: 406 × 508)
 const KEY = 'rina-room:painting'
 const UNDOS = 8
+/** a fresh canvas's white (gesso: a touch warm) */
+const PRIMED = '#fbf8f2'
 
 export type Brush = { color: string; size: number }
 /** brush sizes, in pixels of the painting (it's 768 across) */
@@ -200,16 +202,15 @@ export function makePainting() {
       texture.needsUpdate = true
       keep()
     },
-    /** a fresh canvas: back to the underpainting */
+    /** a fresh canvas: blank, primed white (kept so, till it's painted on) */
     clear() {
       undo.push(g.getImageData(0, 0, W, H))
       if (undo.length > UNDOS) undo.shift()
-      fresh()
-      try {
-        localStorage.removeItem(KEY)
-      } catch {
-        /* */
-      }
+      g.globalAlpha = 1
+      g.fillStyle = PRIMED
+      g.fillRect(0, 0, W, H)
+      texture.needsUpdate = true
+      keep()
     },
   }
 }

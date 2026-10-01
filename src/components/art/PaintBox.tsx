@@ -4,7 +4,7 @@ import { PAINTS } from './spec'
 
 /**
  * The paint box (in the page, over the scene, while you're at the easel): a dab of each paint to pick, three
- * brush sizes, undo, and a fresh canvas (back to the underpainting, after asking).
+ * brush sizes, undo, and a fresh canvas (blank white, after asking).
  */
 export function PaintBox({ on = true }: { on?: boolean }) {
   const p = painting()
