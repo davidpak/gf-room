@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { BufferAttribute, Matrix4, Mesh, Object3D, type BufferGeometry, type Group, type Material } from 'three'
+import { Box3, BufferAttribute, Matrix4, Mesh, Object3D, Sphere, type BufferGeometry, type Group, type Material, type Raycaster } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { indexForPointer } from './bvh'
 
 /**
  * Fewer draw calls for things that don't move inside themselves: wrap them in <Static> and their meshes are
@@ -19,6 +20,8 @@ export const HIDDEN = 7
 const DEBUG = import.meta.env.DEV || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev'))
 const _m = new Matrix4()
 const _inv = new Matrix4()
+const _box = new Box3()
+const _sphere = new Sphere()
 
 type Sig = { key: string; h: number }[]
 type Built = { meshes: Mesh[]; sig: Sig }
@@ -152,6 +155,13 @@ export function Static({ children }: { children: ReactNode }) {
     root.current?.updateWorldMatrix(true, false)
     Object3D.prototype.updateMatrixWorld.call(o, true)
   }
+  // (all of it, in the wrapper's frame: a pointer's ray that misses this misses every piece, so nothing in it
+  // need be brought up to date or tried)
+  const bound = useRef(new Sphere())
+  const near = (rc: Raycaster) => {
+    const r = root.current
+    return !!r && rc.ray.intersectsSphere(_sphere.copy(bound.current).applyMatrix4(r.matrixWorld))
+  }
   const fresh = () => {
     const frame = gl.info.render.frame
     if (stamp.current === frame) return
@@ -187,9 +197,17 @@ export function Static({ children }: { children: ReactNode }) {
     if (DEBUG && b.sig.length) ((window as unknown as { __restatics?: unknown[] }).__restatics ??= []).push({ t: Math.round(performance.now()), n: [b.meshes.length, meshes.length] })
     const next = meshes.length > 1 ? build(r, meshes) : []
     if (next.length) {
+      indexForPointer(meshes) // (still, so found under the pointer quickly: ./bvh)
+      _box.makeEmpty()
+      for (const m of next) {
+        m.geometry.computeBoundingBox()
+        _box.union(m.geometry.boundingBox!)
+      }
+      _box.getBoundingSphere(bound.current)
       for (const m of meshes) {
         m.layers.set(HIDDEN)
         m.raycast = function (rc, hits) {
+          if (!near(rc)) return
           fresh()
           RAY(this).call(this, rc, hits)
         }

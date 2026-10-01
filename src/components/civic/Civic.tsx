@@ -5,6 +5,7 @@ import { CanvasTexture, LatheGeometry, SRGBColorSpace, Vector2, type Group, type
 import { bruno } from '../quad/bruno'
 import { CIVIC, TOY } from './spec'
 import { addShadowProxies, shadowProxiesReady, whenShadowProxiesReady } from './shadowProxy'
+import { indexForPointer } from '../../lib/render/bvh'
 
 /**
  * David's car, the 2016 Civic LX sedan, from a real model of it (scripts/civic.mjs makes
@@ -175,6 +176,10 @@ export function CivicModel({ onWheels }: { onWheels?: (w: { node: Object3D; fron
       m.castShadow = name !== 'Carro_Vidros' && name !== 'Carro_Interno' // (nor the inside: the shell's shadow covers it)
       m.receiveShadow = name !== 'Carro_Interno'
     })
+    // (found under the pointer quickly: ../../lib/render/bvh)
+    const ms: Mesh[] = []
+    c.traverse((o) => void ((o as Mesh).isMesh && ms.push(o as Mesh)))
+    indexForPointer(ms)
     return c
   }, [scene])
   // its shadow cast by a simplified stand-in (./shadowProxy: 500k triangles drawn into the sun's map down to a
