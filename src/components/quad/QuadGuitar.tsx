@@ -61,7 +61,7 @@ export function QuadGuitar({ car }: { car: { current: CarState } }) {
       key: 'guitar',
       items: [],
       frame: (pos, at, aspect) => frameAround(pos, at, aspect, PLAY_AT, 290, 130, LOOK_DIR),
-      hint: 'hold the left button and sweep across the soundhole to strum · click the fingerboard to hold a string at a fret',
+      hint: 'hold the left button and sweep across the soundhole to strum · click a string or press 1–6 to pick it · click the fingerboard to hold a string at a fret',
     }),
     [],
   )

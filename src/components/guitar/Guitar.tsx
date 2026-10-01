@@ -31,8 +31,10 @@ import { BODY, BRIDGE, DOTS, FRETS, FRET_WIRE, HEAD, JOIN, NECK, NUT, OUTLINE, P
  *   strum   hold the left button and sweep across the strings over the soundhole (between the end of the
  *           board and the bridge): each one it crosses sounds (a quick sweep strums, a slow one picks), and
  *           shakes. Not over the fingerboard: that's for fretting
+ *   pick    click a string over the soundhole, or press 1–6 (as guitarists number them: 1 the thin high E,
+ *           6 the low E): that one string sounds
  *   fret    click on the fingerboard: that string's held down there (a pink fingertip) till it's clicked
- *           again; it sounds that note from then on
+ *           again (then quietly let go); it sounds that note from then on
  *
  * Its frame: its tail at the origin, the neck up +y, the top's face at z = 0 facing +z (the back at
  * -depth), the treble side +x. Along it, u (./spec) runs from the nut toward the tail: y = END - u.
@@ -447,11 +449,19 @@ export function GuitarModel({ playable = true }: { playable?: boolean }) {
   const click = (e: ThreeEvent<MouseEvent>) => {
     if (!playable) return
     e.stopPropagation()
+    if (e.delta > 4) return // (the end of a strum, not a click)
     const { x, u } = localOf(e)
-    if (u < 0 || u > NECK.boardEnd) return
-    // the string nearest, the fret just past where it was pressed
+    // the string nearest
     let i = 0
     for (let k = 1; k < 6; k++) if (Math.abs(stringX(k, u) - x) < Math.abs(stringX(i, u) - x)) i = k
+    // over the soundhole: pick it (if it was near enough to it)
+    if (inStrum(u)) {
+      const gap = (stringX(1, u) - stringX(0, u)) * 0.6
+      if (Math.abs(stringX(i, u) - x) < gap) sound(i, 0.75)
+      return
+    }
+    if (u < 0 || u > NECK.boardEnd) return
+    // on the board: the fret just past where it was pressed
     let n = 1
     while (n < FRETS && fretU(n) < u) n++
     const next = heldRef.current.slice()
@@ -461,6 +471,18 @@ export function GuitarModel({ playable = true }: { playable?: boolean }) {
     setHeld(next)
     if (!lift) sound(i, 0.7)
   }
+
+  useEffect(() => {
+    if (!playable) return
+    const key = (e: KeyboardEvent) => {
+      const k = Number(e.key)
+      if (e.repeat || !Number.isInteger(k) || k < 1 || k > 6 || e.ctrlKey || e.metaKey || e.altKey) return
+      if ((e.target as HTMLElement | null)?.closest?.('input, textarea, [contenteditable="true"]')) return
+      sound(6 - k, 0.75)
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  })
 
   // ---- the strings shaking: a blur along the part that rings (from the fret it's held at, or the nut)
   const lenses = useRef<(Mesh | null)[]>([])

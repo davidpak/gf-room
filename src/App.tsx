@@ -38,7 +38,7 @@ const PARTS = {
   rinaos: { stage: RinaOSStage, check: RinaOSStage, title: 'RinaOS', hint: 'her laptop, flat: open OneNote from the dock · click anywhere on a page to type · the ribbon: Home, Insert, Draw, View' },
   quad: { stage: QuadStage, check: QuadStage, title: 'The Quad', hint: 'drive: W A S D or the arrows · space to brake · R to start over · scroll to zoom' },
   civic: { stage: CivicStage, check: CivicStage, title: '2016 Honda Civic LX', hint: 'click a door or the trunk to open it · drag to look round · scroll to zoom' },
-  guitar: { stage: GuitarStage, check: GuitarStage, title: 'Martin D-28', hint: 'hold the left button and sweep across the soundhole to strum · click the fingerboard to hold a string at that fret (again to let go) · drag elsewhere to look round · scroll to zoom · &view=play: held up to play' },
+  guitar: { stage: GuitarStage, check: GuitarStage, title: 'Martin D-28', hint: 'hold the left button and sweep across the soundhole to strum · click a string or press 1–6 to pick it · click the fingerboard to hold a string at that fret (again to let go) · drag elsewhere to look round · scroll to zoom · &view=play: held up to play' },
   prompt: { stage: PromptStage, check: PromptStage, title: 'Fix-it prompts', hint: 'click a prompt · carry a block away and its prompt comes back when it settles · press the wheel and drag to look' },
 } as const
 
