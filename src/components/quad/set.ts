@@ -66,6 +66,8 @@ export const SET = {
     ],
     laptop: { x: -250, z: -640, rot: 0.1 },
   },
+  // the picnic (./QuadPicnic): a gingham blanket on the open lawn inside the V, south of the photo shoot
+  picnic: { x: -950, z: -100, rot: 0.25 },
   // the cookie stand (./CookieStand): a canopy over a table in the corner of the big lawn east of the V, facing out front
   cookies: { x: 3230, z: 1120, rot: 0, sign: { x: 2760, z: 1150, rot: 0.3 } }, // (in the lawn's corner by the walks; its sign just off its left, its arrow toward it)
   // the building along the north edge (cut off where the island ends), its wing stepping out; the
@@ -163,4 +165,15 @@ export function paveOwner(x: number, z: number) {
 export const onWalk = (x: number, z: number, pad = 0) => paveSdf(x, z) < pad
 
 /** where tufts and petals keep off: the trunks' feet, the lamps' bases (x, z, r) */
-export const keepClear: [number, number, number][] = [...SET.trees.map((t) => [t.x, t.z, 130] as [number, number, number]), ...SET.lamps.map((l) => [l.x, l.z, 60] as [number, number, number])]
+export const keepClear: [number, number, number][] = [
+  ...SET.trees.map((t) => [t.x, t.z, 130] as [number, number, number]),
+  ...SET.lamps.map((l) => [l.x, l.z, 60] as [number, number, number]),
+  // (no grass up through the picnic blanket: 60 × 80" at the toy scale, covered in circles)
+  ...Array.from({ length: 20 }, (_, i): [number, number, number] => {
+    const u = ((i % 4) - 1.5) * 95
+    const v = (Math.floor(i / 4) - 2) * 100
+    const c = Math.cos(SET.picnic.rot)
+    const s = Math.sin(SET.picnic.rot)
+    return [SET.picnic.x + u * c + v * s, SET.picnic.z - u * s + v * c, 105]
+  }),
+]

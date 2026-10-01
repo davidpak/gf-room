@@ -15,9 +15,10 @@ import { RinaOSStage } from './components/rinaos/RinaOSStage'
 import { QuadStage } from './components/quad/QuadStage'
 import { CivicStage } from './components/civic/CivicStage'
 import { GuitarStage } from './components/guitar/GuitarStage'
+import { PicnicStage } from './components/picnic/PicnicStage'
 import { useOsMode } from './components/rinaos/mode'
 
-// ?part=room|doll|closet|bed|desk|lamp|charger|keypad|wumpus|mints|tissues|laptop|rinaos|quad|civic|guitar|prompt, add &check for the verification sheet
+// ?part=room|doll|closet|bed|desk|lamp|charger|keypad|wumpus|mints|tissues|laptop|rinaos|quad|civic|guitar|picnic|prompt, add &check for the verification sheet
 const params = new URLSearchParams(location.search)
 const part = params.get('part') ?? 'room'
 const check = params.has('check')
@@ -39,6 +40,7 @@ const PARTS = {
   quad: { stage: QuadStage, check: QuadStage, title: 'The Quad', hint: 'drive: W A S D or the arrows · space to brake · R to start over · scroll to zoom' },
   civic: { stage: CivicStage, check: CivicStage, title: '2016 Honda Civic LX', hint: 'click a door or the trunk to open it · drag to look round · scroll to zoom' },
   guitar: { stage: GuitarStage, check: GuitarStage, title: 'Martin D-28', hint: 'hold the left button and sweep across the soundhole to strum · click a string or press 1–6 to pick it · click the fingerboard to hold a string at that fret (again to let go) · drag elsewhere to look round · scroll to zoom · &view=play: held up to play' },
+  picnic: { stage: PicnicStage, check: PicnicStage, title: 'A picnic', hint: 'click the basket to open its lids · click a sandwich to take it · drag to look round · scroll to zoom' },
   prompt: { stage: PromptStage, check: PromptStage, title: 'Fix-it prompts', hint: 'click a prompt · carry a block away and its prompt comes back when it settles · press the wheel and drag to look' },
 } as const
 

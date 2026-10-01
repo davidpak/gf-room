@@ -12,6 +12,7 @@ import { World } from '../../lib/physics/World'
 import { LookControls, Photos } from './Photos'
 import { CookieStand } from './CookieStand'
 import { QuadGuitar } from './QuadGuitar'
+import { QuadPicnic } from './QuadPicnic'
 import { lookBack, useLook } from './look'
 import './quad.css'
 import { SET } from './set'
@@ -102,6 +103,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
         <LiveProps car={car} />
         <CookieStand car={car} />
         <QuadGuitar car={car} />
+        <QuadPicnic car={car} />
       </World>
       <Photos car={car} />
       <Building />
