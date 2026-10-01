@@ -110,10 +110,15 @@ const feel = new Map<string, Feel>()
 export const liveBody = (id: string) => feel.get(id)?.body.current ?? null
 const _p = new Vector3()
 const _q = new Quaternion()
+/** (the same circles reused frame after frame: nothing left behind for the garbage collector) */
+const pool: (Obstacle & { kind: 'circle' })[] = []
+const out: Obstacle[] = []
 export function propObstacles(): Obstacle[] {
-  const out: Obstacle[] = []
+  out.length = 0
+  let n = 0
   const c = carNow.current
-  const [ch, sh] = [Math.cos(c?.heading ?? 0), Math.sin(c?.heading ?? 0)]
+  const ch = Math.cos(c?.heading ?? 0)
+  const sh = Math.sin(c?.heading ?? 0)
   for (const [id, f] of feel) {
     const b = f.body.current
     if (!b || stowed.has(id)) continue
@@ -128,7 +133,11 @@ export function propObstacles(): Obstacle[] {
     _q.set(q.x, q.y, q.z, q.w)
     for (const [px, pz] of f.pts) {
       _p.set(px, 0, pz).applyQuaternion(_q)
-      out.push({ kind: 'circle', x: t.x + _p.x, z: t.z + _p.z, r: f.r, soft: true })
+      const o = (pool[n++] ??= { kind: 'circle', x: 0, z: 0, r: 0, soft: true })
+      o.x = t.x + _p.x
+      o.z = t.z + _p.z
+      o.r = f.r
+      out.push(o)
     }
   }
   return out

@@ -1,3 +1,4 @@
+import { Waiting } from '../../lib/ready'
 import { Suspense, useMemo, useRef, useState } from 'react'
 import { Canvas } from '../../lib/render/Canvas'
 import { ToyControls } from '../stage/ToyControls'
@@ -290,7 +291,7 @@ function Scene() {
         <meshStandardMaterial color={TOY.floor} roughness={1} />
       </mesh>
       <World timeStep={1 / 120}>
-        <Suspense fallback={null}>
+        <Suspense fallback={<Waiting />}>
           <DeskWithMotor />
         </Suspense>
       </World>

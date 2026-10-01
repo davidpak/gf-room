@@ -48,7 +48,14 @@
   transition-property: transform;
   transition-timing-function: cubic-bezier(0.22, 0.8, 0.32, 1);
 }
-.loader-line { height: 22px; font-family: 'Gaegu', 'Nunito', system-ui, sans-serif; font-size: 21px; color: #fff4e6; overflow: hidden; }
+/* (one line, room to spare, and faded at its top and bottom edges instead of cut, so a line sliding through
+   never shows a hard edge across its letters) */
+.loader-line {
+  min-width: 290px; height: 40px; line-height: 40px; padding: 0 8px; text-align: center; white-space: nowrap;
+  font-family: 'Gaegu', 'Nunito', system-ui, sans-serif; font-size: 21px; color: #fff4e6;
+  -webkit-mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent);
+}
 .loader-line span { display: block; animation: loader-line 1.6s ease both; }
 @keyframes loader-line {
   0% { transform: translateY(70%); opacity: 0; }

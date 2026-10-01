@@ -1,3 +1,4 @@
+import { Waiting } from '../ready'
 import { Suspense, useEffect, type ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { CuboidCollider, Physics, RigidBody, useBeforePhysicsStep } from '@react-three/rapier'
@@ -76,7 +77,7 @@ export function World({
 }) {
   return (
     // the engine loads as WebAssembly: everything outside the world renders while it arrives
-    <Suspense fallback={null}>
+    <Suspense fallback={<Waiting />}>
       <Physics gravity={[0, -gravity, 0]} lengthUnit={1000} debug={debug} numSolverIterations={solverIterations} numInternalPgsIterations={2} contactNaturalFrequency={timeStep < 1 / 90 ? 240 : 30} timeStep={timeStep} interpolate={interpolate} updatePriority={PHYSICS_PRIORITY} allowedLinearError={allowedLinearError}>
         <RigidBody type="fixed" colliders={false}>
           <CuboidCollider args={[6000, 50, 6000]} position={[0, floorY - 50, 0]} friction={0.9} />

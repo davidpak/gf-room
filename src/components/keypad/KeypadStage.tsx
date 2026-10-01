@@ -1,3 +1,4 @@
+import { Waiting } from '../../lib/ready'
 import { Suspense } from 'react'
 import { Canvas } from '../../lib/render/Canvas'
 import { OrbitControls } from '@react-three/drei'
@@ -17,7 +18,7 @@ function Scene() {
   return (
     <>
       <StageLights extent={180} />
-      <Suspense fallback={null}>
+      <Suspense fallback={<Waiting />}>
         <KeypadAlone />
       </Suspense>
     </>

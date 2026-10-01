@@ -1,3 +1,4 @@
+import { Waiting } from '../../lib/ready'
 import { Suspense, useCallback, useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3, type DirectionalLight, type Group, type Object3D, type PerspectiveCamera } from 'three'
@@ -43,6 +44,9 @@ export const CAR_SHAPE = {
     span(-HW, -WELL.x, WELL.floor, WELL.rim, -2315, WELL.z1),
     span(-WELL.x, WELL.x, WELL.floor, 950, -2315, WELL.z0), // (its back)
     span(-700, 700, 950, 1440, -1600, 1000), // (the cabin)
+    // (a skirt down to just off the ground under it all: it shoves the picnic's low things, the books, the board,
+    // the food, rather than riding over them; and nothing gets wedged under it and pressed into the ground)
+    span(-HW + 30, HW - 30, 15, 150, -2290, 2290),
   ],
   lid: span(-640, 640, WELL.rim, WELL.rim + 60, -2218, -1832),
   /** the well, for what's put in it (toy mm, the car's frame) */
@@ -72,6 +76,8 @@ const _tp = new Vector3()
 const _ta = new Vector3()
 const keys = new Set<string>()
 const MAP: Record<string, string> = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'brake', KeyR: 'reset' }
+
+const NONE: Obstacle[] = []
 
 export function Car({ state, obstacles, movers, paused }: { state: { current: CarState }; obstacles: Obstacle[]; /** obstacles that move (the benches, where they are now), read every frame */ movers?: () => Obstacle[]; paused?: boolean }) {
   const body = useRef<Group>(null)
@@ -157,14 +163,15 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     let hit = 0
     const fx = Math.sin(s.heading)
     const fz = Math.cos(s.heading)
-    const list = movers ? [...obstacles, ...movers()] : obstacles
+    const moving = movers ? movers() : NONE
     for (let pass = 0; pass < 2; pass++)
       for (const along of BUMP.along) {
         const cx = nx + fx * along
         const cz = nz + fz * along
         let px = 0
         let pz = 0
-        for (const o of list) {
+        for (let oi = 0; oi < obstacles.length + moving.length; oi++) {
+          const o = oi < obstacles.length ? obstacles[oi] : moving[oi - obstacles.length]
           let dx: number
           let dz: number
           let min: number
@@ -316,7 +323,7 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
   return (
     <group ref={body}>
       <group ref={chassis}>
-        <Suspense fallback={null}>
+        <Suspense fallback={<Waiting />}>
           <group scale={K}>
             <CivicModel onWheels={onWheels} />
           </group>

@@ -1,3 +1,4 @@
+import { Waiting } from '../../lib/ready'
 import { Suspense, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
@@ -104,7 +105,7 @@ export function Desk({ motor, children }: { motor: Motor; children?: ReactNode }
         <Hook side={1} />
         <group position={[0, DESK.topUnder + DESK.top.t, 0]}>{children}</group>
         <group position={[DESK.keypad.x, DESK.topUnder, DESK.top.d / 2 + 20]}>
-          <Suspense fallback={null}>
+          <Suspense fallback={<Waiting />}>
             <Keypad motor={motor} slab={false} />
           </Suspense>
         </group>

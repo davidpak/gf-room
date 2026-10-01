@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { createElement, useLayoutEffect, useSyncExternalStore } from 'react'
 
 /**
  * Is the page ready to show? The loading screen (../components/shell/Loader) stays up until it is: the page's
@@ -64,3 +64,16 @@ export const ready = {
 }
 
 export const useReady = () => useSyncExternalStore((f) => (subs.add(f), () => void subs.delete(f)), () => state)
+
+/** parts of a scene still loading behind their own Suspense (the physics engine, a model): the loading screen
+ *  waits for them too. Use as such a Suspense's fallback: <Suspense fallback={<Waiting />}> */
+let waiting = 0
+export const stillWaiting = () => waiting
+function WaitingMark() {
+  useLayoutEffect(() => {
+    waiting++
+    return () => void waiting--
+  }, [])
+  return null
+}
+export const Waiting = () => createElement(WaitingMark)

@@ -1,3 +1,4 @@
+import { Waiting } from '../../lib/ready'
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useThree } from '@react-three/fiber'
 import { Canvas } from '../../lib/render/Canvas'
@@ -116,7 +117,7 @@ function Furniture() {
         <Bed mirrored />
       </group>
       <group position={[deskX, 0, deskZ]}>
-        <Suspense fallback={null}>
+        <Suspense fallback={<Waiting />}>
           <DeskWithMotor />
         </Suspense>
       </group>

@@ -1,3 +1,4 @@
+import { Waiting } from '../../lib/ready'
 import { Suspense, useMemo, useRef, useState } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
@@ -67,13 +68,13 @@ export function Bed({ mirrored = false }: { mirrored?: boolean }) {
       <group scale={[1, 1, mirrored ? -1 : 1]}>
         <DrawerUnit />
       </group>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Waiting />}>
         <BedSheet />
       </Suspense>
       <BedColliders />
       <Pillows />
       {/* the blue fleece blanket: modelled, lying over the foot end with the head end turned down */}
-      <Suspense fallback={null}>
+      <Suspense fallback={<Waiting />}>
         <Blanket />
       </Suspense>
     </group>

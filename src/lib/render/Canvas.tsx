@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { Canvas as FiberCanvas, useThree, type CanvasProps } from '@react-three/fiber'
+import type { Camera, Light, LightShadow, Mesh, Object3D, Scene, WebGLRenderer } from 'three'
 import { useProgress } from '@react-three/drei'
-import { ready } from '../ready'
+import { ready, stillWaiting } from '../ready'
 
 /**
  * Every stage's <Canvas>: R3F's, plus what the loading screen needs to know (../ready): it checks in when it
@@ -22,6 +23,43 @@ function Progress() {
   return null
 }
 
+/**
+ * The warm-up, as games do it behind their loading screens: everything drawn once, the hidden things too and what's
+ * out of view, its shadows as well, so every shader the page will need is compiled and every model and texture is
+ * on the graphics card before anything's shown. Otherwise each is done the first time it comes into view, and
+ * driving round the Quad hitches (a shader compiling is a frame or two lost).
+ */
+function warmUp(gl: WebGLRenderer, scene: Scene, camera: Camera) {
+  const was: [Object3D, boolean, boolean][] = []
+  scene.traverse((o) => {
+    was.push([o, o.visible, o.frustumCulled])
+    o.visible = true
+    o.frustumCulled = false
+    // (a morphing thing that's never been shown yet has no weights: given them, so it can be drawn)
+    const m = o as Mesh
+    if (m.isMesh && m.geometry?.morphAttributes?.position && !m.morphTargetInfluences) m.updateMorphTargets()
+  })
+  const shadows: { light: Light & { shadow: LightShadow }; auto: boolean }[] = []
+  scene.traverse((o) => {
+    const l = o as Light & { shadow?: LightShadow }
+    if (l.isLight && l.shadow) {
+      shadows.push({ light: l as Light & { shadow: LightShadow }, auto: l.shadow.autoUpdate })
+      l.shadow.needsUpdate = true
+    }
+  })
+  try {
+    gl.compile(scene, camera)
+    gl.render(scene, camera)
+    performance.mark(`warm-up:${gl.info.render.calls}`)
+  } finally {
+    for (const [o, v, c] of was) {
+      o.visible = v
+      o.frustumCulled = c
+    }
+    for (const sh of shadows) sh.light.shadow.autoUpdate = sh.auto
+  }
+}
+
 /** mounted once the scene's built (its Suspense resolved): compile, wait for any stragglers, draw, check out */
 function Ready({ done }: { done: () => void }) {
   const { gl, scene, camera, get } = useThree()
@@ -29,22 +67,45 @@ function Ready({ done }: { done: () => void }) {
   useEffect(() => {
     if (import.meta.env.DEV || DEV_PARAM) (window as unknown as { __r3f: typeof get }).__r3f = get // (for profiling from the console; &dev on a build)
     let live = true
+    // (n frames drawn, or that long in time if frames aren't coming: a tab in the background never hangs here)
     const frames = (n: number) => new Promise<void>((r) => {
-      const f = () => (--n <= 0 ? r() : requestAnimationFrame(f))
+      const t = setTimeout(r, n * 60)
+      const f = () => (--n <= 0 ? (clearTimeout(t), r()) : requestAnimationFrame(f))
       requestAnimationFrame(f)
     })
     ;(async () => {
       ready.shaders()
       try {
-        await gl.compileAsync(scene, camera)
+        await Promise.race([gl.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 6000))])
       } catch {
         /* (not every renderer can: it'll compile as it draws) */
       }
       // (anything still loading outside the suspense: wait for it, a while)
-      for (let i = 0; i < 300 && useProgress.getState().active; i++) await frames(1)
+      const until = performance.now() + 5000
+      while (useProgress.getState().active && performance.now() < until) await frames(1)
+      // what's still loading behind its own Suspense (the physics engine, the car): wait for it, a while; then a
+      // couple of frames for what mounts once it's drawn, its shaders compiled too, everything drawn once, a few
+      // frames to settle
+      const longest = performance.now() + 15000
+      while (stillWaiting() > 0 && performance.now() < longest) await frames(1)
+      await frames(2)
+      try {
+        await Promise.race([gl.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 6000))])
+      } catch {
+        /* (as above) */
+      }
+      if (!live) return
+      try {
+        warmUp(gl, scene, camera)
+      } catch (e) {
+        console.warn('warm-up', e) // (never keeps the page from showing)
+      }
       await frames(4)
       if (live) done()
-    })()
+    })().catch((e) => {
+      console.warn('ready', e)
+      if (live) done() // (whatever went wrong, the page still shows)
+    })
     return () => void (live = false)
   }, [gl, scene, camera, get, done])
   return null

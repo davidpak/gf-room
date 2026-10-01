@@ -16,10 +16,13 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  * Don't wrap anything that animates its parts (a lid, a page, a string): it would look frozen.
  */
 export const HIDDEN = 7
+const DEBUG = import.meta.env.DEV || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev'))
 const _m = new Matrix4()
 const _inv = new Matrix4()
 
-type Built = { meshes: Mesh[]; sig: string }
+type Sig = { key: string; h: number }[]
+type Built = { meshes: Mesh[]; sig: Sig }
+const same = (a: Sig, b: Sig) => a.length === b.length && a.every((x, i) => x.key === b[i].key && Math.abs(x.h - b[i].h) < 0.5)
 
 function mergeable(o: Object3D): o is Mesh {
   const m = o as Mesh
@@ -47,14 +50,14 @@ function collect(from: Object3D, root: Object3D, merged: Set<Object3D>) {
     for (const c of o.children) walk(c)
   }
   for (const c of from.children) walk(c)
-  const sig = out
-    .map((m) => {
-      const e = _m.multiplyMatrices(_inv, m.matrixWorld).elements
-      let h = 0
-      for (let i = 0; i < 16; i++) h += e[i] * (i + 1.37)
-      return `${m.id}:${m.geometry.id}:${(m.material as Material).uuid}:${h.toFixed(2)}`
-    })
-    .join(',')
+  // (which they are, and where: a number each, compared with some give, so the last decimal drifting as a loose
+  // thing settles isn't taken for a change)
+  const sig: Sig = out.map((m) => {
+    const e = _m.multiplyMatrices(_inv, m.matrixWorld).elements
+    let h = 0
+    for (let i = 0; i < 16; i++) h += e[i] * (i + 1.37)
+    return { key: `${m.id}:${m.geometry.id}:${(m.material as Material).uuid}`, h }
+  })
   return { meshes: out, sig, others }
 }
 
@@ -103,6 +106,20 @@ function build(root: Group, meshes: Mesh[]) {
 }
 
 const NOOP = () => {}
+/** a number that changes when anything in it does (what's there, shown or not, its shape, its look, where it sits):
+ *  worked out without making anything, so checking for changes leaves nothing for the garbage collector */
+function fingerprint(o: Object3D): number {
+  const e = o.matrix.elements
+  let h = o.id * 0.6180339 + (o.visible ? 1.5 : 0)
+  h += o.position.x * 1.1 + o.position.y * 1.7 + o.position.z * 2.3 + o.quaternion.x * 3.1 + o.quaternion.y * 3.7 + o.quaternion.z * 4.3
+  h += o.scale.x * 5.1 + o.scale.y * 5.3 + o.scale.z * 5.9 + e[12] * 1.9 + e[13] * 2.9 + e[14] * 3.9 + e[0] * 0.7 + e[5] * 0.9
+  const m = o as Mesh
+  if (m.isMesh) h += m.geometry.id * 7.7 + ((m.material as unknown as { id?: number }).id ?? 0) * 11.3
+  if (!o.visible) return h
+  const c = o.children
+  for (let i = 0; i < c.length; i++) if (!c[i].userData.live) h = h * 1.0000001 + fingerprint(c[i])
+  return h
+}
 const RAY = (o: Mesh) => Object.getPrototypeOf(o).raycast as Mesh['raycast']
 
 export function Static({ children }: { children: ReactNode }) {
@@ -110,7 +127,7 @@ export function Static({ children }: { children: ReactNode }) {
   const orig = useRef<Group>(null)
   const raycaster = useThree((s) => s.raycaster)
   const gl = useThree((s) => s.gl)
-  const built = useRef<Built & { merged: Mesh[] }>({ meshes: [], sig: '', merged: [] })
+  const built = useRef<Built & { merged: Mesh[] }>({ meshes: [], sig: [], merged: [] })
   // (the pointer sees the hidden layer too)
   useEffect(() => void raycaster.layers.enable(HIDDEN), [raycaster])
   // while it's merged, the meshes it's made of aren't redrawn, so their places aren't worked out every frame
@@ -157,7 +174,7 @@ export function Static({ children }: { children: ReactNode }) {
       up.reverse().forEach((p) => (seen.add(p), chain.push(p)))
     }
     loose.current = chain
-    if (sig === b.sig) return
+    if (same(sig, b.sig)) return
     // put the old ones back on the drawn layer, take the old merge away
     for (const m of b.meshes) {
       m.layers.set(0)
@@ -167,6 +184,7 @@ export function Static({ children }: { children: ReactNode }) {
       r.remove(m)
       m.geometry.dispose()
     }
+    if (DEBUG && b.sig.length) ((window as unknown as { __restatics?: unknown[] }).__restatics ??= []).push({ t: Math.round(performance.now()), n: [b.meshes.length, meshes.length] })
     const next = meshes.length > 1 ? build(r, meshes) : []
     if (next.length) {
       for (const m of meshes) {
@@ -182,13 +200,23 @@ export function Static({ children }: { children: ReactNode }) {
     else delete (o as Partial<Group>).updateMatrixWorld
     built.current = { meshes: next.length ? meshes : [], sig, merged: next }
   }
-  useLayoutEffect(rebuild)
-  // (pieces coming and going between renders of this one: checked a few times a second)
-  const t = useRef(0)
+  useLayoutEffect(() => {
+    rebuild()
+    if (orig.current) print.current = fingerprint(orig.current)
+  })
+  // (pieces coming and going between renders of this one: checked twice a second, each on its own beat so they
+  // never all check on the same frame, and cheaply: merged again only if its fingerprint changed)
+  const t = useRef(-Math.random() * 0.5)
+  const print = useRef(NaN)
   useFrame((_, dt) => {
     t.current += dt
-    if (t.current < 0.3) return
-    t.current = 0
+    if (t.current < 0.5) return
+    t.current -= 0.5
+    const o = orig.current
+    if (!o) return
+    const p = fingerprint(o)
+    if (p === print.current) return
+    print.current = p
     rebuild()
   })
   // (taken away, or remounted: everything as it was, so a remount merges afresh)
@@ -204,7 +232,7 @@ export function Static({ children }: { children: ReactNode }) {
         m.geometry.dispose()
       }
       if (orig.current) delete (orig.current as Partial<Group>).updateMatrixWorld
-      built.current = { meshes: [], sig: '', merged: [] }
+      built.current = { meshes: [], sig: [], merged: [] }
     },
     [],
   )
