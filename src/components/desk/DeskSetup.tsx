@@ -22,8 +22,12 @@ import { LAPTOP_BOTTOM, LiveLaptop, laptopSockets } from '../laptop/Laptop'
 // Rina's lamp on the back-right corner
 const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
 const LAMP_YAW = -0.6 // turned to face into the desk
-/** David, crocheted: on the far side from the lamp, the back-left corner, turned a little in toward the desk */
-const DOLL_HOME = new Matrix4().makeRotationY(0.45).setPosition(-DESK.top.w / 2 + 130, 0, -DESK.top.d / 2 + 120)
+/**
+ * David, crocheted: tucked into the back-left corner (the far side from the lamp), facing out of it on the
+ * diagonal, so his back sits square in the corner: his body reaches ~72 behind and beside his middle that way
+ * (the hood 50 back, the arms 52 out), and he sits 18 clear of both edges
+ */
+const DOLL_HOME = new Matrix4().makeRotationY(Math.PI / 4).setPosition(-DESK.top.w / 2 + 90, 0, -DESK.top.d / 2 + 90)
 
 /**
  * The wall outlet behind the desk, at outlet height, on the right where the lamp and the desk's motor
@@ -32,10 +36,10 @@ const DOLL_HOME = new Matrix4().makeRotationY(0.45).setPosition(-DESK.top.w / 2 
 const OUTLET = { x: 450, y: 300 }
 /** Rina's Ice Breakers: front right of the desk, turned a little toward the room (desktop frame) */
 const MINTS_HOME = new Matrix4().makeRotationY(-0.4).setPosition(300, MINTS.puck.h / 2, 150)
-// the Kleenex on the right, in front of the lamp
+// the Kleenex on the left, in front of David
 // her MacBook a little right of the middle (in the charger's reach), open, facing her chair
 const LAPTOP_HOME = new Matrix4().makeRotationY(0.05).setPosition(60, LAPTOP_BOTTOM, 50)
-const TISSUES_HOME = new Matrix4().makeRotationY(-0.25).setPosition(505, TISSUES.box.h / 2, 70)
+const TISSUES_HOME = new Matrix4().makeRotationY(0.2).setPosition(-480, TISSUES.box.h / 2, 95)
 const LAMP_OUTLETS = lampOutlets()
 const LAMP_M = new Matrix4().makeRotationY(LAMP_YAW).setPosition(...LAMP_AT) // lamp frame -> desktop frame
 const CORD_R = PLUGS[2].cord
@@ -277,7 +281,7 @@ export function DeskSetup({ at = [0, 0], wall = 80, keys = true }: { at?: [numbe
       <LampTrinkets lamp={lamp} />
       <LiveDoll homeAt={dollAt} spawn={spawn(DOLL_HOME.elements[12], 900, DOLL_HOME.elements[14])} />
       <LiveMints homeAt={mintsAt} spawn={spawn(300, 800, 150)} />
-      <LiveTissues homeAt={tissuesAt} spawn={spawn(505, 900, 70)} />
+      <LiveTissues homeAt={tissuesAt} spawn={spawn(-480, 900, 95)} />
       <LiveLaptop homeAt={laptopAt} spawn={spawn(60, 900, 50)} bodyOut={laptopBody} />
       <WallOutlet position={[ax + OUTLET.x, OUTLET.y, az - DESK.top.d / 2 - wall]} top={lampSocket} bottom={deskSocket} />
       <LiveCord setup={cords.lamp} />

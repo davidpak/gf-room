@@ -1,5 +1,6 @@
 import { Waiting } from '../../lib/ready'
 import { Suspense } from 'react'
+import { useThree } from '@react-three/fiber'
 import { Canvas } from '../../lib/render/Canvas'
 import { ToyControls } from '../stage/ToyControls'
 import { PCFShadowMap, Vector3 } from 'three'
@@ -13,6 +14,8 @@ import { DESK, STACK } from './spec'
 import { DeskSetup } from './DeskSetup'
 
 function Scene() {
+  const get = useThree((s) => s.get)
+  if (import.meta.env.DEV) Object.assign(window, { __r3f: get }) // (for screenshots from the console)
   return (
     <>
       {/* small biases (the depth one is a share of the shadow camera's 6 m depth: 0.00008 is 0.5 mm): thin

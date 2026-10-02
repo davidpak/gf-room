@@ -165,6 +165,8 @@ type Seat = ReturnType<typeof seat>
  * pole there and he leans on it; nothing else of him reaches further back.
  */
 export const SEATED = { backZ: seat(LEAN).backZ }
+/** the default pose's numbers, for whoever drives the limbs (./LiveDoll): the hips' height, the turns */
+export const SEAT = { ...seat(LEAN), hipH: HIP_H, splay: SPLAY, armIn: ARM_IN }
 
 /**
  * Sets the whole pose. breath 0..1 (0 = at rest, 1 = breathed out: the chest draws in a touch,
@@ -185,7 +187,8 @@ function pose(r: DollRig, s: Seat, breath: number, roll: number) {
   r.armR.rotation.set(s.armX, 0, ARM_IN)
 }
 
-export function SeatedDoll({ lean = LEAN }: { lean?: number }) {
+/** `limbs`: called after the pose each frame, to turn the arms and legs some other way (physics) */
+export function SeatedDoll({ lean = LEAN, limbs }: { lean?: number; limbs?: (r: DollRig) => void }) {
   const rig = useRef<DollRig | null>(null)
   const s = useMemo(() => seat(lean), [lean])
   const life = useRef({ t: 0, next: 5, back: 0, target: HEAD_ROLL, tilt: { x: HEAD_ROLL, v: 0 } as Spring })
@@ -215,6 +218,7 @@ export function SeatedDoll({ lean = LEAN }: { lean?: number }) {
     stepSpring(L.tilt, L.target, h, TILT.k, TILT.c)
     const breath = (1 - Math.cos((2 * Math.PI * L.t) / BREATH.period)) / 2
     pose(r, s, breath, L.tilt.x)
+    limbs?.(r)
   })
 
   return (
