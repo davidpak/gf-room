@@ -79,6 +79,7 @@ export type Check = { what: string; value: string; ok: boolean }
 export function checkSpeaker(): Check[] {
   const out: Check[] = []
   const c = (what: string, value: string, ok: boolean) => out.push({ what, value, ok })
+  c('cabinet 636.6 × 389.7 × 371.5 [JBL]', `${L100.h} × ${L100.w} × ${L100.d}`, L100.h === 636.6 && L100.w === 389.7 && L100.d === 371.5)
   const B = L100.badge
   c('the badge under the woofer, on the baffle', `y ${B.y} ± ${B.h / 2}, the woofer's foot at ${L100.woofer.y - L100.woofer.r}`, B.y + B.h / 2 < L100.woofer.y - L100.woofer.r - 2 && B.y - B.h / 2 > L100.edge)
   // everything on the baffle, nothing overlapping
