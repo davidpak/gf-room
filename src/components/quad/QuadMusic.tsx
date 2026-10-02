@@ -20,7 +20,9 @@ import { LiveProp, liveBody, setPrompt } from './Physical'
 import { clickSpot, frameAround, getLook, lookAt, type Spot } from './look'
 import { AFrame } from './CookieStand'
 import { Bunting, CANOPY, PicksRack, RACK, RUG, VinylStrings, VinylWall, MusicCanopy, MusicRug, NowPlayingEasel, Notes, useSpinningFace } from './MusicDecor'
-import { Basket, CoffeeTable, DIGBOX, DigBox, Plant, Pouf, SPEAKER, Speaker, Stock, Succulent, TABLE } from './MusicCorner'
+import { Basket, CoffeeTable, DIGBOX, DigBox, Plant, Pouf, Stock, Succulent, TABLE } from './MusicCorner'
+import { SpeakerOnStand } from '../speaker/Speaker'
+import { L100 } from '../speaker/spec'
 import { SET } from './set'
 import type { CarState } from './Car'
 
@@ -65,7 +67,10 @@ const SIGN = { w: 760, len: 1100, lean: 0.22, x: -2450, z: 900, rot: 0.35 }
 const EASEL_AT = { x: 1480, z: 380, rot: -0.4 }
 const PICKS_AT = { x: -1660, z: 330, rot: 0.4 }
 // (the furniture: the speakers either side of the stand, the listening corner out front, the plants at the back)
-const SPEAKERS_AT = [-990, 990].map((x) => ({ x, z: -40, rot: x < 0 ? 0.12 : -0.12 }))
+// (a JBL L100 Classic on its JS-120 either side, clear of the stand's ends, turned a little in; its tweeter toward
+// the middle: ../speaker)
+const SPEAKERS_AT = [-1010, 1010].map((x) => ({ x, z: -40, rot: x < 0 ? 0.12 : -0.12, side: (x < 0 ? 1 : -1) as -1 | 1 }))
+const SPEAKER_BOX = { w: L100.w, h: 800, d: L100.d } // (the speaker on its stand, as a box: what the car bumps)
 const TABLE_AT = { x: 650, z: 800, rot: 0.3 }
 const POUFS_AT = [
   { x: 250, z: 950, rot: 0, mint: true },
@@ -275,13 +280,13 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
       </LiveProp>
       {/* the speakers either side */}
       {SPEAKERS_AT.map((s, i) => (
-        <LiveProp key={i} id={`musicspeaker${i}`} label="" set="music" at={home(s.x, 0, s.z, s.rot)} car={car} lift={60} feelPts={[[0, 0]]} feelR={S(SPEAKER.w)}>
+        <LiveProp key={i} id={`musicspeaker${i}`} label="" set="music" at={home(s.x, 0, s.z, s.rot)} car={car} lift={60} feelPts={[[0, 0]]} feelR={S(SPEAKER_BOX.w)}>
           <group scale={K} onClick={toStand}>
             <Static>
-              <Speaker />
+              <SpeakerOnStand side={s.side} />
             </Static>
           </group>
-          <CuboidCollider args={[S(SPEAKER.w), S(SPEAKER.h + 40), S(SPEAKER.d)]} position={[0, S(SPEAKER.h + 40), 0]} mass={2} friction={0.8} />
+          <CuboidCollider args={[S(SPEAKER_BOX.w), S(SPEAKER_BOX.h), S(SPEAKER_BOX.d)]} position={[0, S(SPEAKER_BOX.h), 0]} mass={4} friction={0.8} />
         </LiveProp>
       ))}
       {/* the listening corner: the coffee table, the poufs */}

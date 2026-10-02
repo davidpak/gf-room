@@ -1,17 +1,15 @@
-import { useMemo, useRef } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useMemo } from 'react'
+import { type ThreeEvent } from '@react-three/fiber'
 import { CanvasTexture, CylinderGeometry, DoubleSide, Euler, Matrix4, Quaternion, SRGBColorSpace, Shape, ShapeGeometry, SphereGeometry, TorusGeometry, Vector3, type Group } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { needle } from '../records/play'
 import { StillSleeves } from '../records/Sleeves'
 import { LP, type Pressing } from '../records/vinyl'
 import { DARK, HAND, WOOD } from './CookieStand'
 import { bruno } from './bruno'
 
 /**
- * The record stand's corner of the lawn, furnished (real mm; ./QuadMusic places it all at the toy scale): a pair of
- * tall speakers either side of the stand, their cones pumping while a record plays; on the stand's top, the Dig box
+ * The record stand's corner of the lawn, furnished (real mm; ./QuadMusic places it all at the toy scale; its speakers
+ * are ../speaker's): on the stand's top, the Dig box
  * (a recipe box of index cards: click it, write what to dig for), a succulent and a few records lying about; under
  * it, the back stock (records stood spine out, two stacks lying flat, a basket of rolled-up posters); out front, a
  * listening corner: a round coffee table (a mug, a pair of headphones, a record) and two poufs; big leafy plants in
@@ -21,8 +19,6 @@ import { bruno } from './bruno'
  * ./QuadMusic puts them (a material a draw), the records all from the cover sheet (../records/covers: one draw a
  * group, their real covers).
  */
-const WALNUT = bruno({ color: '#a8754e', shade: '#8a6f96' })
-const GRILLE = bruno({ color: '#cdb9ec', shade: '#9b88c4' })
 const CREAM = bruno({ color: '#fdf2e4', shade: '#b4a0c4' })
 const TERRACOTTA = bruno({ color: '#e0906c', shade: '#a77a9a' })
 const SOIL = bruno({ color: '#5d4a3c' })
@@ -35,53 +31,6 @@ const KNIT2 = bruno({ color: '#c8ead9', shade: '#8fb0c0' })
 
 const rbox = (w: number, h: number, d: number, r = 8) => new RoundedBoxGeometry(w, h, d, 2, Math.min(r, Math.min(w, h, d) / 2 - 0.01))
 const cyl = (r0: number, r1: number, h: number, seg = 24) => new CylinderGeometry(r0, r1, h, seg)
-
-// ---- the speakers: walnut cabinets, lilac grilles, a big cone, a little one, a tweeter
-export const SPEAKER = { w: 300, h: 920, d: 280 }
-const SPK = (() => {
-  const { w, h, d } = SPEAKER
-  const cap = new SphereGeometry(30, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2)
-  // (the woofer at 300 up, the mid at 600, both in their cones' frame: z out of the grille; the cones one piece, their
-  // dust caps another: they pump together)
-  return {
-    cab: rbox(w, h, d, 16),
-    grille: rbox(w - 44, h - 120, 14, 6),
-    foot: cyl(18, 22, 40, 10),
-    cones: mergeGeometries([cyl(96, 70, 26, 28).rotateX(Math.PI / 2).translate(0, 300, 6), cyl(58, 42, 20, 24).rotateX(Math.PI / 2).translate(0, 600, 6)])!,
-    caps: mergeGeometries([cap.clone().translate(0, 300, 18), cap.clone().scale(0.62, 0.62, 0.62).translate(0, 600, 18)])!,
-    ring: new TorusGeometry(36, 7, 8, 24),
-    dome: new SphereGeometry(24, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-  }
-})()
-/** a speaker, its feet at y 0, its front toward +z; its cones in a group of their own (they move) */
-export function Speaker() {
-  const { w, h, d } = SPEAKER
-  const cones = useRef<Group>(null)
-  useFrame(({ clock }) => {
-    const g = cones.current
-    if (!g) return
-    // (a thump on the beat, a little flutter between, only while a record's playing)
-    const t = clock.elapsedTime
-    const k = needle.playing ? Math.pow(Math.max(0, Math.sin(t * Math.PI * 2 * 1.9)), 8) * 0.07 + Math.sin(t * 23) * 0.006 : 0
-    g.scale.set(1, 1, 1 + k * 4)
-  })
-  const front = d / 2 + 7
-  return (
-    <group>
-      <mesh geometry={SPK.cab} material={WALNUT} position={[0, h / 2 + 40, 0]} castShadow receiveShadow />
-      {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => <mesh key={`${sx}${sz}`} geometry={SPK.foot} material={DARK} position={[sx * (w / 2 - 40), 20, sz * (d / 2 - 40)]} />))}
-      <mesh geometry={SPK.grille} material={GRILLE} position={[0, h / 2 + 40, d / 2]} />
-      {/* the woofer and the mid: their cones, their dust caps (pumping out of the grille: scaled from it) */}
-      <group ref={cones} position={[0, 40, front]} userData={{ live: true }}>
-        <mesh geometry={SPK.cones} material={DARK} />
-        <mesh geometry={SPK.caps} material={CREAM} />
-      </group>
-      {/* the tweeter: a cream ring round a little dome */}
-      <mesh geometry={SPK.ring} material={CREAM} position={[0, 820 + 40, front + 4]} />
-      <mesh geometry={SPK.dome} material={DARK} rotation={[Math.PI / 2, 0, 0]} position={[0, 820 + 40, front]} />
-    </group>
-  )
-}
 
 // ---- the Dig box: a mint recipe box of index cards, its lid propped open, "dig" lettered on its front
 export const DIGBOX = { w: 190, h: 120, d: 150, t: 8 }
