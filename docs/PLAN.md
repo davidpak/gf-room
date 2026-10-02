@@ -56,6 +56,10 @@ Each milestone is something you can open in a browser and show someone.
 - [ ] **M5: Polish.** Post-processing (bloom on the lamp, vignette), day/night toggle, loading screen, deploy to Vercel/Netlify with a custom domain.
 - [ ] **M6 (optional): Blender.** Model the whole apartment in Blender, bake lighting, export one GLB. This is the Three.js Journey "portal scene" workflow and is where it starts looking like Bruno's.
 
+## Later
+
+- **Melee from the Mac mini, over Tailscale.** Today the TV shows Dolphin only from the viewer's own computer (`getDisplayMedia` in `src/components/gamecube/dolphin.ts`). The solid version: Slippi runs around the clock on David's Mac mini. OBS streams its window (picture and sound) over WebRTC through MediaMTX, and the TV plays that stream with no window picker. The browser's Gamepad API (or the keyboard) sends ports 1 and 2 back to a small Node bridge on the mini, which drives Dolphin's controller pipes. `tailscale serve` hosts the site at a private HTTPS `*.ts.net` address. Expect about 60–120 ms of input lag, fine for casual play; Slippi online is still better for serious matches. The mini may need an HDMI dummy plug when running headless. Undecided: a written setup guide versus SSH access for Claude, and whether to keep the window-capture mode as a fallback.
+
 ## Known bugs
 
 - **Ice Breakers tin still bounces with mints inside** (`?part=mints`, desk page). Dropping or throwing it with mints in, especially with a tab open, can still send it bouncing or hopping. Commit 73112e1 fixed one cause (mints teleported back inside shoved the tin), but big bounces remain. Leads: contacts between the near-weightless mints (0.00005 kg) and the 12 g tin, the rattle cap and shared gravity/damping in `src/components/mints/Mints.tsx`, and unpacking mints while the tin is moving. Idea to try: while the tin is moving, keep every mint packed (kinematic, touching nothing) and only let them loose once it is still.
