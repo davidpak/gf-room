@@ -22,6 +22,8 @@ export type Spot = {
   keys?: (e: KeyboardEvent) => boolean
   /** its own hint, instead of the photos' */
   hint?: string
+  /** what Esc does from it (said in the hint bar: 'back to the car' when not said) */
+  back?: string
 }
 export type Look = { spot: Spot; i: number | null }
 
@@ -57,8 +59,11 @@ const _c = new Vector3()
 export function lookPose(pos: Vector3, at: Vector3, aspect: number) {
   if (!look) return false
   if (look.i === null) {
+    // (a spot with nothing to frame yet, its thing not there this frame, leaves the camera where it is: not gliding
+    // off to wherever pos and at last were, nor to the world's middle)
+    pos.x = NaN
     look.spot.frame(pos, at, aspect)
-    return true
+    return !Number.isNaN(pos.x)
   }
   const o = look.spot.items[look.i]?.()
   if (!o) return false

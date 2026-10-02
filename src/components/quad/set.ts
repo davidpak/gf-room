@@ -81,6 +81,8 @@ export const SET = {
     scooters: [{ x: 880, z: 1720, rot: -Math.PI / 2 + 0.15 }, { x: 990, z: 1700, rot: -Math.PI / 2 - 0.05 }],
   },
   // the cookie stand (./CookieStand): a canopy over a table in the corner of the big lawn east of the V, facing out front
+  // the record stand (./QuadMusic): on the same lawn, west of the cookie stand and its sign, facing out front too
+  music: { x: 2240, z: 1110, rot: 0 },
   cookies: { x: 3230, z: 1120, rot: 0, sign: { x: 2760, z: 1150, rot: 0.3 } }, // (in the lawn's corner by the walks; its sign just off its left, its arrow toward it)
   // the building along the north edge (cut off where the island ends), its wing stepping out; the
   // dark hedge before the wing; bushes at the building's foot

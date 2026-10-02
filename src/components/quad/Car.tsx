@@ -308,6 +308,12 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
       camera.position.set(c.x + 560, 820, c.z + 1250)
       camera.lookAt(c.x, 300, c.z)
     }
+    if (VIEW === 'music') {
+      // (?view=music: the record stand, from out front and above)
+      const c = SET.music
+      camera.position.set(c.x + 250, 560, c.z + 900)
+      camera.lookAt(c.x, 140, c.z)
+    }
     if (VIEW === 'shoot') {
       // (?view=shoot: the photo shoot between the middle cherries, from in front and a little above)
       const c = SET.shoot.camera

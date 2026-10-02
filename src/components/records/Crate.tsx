@@ -8,6 +8,7 @@ import type { CrateId } from './library'
 import { useShelf } from './shelf'
 import { Disc, Jacket, discThick, useArt } from './Record'
 import { LP, sizeOf, type Pressing } from './vinyl'
+import { CRATE } from './rack'
 
 /**
  * The crate her records live in: pine, open-topped, low at the front so the covers show, a hand-hole cut through each
@@ -20,16 +21,7 @@ import { LP, sizeOf, type Pressing } from './vinyl'
  * Its label's chalked on a slate card on its front board (painted into the board: no card stuck on).
  * Its frame: its middle, its floor's underside at y 0, the low front toward +z.
  */
-export const CRATE = {
-  in: { w: LP.sleeve + 16, d: 250 }, // inside
-  wall: 14,
-  floor: 12,
-  h: 200, // ends and back
-  front: 120, // the low front
-  hole: { w: 90, h: 30, y: 150 }, // the hand-holes in the ends
-  lean: 0.1, // radians back
-  colors: { pine: '#e3bf8c', pineShade: '#9a7f9a' },
-}
+export { CRATE }
 const C = CRATE
 
 /** an end: the board with its hand-hole cut through (its faces' uv in mm, the grain's texture repeated to suit) */
@@ -52,6 +44,8 @@ function endBoard() {
   return new ExtrudeGeometry(s, { depth: C.wall, bevelEnabled: false, curveSegments: 12 }).translate(0, 0, -C.wall / 2).rotateY(Math.PI / 2)
 }
 
+/** pine boards' grain (the stand's too) */
+export const pineTexture = () => pine()
 function pine() {
   const c = document.createElement('canvas')
   c.width = c.height = 512

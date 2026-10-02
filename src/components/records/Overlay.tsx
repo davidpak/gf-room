@@ -25,7 +25,7 @@ export const askDig = (on = true) => {
 }
 const useAsking = () => useSyncExternalStore((f) => (askSubs.add(f), () => void askSubs.delete(f)), () => asking)
 
-function About({ bottom }: { bottom: number }) {
+function About({ bottom, hints }: { bottom: number; hints: boolean }) {
   const b = useBrowse()
   const shelf = useShelf()
   const p = recordUp()
@@ -53,9 +53,11 @@ function About({ bottom }: { bottom: number }) {
           {pressed} · {songs} songs · {min} min
         </div>
       )}
+      {hints && (
       <div style={{ ...T, fontWeight: 400, fontSize: 16, opacity: 0.75, marginTop: 4 }}>
         {b.mode === 'crate' ? 'A / D or ← → to flip through · Enter (or click it) to take it out · Esc to step back' : `click ${discs > 1 ? 'a record' : 'the record'} to take it out of the jacket, then carry it to the turntable · A / D for the next one · Esc to put it back`}
       </div>
+      )}
       {b.mode === 'out' && p.artistId && (
         <button style={{ ...PILL, fontSize: 16, marginTop: 6 }} onClick={() => digMore(p.artistId!, p.artist.split(',')[0]).then(() => openCrate('dig'))}>
           ⛏ more by {p.artist.split(',')[0]}
@@ -153,11 +155,13 @@ function DigCard() {
   )
 }
 
-export function RecordsOverlay({ bottom = 110 }: { bottom?: number }) {
+/** `status`: whether to show the log-in / playing line (on the Quad: only while the player's looked at) */
+/** `hints`: what to do, under the record (the Quad has its own hint bar: off there) */
+export function RecordsOverlay({ bottom = 110, status = true, hints = true }: { bottom?: number; status?: boolean; hints?: boolean }) {
   return (
     <>
-      <About bottom={bottom} />
-      <Status bottom={bottom - 26} />
+      <About bottom={bottom} hints={hints} />
+      {status && <Status bottom={bottom - 26} />}
       <DigCard />
     </>
   )

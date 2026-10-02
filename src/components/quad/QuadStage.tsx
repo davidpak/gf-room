@@ -17,6 +17,8 @@ import { QuadPicnic } from './QuadPicnic'
 import { QuadLime, RideHint } from './QuadLime'
 import { QuadArt } from './QuadArt'
 import { QuadGame } from './QuadGame'
+import { QuadMusic } from './QuadMusic'
+import { RecordsOverlay } from '../records/Overlay'
 import { PaintBox } from '../art/PaintBox'
 import { DolphinButton } from '../gamecube/DolphinButton'
 import '../art/art.css'
@@ -116,6 +118,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
         <QuadLime car={car} obstacles={obstacles} />
         <QuadArt car={car} />
         <QuadGame car={car} />
+        <QuadMusic car={car} />
       </World>
       <Photos car={car} />
       <Building />
@@ -141,6 +144,7 @@ export function QuadStage() {
       <RideHint />
       <PaintBox on={look?.spot.key === 'easel'} bottom={124} />
       <DolphinButton show={look?.spot.key === 'gametv'} bottom={124} />
+      <RecordsOverlay bottom={150} hints={false} status={look?.spot.key === 'turntable'} />
     </>
   )
 }

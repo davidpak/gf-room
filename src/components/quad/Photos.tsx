@@ -57,7 +57,8 @@ export function LookControls() {
   useEffect(() => {
     if (!l) return
     const key = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' && l.spot.keys?.(e)) {
+      // (the spot's own keys first, Esc too: a record taken out goes back in its crate before the crate's left)
+      if (l.spot.keys?.(e)) {
         e.preventDefault()
         e.stopPropagation()
         return
@@ -81,7 +82,7 @@ export function LookControls() {
           <kbd>←</kbd> <kbd>→</kbd> the others ·{' '}
         </>
       )}
-      <kbd>esc</kbd> {l && l.i !== null ? 'back' : 'back to the car'}
+      <kbd>esc</kbd> {l && l.i !== null ? 'back' : (l?.spot.back ?? 'back to the car')}
     </div>
   )
 }

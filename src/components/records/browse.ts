@@ -62,7 +62,8 @@ export const crateSpot: Spot = {
 export const recordSpot: Spot = {
   key: 'record',
   items: [],
-  hint: 'click a record to take it out · A / D for the next one · Esc puts it back',
+  hint: 'click a record to take it out of its jacket · A / D for the next one',
+  back: 'put it back',
   frame: (pos, at, aspect) => {
     const o = s.crate && crateRefs.get(s.crate)?.out
     if (!o) return
@@ -71,8 +72,8 @@ export const recordSpot: Spot = {
     o.getWorldPosition(_c)
     const p = recordUp()
     const wide = (p && p.sides.length > 2 ? 760 : 660) * k
-    frameAround(pos, at, aspect, _c, wide, 400 * k, toward(o, 0.18))
-    lower(pos, at, 400 * k)
+    frameAround(pos, at, aspect, _c, wide, 480 * k, toward(o, 0.18))
+    lower(pos, at, 260 * k)
   },
   keys: (e) => {
     if (e.key === 'Escape') {
