@@ -71,6 +71,9 @@ export const SET = {
   // the art corner (./QuadArt): the art blanket on the open lawn between the picnic and the V's west walk, its easel at
   // the blanket's far (north) end facing out toward the camera
   art: { x: -1960, z: -40, rot: 0.1 },
+  // the GameCube setup (./QuadGame): its rug on the open lawn inside the V east of the picnic, south of the photo
+  // shoot, the TV's back to the cherries, the cushions toward the walk
+  game: { x: 330, z: -330, rot: 0 },
   // Lime's rentals (./QuadLime), left the way they are: two Gliders and two scooters on the cross walk's north
   // edge, east of the V, nosed out onto the walk
   lime: {
@@ -184,6 +187,14 @@ export const keepClear: [number, number, number][] = [
     const c = Math.cos(SET.picnic.rot)
     const s = Math.sin(SET.picnic.rot)
     return [SET.picnic.x + u * c + v * s, SET.picnic.z - u * s + v * c, 105]
+  }),
+  // (nor through the GameCube's rug: 6 × 4 ft)
+  ...Array.from({ length: 15 }, (_, i): [number, number, number] => {
+    const u = ((i % 5) - 2) * 95
+    const v = (Math.floor(i / 5) - 1) * 95
+    const c = Math.cos(SET.game.rot)
+    const s = Math.sin(SET.game.rot)
+    return [SET.game.x + u * c + v * s, SET.game.z - u * s + v * c, 100]
   }),
   // (nor through the art blanket: 50 × 60")
   ...Array.from({ length: 12 }, (_, i): [number, number, number] => {

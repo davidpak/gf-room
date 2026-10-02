@@ -8,7 +8,8 @@ import { Crane, Hoop, Pencil, PencilTin, Sketchbook, Succulent, WaterCup, Waterc
 import { PaperSheet } from '../art/plane/PaperSheet'
 import { H as PAPER_H, W as PAPER_W } from '../art/plane/paper'
 import { CANVAS, EASEL, HOOP, JAR, PAINTS, PALETTE, PAPER_COLORS, PENCILS, POT, SKETCHBOOK, STOOL, THROW, TUBE, WATERCOLOR } from '../art/spec'
-import { LiveProp, liveBody } from './Physical'
+import { Prompts } from '../prompt/Prompts'
+import { LiveProp, liveBody, setPrompt } from './Physical'
 import { clickSpot, frameAround, getLook, lookBack, useLook, type Spot } from './look'
 import { onReset } from './reset'
 import { SET } from './set'
@@ -145,6 +146,11 @@ export function QuadArt({ car }: { car: { current: CarState } }) {
   // R: the paper flat again (the loose things go home on their own)
   const [round, setRound] = useState(0)
   useEffect(() => onReset(() => setRound((r) => r + 1)), [])
+  // its prompt, when anything of it's out of place: all of it back, the paper flat again
+  const prompt = useMemo(() => {
+    const base = setPrompt('art', 'Reset Art Corner', (o) => o.copy(world(0, 2100, EZ)))
+    return { ...base, run: () => (base.run(), setRound((r) => r + 1)) }
+  }, [])
 
   const S = (r: number) => (r * K) / 2 // (a half-size, real mm to the toy's)
   return (
@@ -242,6 +248,7 @@ export function QuadArt({ car }: { car: { current: CarState } }) {
           />
         )
       })}
+      <Prompts items={[prompt]} far={9000} />
     </>
   )
 }

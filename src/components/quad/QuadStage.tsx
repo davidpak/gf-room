@@ -16,6 +16,7 @@ import { QuadGuitar } from './QuadGuitar'
 import { QuadPicnic } from './QuadPicnic'
 import { QuadLime, RideHint } from './QuadLime'
 import { QuadArt } from './QuadArt'
+import { QuadGame } from './QuadGame'
 import { PaintBox } from '../art/PaintBox'
 import '../art/art.css'
 import { lookBack, useLook } from './look'
@@ -113,6 +114,7 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
         <QuadPicnic car={car} />
         <QuadLime car={car} obstacles={obstacles} />
         <QuadArt car={car} />
+        <QuadGame car={car} />
       </World>
       <Photos car={car} />
       <Building />

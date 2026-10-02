@@ -18,3 +18,6 @@ public/photos/
 # the Civic model (Sketchfab, licence to check before it ships): the download and the web copy stay local
 public/reference/2016-honda-civic.zip
 public/models/civic.glb
+
+# the Melee disc and box art (Nintendo's): kept local, as the Civic is; without them the disc and case draw their own
+public/textures/melee/
