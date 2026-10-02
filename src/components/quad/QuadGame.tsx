@@ -134,7 +134,7 @@ export function QuadGame({ car }: { car: { current: CarState } }) {
       key: 'gamecube',
       items: [],
       frame: frameOn('gamecube', new Vector3(0, CUBE.h * 0.7, 12), new Vector3(0, 1.3, 1).normalize(), CUBE.w * K * 2.3, CUBE.h * K * 2.4),
-      hint: 'POWER: the light grey button, back left · OPEN: front right · RESET: front left · lid up, click the disc to put it in its case',
+      hint: 'POWER: the light grey button, back left · OPEN: front left · RESET: front right · lid up, click the disc to put it in its case',
     }),
     [],
   )

@@ -17,7 +17,7 @@ import { getCube, shutLid, tidyCube } from './state'
 
 /**
  * The GameCube on its own (gallery first), full size, in the Quad's evening light: carry it, turn it (the hand: left
- * drag, right drag), press POWER (back left, light grey: its lamp lights), OPEN (front right: the lid pops), RESET;
+ * drag, right drag), press POWER (back left, light grey: the lip under the lid glows orange), OPEN (front left: the lid opens), RESET (front right);
  * click the lid to shut it; with the lid up click the disc to take it out (it's set down beside it) and again to put
  * it back. Its prompt puts Melee back and shuts the lid. &check: its sheet (the references beside it, and the checks).
  */

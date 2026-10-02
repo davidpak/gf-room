@@ -17,7 +17,7 @@ import { padButton } from './state'
 /**
  * The GameCube setup, all of it (?part=gamesetup; the console alone is ?part=gamecube), full size in the Quad's evening light: the CRT on its bench, the
  * console with Melee in it, the two controllers, the case, the cushions, on the rug. Click POWER (the light grey
- * button, back left on top), OPEN (front right) and RESET; the lid to shut it; the disc to take it out to its case
+ * button, back left on top), OPEN (front left) and RESET (front right); the lid to shut it; the disc to take it out to its case
  * (and back); the TV's own power switch; START, A and B on either controller (or Enter, Backspace). &cam=x,y,z&at=x,y,z
  * to look closely.
  */

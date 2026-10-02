@@ -17,12 +17,15 @@ import { getCube, moveDisc, pressOpen, pressPower, pressReset, shutLid, useCube 
  *              seam round its bottom, the port insides and card slots on the front, the vent grids on the sides, the
  *              sockets on the back); the top over it, a frame with the lid's outline cut through (the well's walls),
  *              its face painted (the buttons' rings and names, the raised Nintendo pill, the finger dip)
- *   the lid    flush in its hole, the round black window painted in; hinged at the back, popping up on its spring
+ *   the lid    flush in its hole, the same indigo as the top round it (a thin dark seam between), the round black
+ *              window painted in; hinged at the back, rising slowly and smoothly
+ *   the light  the lip under the lid's front edge, glowing orange while it's on
  *   the front  the silver panel standing proud of it, the four ports and two slots cut through it
  *   the back   the black strap of the handle looped out; the AV plug in its socket
  *   in it      the drive, its spindle, the disc on it (./Disc)
  *
- * Its buttons each their own part, clicked: POWER (the lamp beside it lights), OPEN (the lid pops), RESET; the lid
+ * Its buttons each their own part, clicked: POWER (back left: the lip lights), OPEN (front left: the lid opens), RESET
+ * (front right, sunk in its ring); the lid
  * clicked shut; the disc, with the lid up, out to its case (./state). The controllers' plugs in ports 1 and 2 and the
  * AV plug are where the cables leave from (./anchors).
  */
@@ -212,7 +215,7 @@ function topTexture(lid: boolean) {
   const t = canvasTexture(CW * PX, CD * PX, (g) => {
     const X = (x: number) => (x + CW / 2) * PX
     const Y = (z: number) => (z + CD / 2) * PX
-    g.fillStyle = lid ? '#6154c2' : COLORS.indigo
+    g.fillStyle = COLORS.indigo
     g.fillRect(0, 0, CW * PX, CD * PX)
     if (lid) {
       // the round black window, a rim round it
@@ -264,14 +267,31 @@ function topTexture(lid: boolean) {
       g.arc(X(b.x), Y(b.z), b.ring * PX, 0, Math.PI * 2)
       g.fill()
     }
-    g.fillStyle = ink.label
-    g.font = `bold ${2.4 * PX}px Arial, sans-serif`
-    g.textAlign = 'center'
-    g.textBaseline = 'middle'
+    // (each name round its button between its ring and the notch, the letters' tops outward, read clockwise)
+    const round = (text: string, b: { x: number; z: number; ring: number }, mid: number) => {
+      const r = (b.ring + L.notchR - L.gap) / 2
+      g.font = `bold ${2.1 * PX}px Arial, sans-serif`
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      g.fillStyle = ink.label
+      const widths = [...text].map((ch) => g.measureText(ch).width / PX + 0.35)
+      const total = widths.reduce((a, w) => a + w, 0)
+      let a = mid - total / r / 2
+      for (const [i, ch] of [...text].entries()) {
+        const step = widths[i] / r
+        const at = a + step / 2
+        g.save()
+        g.translate(X(b.x + r * Math.cos(at)), Y(b.z + r * Math.sin(at)))
+        g.rotate(at + Math.PI / 2)
+        g.fillText(ch, 0, 0)
+        g.restore()
+        a += step
+      }
+    }
     const { power, reset, open } = CUBE.buttons
-    g.fillText('POWER', X(power.x - 1), Y(power.z + power.ring + 3.4))
-    g.fillText('RESET', X(reset.x - 1), Y(reset.z - reset.ring - 3.4))
-    g.fillText('OPEN', X(open.x + 1), Y(open.z - open.ring - 3.4))
+    round('POWER', power, 0) // (down its right side)
+    round('OPEN', open, -Math.PI / 4) // (round its back right)
+    round('RESET', reset, (-3 * Math.PI) / 4) // (round its back left)
     // the raised Nintendo pill, back right
     const lg = CUBE.logo
     g.strokeStyle = '#4b42a0'
@@ -281,12 +301,6 @@ function topTexture(lid: boolean) {
     g.fillStyle = '#4b42a0'
     g.font = `italic bold ${4.2 * PX}px Arial, sans-serif`
     g.fillText('Nintendo', X((lg.x0 + lg.x1) / 2 - CW / 2), Y((lg.y0 + lg.y1) / 2 - CD / 2 + 0.3))
-    // the finger dip under the lid's front edge
-    const gp = CUBE.grip
-    g.fillStyle = '#463d96'
-    g.beginPath()
-    g.ellipse(X((gp.x0 + gp.x1) / 2 - CW / 2), Y(L.frontMid - CD / 2), ((gp.x1 - gp.x0) / 2) * PX, (gp.dip - L.frontMid + 0.5) * PX, 0, 0, Math.PI)
-    g.fill()
   })
   return capped(t, -CW / 2, CW / 2, -CD / 2, CD / 2)
 }
@@ -326,12 +340,31 @@ function bodyGeometry() {
 }
 function frameGeometry() {
   const outer = fromPlan(bodyOutline())
-  outer.holes.push(fromPlan(lidOutline(L.gap), new Path() as Shape))
+  outer.holes.push(fromPlan(lidOutline(L.gap, true), new Path() as Shape))
   return standUp(new ExtrudeGeometry(outer, { depth: CH - FLOOR, bevelEnabled: false }), FLOOR)
 }
 function lidGeometry() {
-  const b = 0.8
+  const b = 0.3
   return standUp(new ExtrudeGeometry(fromPlan(lidOutline(-b)), { depth: L.t - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 2 }), CH - L.t)
+}
+/** the lip under the lid's front edge (the power light): out from under the lid's bow to the dip, sunk a little */
+function lipGeometry() {
+  const zMid = L.frontMid - CD / 2
+  const bow = (x: number) => zMid - L.bowR + Math.sqrt(L.bowR * L.bowR - x * x)
+  const x0 = CUBE.grip.x0 - CW / 2
+  const x1 = CUBE.grip.x1 - CW / 2
+  const deep = CUBE.grip.dip - CD / 2
+  const pts: [number, number][] = []
+  for (let i = 0; i <= 24; i++) {
+    const x = x1 + ((x0 - x1) * i) / 24
+    const u = (x - (x0 + x1) / 2) / ((x1 - x0) / 2)
+    pts.push([x, bow(x) + (deep - bow(0)) * Math.sqrt(Math.max(0, 1 - u * u))])
+  }
+  for (let i = 0; i <= 12; i++) {
+    const x = x0 + ((x1 - x0) * i) / 12
+    pts.push([x, bow(x) - 1.5]) // (tucked under the lid's edge)
+  }
+  return standUp(new ExtrudeGeometry(fromPlan(pts), { depth: 2, bevelEnabled: false }), CH - 2.8)
 }
 function panelGeometry() {
   const P = CUBE.panel
@@ -387,14 +420,13 @@ function handleGeometry() {
 const BUTTON = (r: number, h: number, dome: number, inner = 0) =>
   new LatheGeometry(
     (inner
-      ? [[0, h + 0.6], [inner - 0.3, h + 0.6], [inner, h], [r - 0.6, h], [r, h - 0.6], [r, 0], [0, 0]]
+      ? [[0, h + 0.8], [inner - 0.5, h + 0.8], [inner - 0.1, h + 0.3], [inner - 0.1, h - 0.9], [inner + 0.9, h - 0.9], [inner + 1.1, h], [r - 0.6, h], [r, h - 0.6], [r, 0], [0, 0]] // (the inner button, a groove round it, the ring)
       : [[0, h + dome], [r * 0.6, h + dome * 0.7], [r - 0.6, h], [r, h - 0.6], [r, 0], [0, 0]]
     )
       .reverse()
       .map(([x, y]) => new Vector2(x, y)),
     32,
   )
-const LAMP = new CylinderGeometry(1.4, 1.4, 1.2, 14)
 const FOOT = new RoundedBoxGeometry(14, FEET, 9, 1, 0.6)
 const DRIVE = new CylinderGeometry(CUBE.well.drive, CUBE.well.drive, 2, 48)
 const SPINDLE = new CylinderGeometry(6, 6.5, 1.5, 24)
@@ -405,15 +437,16 @@ const AVPLUG = new RoundedBoxGeometry(CUBE.av.w - 1, CUBE.av.h - 1, 18, 2, 2.5)
 const M = {
   frameSide: bruno({ color: COLORS.indigo, shade: '#3a3070' }),
   floor: bruno({ color: '#2c2838', shade: '#1c1a24' }),
-  lidSide: bruno({ color: '#5a4dba', shade: '#3a3070' }),
+  lidSide: bruno({ color: COLORS.indigo, shade: '#3a3070' }),
+  // the power light: smoky when it's off, orange when it's on
+  lipOff: bruno({ color: '#6a4a52', shade: '#3a2830' }),
+  lipOn: bruno({ color: '#ff8a3c', emissive: '#ff5208', emissiveIntensity: 1.5 }),
   panelSide: bruno({ color: '#b9bac4', shade: '#7e7f8c' }),
   grey: bruno({ color: '#dcdce4', shade: '#8e8ea0' }),
   button: bruno({ color: '#4c42a6', shade: '#2e2766' }),
   black: bruno({ color: '#232127', shade: '#141217' }),
   drive: bruno({ color: '#1b1a20', shade: '#0f0e13' }),
   spindle: bruno({ color: '#9a98a6', shade: '#55536a' }),
-  lampOff: bruno({ color: '#3c4a3e', shade: '#1e2620' }),
-  lampOn: bruno({ color: '#7dff9a', emissive: '#48ff78', emissiveIntensity: 1.2 }),
   plug1: bruno({ color: COLORS.indigo, shade: '#3a3070' }),
   plug2: bruno({ color: COLORS.black, shade: '#18171c' }),
 }
@@ -456,8 +489,9 @@ export function GameCube({ onBody }: { onBody?: (e: ThreeEvent<MouseEvent>) => v
       panel: panelGeometry(),
       handle: handleGeometry(),
       power: BUTTON(CUBE.buttons.power.r, 2.2, 0.8),
-      reset: BUTTON(CUBE.buttons.reset.r, 1.8, -0.4),
-      open: BUTTON(CUBE.buttons.open.r, 1.8, 0, CUBE.buttons.open.inner),
+      open: BUTTON(CUBE.buttons.open.r, 1.8, 0.4),
+      reset: BUTTON(CUBE.buttons.reset.r, 1.4, 0, CUBE.buttons.reset.inner),
+      lip: lipGeometry(),
     }),
     [],
   )
@@ -471,25 +505,21 @@ export function GameCube({ onBody }: { onBody?: (e: ThreeEvent<MouseEvent>) => v
     }),
     [],
   )
-  // the lid on its spring: up with a bounce, shut with a snap
+  // the lid: rising slowly and smoothly (its damper: 1.6 s, easing to a stop), shut gently (0.35 s)
   const lid = useRef<Group>(null)
-  const spring = useRef({ a: 0, v: 0 })
-  useFrame((_, dt) => {
+  const swing = useRef({ from: 0, to: 0, at: 0, a: 0 })
+  useFrame(() => {
     const g = lid.current
     if (!g) return
-    const s = spring.current
-    const open = getCube().lid
-    const target = open ? -L.open : 0
-    const h = Math.min(dt, 1 / 30)
-    for (let i = 0; i < 4; i++) {
-      s.v += (-320 * (s.a - target) - (open ? 8 : 34) * s.v) * (h / 4)
-      s.a += s.v * (h / 4)
-    }
-    if (!open && s.a > 0) {
-      s.a = 0
-      s.v = 0
-    }
-    g.rotation.x = s.a
+    const w = swing.current
+    const to = getCube().lid ? -L.open : 0
+    const t = performance.now() / 1000
+    if (to !== w.to) Object.assign(w, { from: w.a, to, at: t })
+    const opening = w.to < w.from
+    const k = Math.min(1, (t - w.at) / (opening ? 1.6 : 0.35))
+    const e = opening ? 1 - Math.pow(1 - k, 3) : k * k * (3 - 2 * k)
+    w.a = w.from + (w.to - w.from) * e
+    g.rotation.x = w.a
   })
   const body = (e: ThreeEvent<MouseEvent>) => {
     if (!onBody) return
@@ -526,12 +556,12 @@ export function GameCube({ onBody }: { onBody?: (e: ThreeEvent<MouseEvent>) => v
           }}
         />
       </group>
-      {/* the buttons, and the power lamp (live: they move, it changes) */}
+      {/* the buttons, and the power light (live: they move, it changes) */}
       <group userData={{ live: true }}>
         <Button k="power" at={power} geo={geo.power} m={M.grey} act={pressPower} />
         <Button k="reset" at={reset} geo={geo.reset} m={M.button} act={pressReset} />
         <Button k="open" at={open} geo={geo.open} m={M.button} act={pressOpen} />
-        <mesh geometry={LAMP} material={c.power ? M.lampOn : M.lampOff} position={[CUBE.lamp.x, CH + 0.2, CUBE.lamp.z]} />
+        <mesh geometry={geo.lip} material={c.power ? M.lipOn : M.lipOff} />
       </group>
       {/* the controllers' plugs in ports 1 and 2; the AV plug in its socket at the back */}
       {[0, 1].map((i) => (

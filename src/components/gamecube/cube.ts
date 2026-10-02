@@ -10,7 +10,8 @@
  *   [RR] Wikimedia Commons, "Nintendo GameCube rear.jpg" (public/reference/gamecube/rear.jpg): the back square on,
  *        6.05 px a mm across, 6.09 down: the handle and the sockets, scanned by pixel
  *   [PH] Wikimedia Commons, Evan-Amos's photos (open.jpg with the lid up, back-left.jpg, front-right.jpg) and David's
- *        (david.png): what no drawing has (the well, the handle's loop, the printed names, the lamp), by eye: est.
+ *        (david.png; top-lit.webp, its top square on and switched on): what no drawing has (the well, the handle's
+ *        loop, the names printed round the buttons, which button's which, the power light), by eye: est.
  *
  * Kept local, out of the repository: the reference folder (public/reference/gamecube/).
  */
@@ -26,19 +27,22 @@ export const CUBE = {
   // the back (less a 2.5 lip: est.) to its front edge, which bows out from 141.6 at its ends to 146.4 in the middle (a
   // circle's arc, r 219); notched round three of the buttons, r 11.8 about each. t: its thickness; open: how far it
   // swings up (radians, est. from open.jpg); gap: round it, in the top
-  lid: { x0: 15.5, x1: 134.5, back: 2.5, frontEnds: 141.6, frontMid: 146.4, bowR: 219, notchR: 11.8, t: 4, open: 1.25, gap: 0.6 },
+  lid: { x0: 15.5, x1: 134.5, back: 2.5, frontEnds: 141.6, frontMid: 146.4, bowR: 219, notchR: 11.8, t: 4, open: 1.25, gap: 0.35 },
   window: { r: 41.75, z: 0 }, // [DD] the round black window, 185.9 px (83.5) across, its middle 80.5 from the back
   well: { depth: 10, drive: 42 }, // [PH] est. (open.jpg): the well under the lid, the black drive in it
-  grip: { x0: 56.6, x1: 93.4, dip: 150.4 }, // [DD] the finger dip under the lid's front edge
+  // [DD] the lip under the lid's front edge (from the left; its deepest from the back): the power light, lit orange
+  // while it's on [PH top-lit.webp]
+  grip: { x0: 56.6, x1: 93.4, dip: 150.4 },
   logo: { x0: 100.8, x1: 128.1, y0: 5.6, y1: 12.7 }, // [DD] the raised Nintendo pill, back right
   // the buttons [DD]: each in a ring 17.0 across, centred on the lid's side lines; POWER 40.2 from the back on the
-  // left, RESET and OPEN 139.9 from the back; OPEN's own button 9.4 across in its ring
+  // left, the other two 139.9 from the back; the front right one's own button 9.4 across, sunk in its ring. Which is
+  // which [PH top-lit.webp]: POWER back left (light grey), OPEN front left, RESET front right (the one in the ring:
+  // hard to press by accident). Their names printed round them, along the notches
   buttons: {
-    power: { x: -59.5, z: -40.3, r: 7.5, ring: 8.5 }, // light grey [PH]
-    reset: { x: -59.5, z: 59.4, r: 7.4, ring: 8.5 },
-    open: { x: 59.5, z: 59.4, r: 7.4, ring: 8.5, inner: 4.7 },
+    power: { x: -59.5, z: -40.3, r: 7.5, ring: 8.5 },
+    open: { x: -59.5, z: 59.4, r: 7.4, ring: 8.5 },
+    reset: { x: 59.5, z: 59.4, r: 7.4, ring: 8.5, inner: 4.7 },
   },
-  lamp: { x: -67.2, z: -27 }, // [PH] est.: the power lamp, in the strip beside the lid just in front of POWER
   // the front [DD]: the silver panel, 117.1 × 60.3 (16.5 in from each side, from the band's seam up to 84.6), 2.6
   // proud (the top view's strip 427.9-433.6); four ports Ø15.3 at x ±14.2, ±44.3, 64.6 up (their keyed insides
   // 9.7 × 8.4); the memory card slots 36.4 × 7.3 at x ±29.25, 38.3 up
@@ -77,10 +81,13 @@ export const CUBE_REF = {
 }
 
 /** the lid's outline on top, built from the spec: [x, z] round it (z toward the front). `grow` it outward (the hole
- *  in the top it sits in) */
-export function lidOutline(grow = 0): [number, number][] {
+ *  in the top it sits in); `lip`: with the lip under its front edge too (the hole's that wide there) */
+export function lidOutline(grow = 0, lip = false): [number, number][] {
   const L = CUBE.lid
-  const { power, reset, open } = CUBE.buttons
+  const bs = Object.values(CUBE.buttons)
+  const power = bs.find((b) => b.z < 0)!
+  const reset = bs.find((b) => b.z > 0 && b.x < 0)! // (the front left one)
+  const open = bs.find((b) => b.z > 0 && b.x > 0)! // (the front right one)
   const xl = L.x0 - CUBE.w / 2 - grow
   const xr = L.x1 - CUBE.w / 2 + grow
   const back = L.back - CUBE.d / 2 - grow
@@ -110,11 +117,18 @@ export function lidOutline(grow = 0): [number, number][] {
   const xo = meet(open.x, open.z, -1)
   const ao = Math.atan2(bow(xo) - open.z, xo - open.x)
   around(open.x, open.z, -Math.PI / 2, ao - 2 * Math.PI)
-  // along the bow to RESET, round it to the left side
+  // along the bow to the front left button (out round the lip, if it's in), round it to the left side
   const xs = meet(reset.x, reset.z, 1)
+  const g0 = CUBE.grip.x1 - CUBE.w / 2 + grow // (the lip's ends, right then left)
+  const g1 = CUBE.grip.x0 - CUBE.w / 2 - grow
+  const deep = CUBE.grip.dip - CUBE.d / 2 + grow
   for (let i = 1; i < 30; i++) {
     const x = xo + ((xs - xo) * i) / 30
-    out.push([x, bow(x)])
+    if (lip && x < g0 && x > g1) {
+      // (a half ellipse out from the bow)
+      const u = (x - (g0 + g1) / 2) / ((g0 - g1) / 2)
+      out.push([x, bow(x) + (deep - bow(0)) * Math.sqrt(Math.max(0, 1 - u * u))])
+    } else out.push([x, bow(x)])
   }
   around(reset.x, reset.z, Math.atan2(bow(xs) - reset.z, xs - reset.x), -Math.PI / 2)
   // up the left side, round POWER, on to the back
@@ -167,6 +181,9 @@ export function checkCube() {
   const discTop = floor + 2 + 1 + 1.2 // (the drive, the spindle's seat, the disc)
   add('the disc lies under the shut lid', discTop < C.h - C.lid.t - 0.5, `disc top ${discTop.toFixed(1)}, the lid's underside ${C.h - C.lid.t}`)
   add('the 8 cm disc shows in the window', 40 < C.window.r, 'Ø80 under Ø83.5')
+  add('OPEN front left, RESET front right in its ring [PH]', C.buttons.open.x < 0 && C.buttons.open.z > 0 && C.buttons.reset.x > 0 && 'inner' in C.buttons.reset, 'yes')
+  add('the names fit between ring and notch', C.lid.notchR - C.buttons.power.ring >= 2.8, `${(C.lid.notchR - C.buttons.power.ring).toFixed(1)} for letters 2.2 high`)
+  add('the lip 36.8 wide, 4 deep under the front [DD]', Math.abs(C.grip.x1 - C.grip.x0 - 36.8) < 0.1 && Math.abs(C.grip.dip - C.lid.frontMid - 4) < 0.1, `${(C.grip.x1 - C.grip.x0).toFixed(1)} × ${(C.grip.dip - C.lid.frontMid).toFixed(1)}`)
   add('1.4 kg [W]', C.mass === 1.4, `${C.mass} kg`)
   return results
 }

@@ -8,9 +8,9 @@ import { blipSound, bootSound, cheerSound, clickSound, confirmSound, lidSound, s
  *
  *   POWER    (the light grey button, back left) the console on: it boots (the TV, if it's on, plays our chime), then
  *            the game's title, or with no disc in it the console's own menu
- *   OPEN     (the front right one) the lid pops up; while it's up the game's stopped ("the Disc Cover is open"); a
+ *   OPEN     (the front left one) the lid opens; while it's up the game's stopped ("the Disc Cover is open"); a
  *            click on the lid shuts it, and the game starts again
- *   RESET    (front left) starts it over
+ *   RESET    (front right, sunk in its ring) starts it over
  *   the disc with the lid up, a click on it takes it out to its case (opening the case); a click on it in the case
  *            puts it back
  *   the TV   its own power button; on with the console off: the blue VIDEO 1 screen
