@@ -1,19 +1,23 @@
 import { frontUp, leaveCrate } from './browse'
 import { cancelChange } from './changer'
-import { getDeck, now, setDeck, sideUp } from './deck'
+import { getDeck, live, now, setDeck, sideUp } from './deck'
+import { EW } from './victrola'
 import { bandStarts, lift, needle } from './play'
 import { toFront } from './shelf'
 import type { Pressing } from './vinyl'
 
-/** a record onto the platter (that disc, that side up; the one there, if any, back in its jacket): it comes down
- *  onto the spindle (./Turntable's Flip) */
+/** a record onto the platter (that disc, that side up; the one there, if any, back in its jacket): the arm lifted
+ *  and swung home first, the lid swung wide; the record comes down onto the spindle once the arm's clear of it
+ *  (./Turntable's Flip) */
 export function putOn(p: Pressing, disc = 0, face: 0 | 1 = 0) {
   cancelChange()
   lift()
   needle.runout = false
   needle.ended = false
   leaveCrate()
-  setDeck({ on: { p, disc, face }, arm: { a: getDeck().arm.a, down: false }, lid: true })
+  live.wide = true // (till it's down: ./Turntable's Flip)
+  live.landed = ''
+  setDeck({ on: { p, disc, face }, arm: { a: EW.arm.rest, down: false }, lid: true })
 }
 
 /** a record put on and played: once it's down on the spindle, the player on and the needle at its first song; its
@@ -24,12 +28,16 @@ export function playOn(p: Pressing, disc = 0) {
   toFront(p.uri)
   frontUp()
   const on = getDeck().on
-  setTimeout(() => {
+  // (the needle only over it once it's down on the spindle)
+  const t0 = performance.now()
+  const wait = setInterval(() => {
     const d = getDeck()
     // (something else done meanwhile: another record, the arm in hand)
-    if (d.on !== on || !d.on || d.held) return
+    if (d.on !== on || !d.on || d.held || performance.now() - t0 > 8000) return clearInterval(wait)
+    if (live.landed !== `${p.uri}/${disc}`) return
+    clearInterval(wait)
     const a = bandStarts(sideUp(d.on))[0]
     if (a == null) return
     setDeck({ power: true, poweredAt: d.power ? d.poweredAt : now(), arm: { a, down: true } })
-  }, 1250)
+  }, 100)
 }

@@ -188,7 +188,7 @@ export function Turntable({ gate }: { gate?: () => boolean } = {}) {
       <Driver />
       <Eastwood on={gated}>
         {d.on && art && S && (
-          <Flip key={`${d.on.p.uri}/${d.on.disc}`} face={d.on.face} t={discThick(S) * FIT} r={S.r * FIT}>
+          <Flip key={`${d.on.p.uri}/${d.on.disc}`} id={`${d.on.p.uri}/${d.on.disc}`} face={d.on.face} t={discThick(S) * FIT} r={S.r * FIT}>
             <group scale={FIT}>
               <Disc p={d.on.p} art={art} disc={d.on.disc} />
             </group>
@@ -206,21 +206,28 @@ export const stylusNow = () => stylusAt(live.a)
  * The disc put on, and turned over (face 1 up), straight up and down: the lid swung wide first (./victrola EW.lid.wide:
  * at its usual 68 its front pane hangs over the back of the platter), the disc lifted straight up off the spindle
  * till it can turn over clear of the platter and the arm, turned over about its front-to-back line, and set straight
- * back down. Put on: straight down from above. Each stretch eased in and out.
+ * back down. Put on: straight down from above. Each stretch eased in and out. Nothing moves till the arm's swung
+ * clear of the record (its head outside it): it waits up above, or on the platter.
  */
 const ease = (x: number) => {
   const c = Math.max(0, Math.min(1, x))
   return c * c * (3 - 2 * c)
 }
 const WIDEN = 0.35 // (s: the lid swung wide before the disc moves)
-function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; children: React.ReactNode }) {
+function Flip({ id, face, t, r, children }: { id: string; face: 0 | 1; t: number; r: number; children: React.ReactNode }) {
   const g = useRef<Group>(null)
   const from = useRef<0 | 1>(face) // (the face up when it last settled)
   const clock = useRef(0)
   const arriving = useRef(true)
   // (high enough that, on its edge, its lower half clears the platter and the arm: its radius and a little)
   const H = r + 18
-  useEffect(() => () => void (live.wide = false), [])
+  // (taken off: the lid let back, unless another's going on in its place)
+  useEffect(() => () => void (getDeck().on ? null : (live.wide = false)), [])
+  // (the arm's head clear of the record: the stylus outside its edge, with the head's length to spare)
+  const armClear = () => {
+    const s = stylusAt(live.a)
+    return Math.hypot(s.x - EW.platter.x, s.z - EW.platter.z) > r + EW.arm.head.l
+  }
   useFrame((_, dtRaw) => {
     const o = g.current
     if (!o) return
@@ -230,7 +237,7 @@ function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; chi
     if (arriving.current) {
       // put on: from above, straight down onto the spindle
       live.wide = true
-      clock.current += dt
+      if (clock.current > 0 || armClear()) clock.current += dt
       const k = clock.current - WIDEN
       y = (H + 40) * (1 - ease(k / 0.85))
       turn = face * Math.PI
@@ -239,11 +246,12 @@ function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; chi
         from.current = face
         clock.current = 0
         live.wide = false
+        live.landed = id
       }
     } else if (face !== from.current) {
       // over: up, turned, down
       live.wide = true
-      clock.current += dt
+      if (clock.current > 0 || armClear()) clock.current += dt
       const k = clock.current - WIDEN
       y = H * (ease(k / 0.55) - ease((k - 1.25) / 0.55))
       turn = (from.current + ease((k - 0.5) / 0.8)) * Math.PI
