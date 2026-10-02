@@ -532,6 +532,12 @@ export function Bunting() {
 
 // ---- the picks rack: a tiered wooden display rack, records face out (a few of hers: one draw, ../records/Sleeves), a card on top
 export const RACK = { w: 720, h: 920, d: 300, lean: 0.22, tiers: [110, 520] }
+// (the leg: its foot at z -440 on the grass, its top at y 600 just behind the leaned board (its back there: z -158))
+const PROP = (() => {
+  const foot = -440
+  const top = { y: 600, z: -188 }
+  return { y: top.y / 2, z: (foot + top.z) / 2, tilt: Math.atan2(top.z - foot, top.y), len: Math.hypot(top.z - foot, top.y) }
+})()
 const slots = [
   { x: -RACK.w / 4 + 6, tier: 0 },
   { x: RACK.w / 4 - 6, tier: 0 },
@@ -573,7 +579,8 @@ export function PicksRack({ records, title }: { records: import('../records/viny
         <mesh geometry={g.card} material={card} position={[0, RACK.h + 60, 0]} castShadow />
         <StillSleeves records={records.slice(0, slots.length)} place={place} who="picks" />
       </group>
-      <mesh geometry={g.leg} material={WOOD} position={[0, RACK.h * 0.38, -RACK.h * 0.32]} rotation={[0.55, 0, 0]} castShadow />
+      {/* the prop leg: from the grass behind up to the back board's back (its top 10 behind it: not through it) */}
+      <mesh geometry={g.leg} material={WOOD} position={[0, PROP.y, PROP.z]} rotation={[PROP.tilt, 0, 0]} scale={[1, PROP.len / (RACK.h * 0.8), 1]} castShadow />
     </group>
   )
 }

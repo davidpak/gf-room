@@ -1,7 +1,8 @@
-import { leaveCrate } from './browse'
+import { frontUp, leaveCrate } from './browse'
 import { cancelChange } from './changer'
 import { getDeck, now, setDeck, sideUp } from './deck'
 import { bandStarts, lift, needle } from './play'
+import { toFront } from './shelf'
 import type { Pressing } from './vinyl'
 
 /** a record onto the platter (that disc, that side up; the one there, if any, back in its jacket): it comes down
@@ -15,9 +16,13 @@ export function putOn(p: Pressing, disc = 0, face: 0 | 1 = 0) {
   setDeck({ on: { p, disc, face }, arm: { a: getDeck().arm.a, down: false }, lid: true })
 }
 
-/** a record put on and played: once it's down on the spindle, the player on and the needle at its first song */
+/** a record put on and played: once it's down on the spindle, the player on and the needle at its first song; its
+ *  jacket goes back in the front of the crate (empty of that record while it plays: ./Crate) */
 export function playOn(p: Pressing, disc = 0) {
   putOn(p, disc, 0)
+  // (its jacket back in the front of the crate, the front one up next time: it's the one she'll look for)
+  toFront(p.uri)
+  frontUp()
   const on = getDeck().on
   setTimeout(() => {
     const d = getDeck()

@@ -55,6 +55,7 @@ export const EW = {
     t: 2.5, // [E]
     hinge: { xs: [-110, 110], y: 6, z: -150 }, // [P7][E]: on the back, a little up
     open: (68 * Math.PI) / 180, // [E] from the photos
+    wide: (100 * Math.PI) / 180, // [E] swung back past upright, while a record goes on or turns over (at 68 a 12" lifted to turn over would go through its front pane)
   },
   badge: { x: 118, y: 18, w: 46 }, // VICTROLA, white, the grille's bottom right [P7]
   colors: { bamboo: '#f1dcb4', bambooShade: '#9a7f9a', black: '#26232b', mesh: '#1d1b22', platter: '#c9cbd2', silver: '#dcdee5', display: '#5fb7ff', label: '#f6efe3' },

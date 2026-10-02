@@ -7,6 +7,7 @@ import { useLook } from '../quad/look'
 import { crateRefs, getBrowse, lookMoved, openCrate, takeOut, useBrowse } from './browse'
 import type { CrateId } from './library'
 import { crateNote, useShelf } from './shelf'
+import { useDeck } from './deck'
 import { Disc, Jacket, artOf, discThick, useArt } from './Record'
 import { bigCover, uploadSoon } from './covers'
 import { SLEEVE, sleeveGeometry, useSleeveCovers } from './Sleeves'
@@ -217,6 +218,9 @@ function Hero({ p, out, onUp, onPlay, ready, place }: { p: Pressing; out: boolea
     })
   })
   const stop = (e: ThreeEvent<MouseEvent | PointerEvent>) => e.stopPropagation()
+  // (the record that's on the player isn't in its jacket)
+  const d = useDeck()
+  const away = d.on && d.on.p.uri === p.uri ? d.on.disc : -1
   const discs = p.sides.length / 2
   if (!art) return null
   // (turned about the middle of the whole: the jacket and its records fanned out of it)
@@ -242,7 +246,7 @@ function Hero({ p, out, onUp, onPlay, ready, place }: { p: Pressing; out: boolea
       </group>
       {/* its records, behind the jacket, sliding out of its open edge (+x) when it's out: a click plays one */}
       {discsOn &&
-        Array.from({ length: discs }, (_, j) => (
+        Array.from({ length: discs }, (_, j) => j).filter((j) => j !== away).map((j) => (
           <group key={j} ref={(d) => void (slides.current[j] = d)} position={[0, S.sleeve / 2, -S.sleeveT / 2 - 2 - j * (discThick(S) + 2)]} visible={false}>
             <group
               rotation={[Math.PI / 2, 0, 0]}
@@ -347,14 +351,11 @@ export function Crate({ id, label, note = '', onPlay, gate }: { id: CrateId; lab
   useSleeveCovers(mesh, records, 'crate')
   const gap = Math.min(28, (C.in.d - 50) / Math.max(1, n - 1))
   const zOf = (i: number) => C.in.d / 2 - 30 - i * gap
-  const poses = useRef<Pose[]>([])
+  const poses = useRef(new Map<string, Pose>()) // (by record: one moved in the crate slides to its new place)
   const over = useRef<number | null>(null)
   const hero = useRef({ i: -1, ready: false, g: null as Group | null })
   const dirty = useRef(true)
-  useEffect(() => {
-    poses.current = []
-    dirty.current = true
-  }, [records])
+  useEffect(() => void (dirty.current = true), [records])
   const heroI = mine ? b.i : -1
   useEffect(() => {
     hero.current.i = heroI
@@ -383,8 +384,8 @@ export function Crate({ id, label, note = '', onPlay, gate }: { id: CrateId; lab
     dirty.current = false
     for (let i = 0; i < n; i++) {
       want(i, records[i], w)
-      let c = poses.current[i]
-      if (!c) c = poses.current[i] = { ...w }
+      let c = poses.current.get(records[i].uri)
+      if (!c) poses.current.set(records[i].uri, (c = { ...w }))
       const d = Math.abs(w.x - c.x) + Math.abs(w.y - c.y) + Math.abs(w.z - c.z) + Math.abs(w.r - c.r) * 300
       if (d < 0.02) continue
       moved = true
@@ -394,14 +395,14 @@ export function Crate({ id, label, note = '', onPlay, gate }: { id: CrateId; lab
       c.r += (w.r - c.r) * k
     }
     const h = hero.current
-    const hp = poses.current[h.i]
+    const hp = records[h.i] && poses.current.get(records[h.i].uri)
     if (h.g && hp) {
       h.g.position.set(hp.x, hp.y, hp.z)
       h.g.rotation.set(hp.r, 0, 0)
     }
     if (!moved) return
     for (let i = 0; i < n; i++) {
-      const c = poses.current[i]
+      const c = poses.current.get(records[i].uri)!
       const sc = sizeOf(records[i]).sleeve / LP.sleeve
       // (a 7" single: its own smaller, thinner jacket; the one up, once its sharp cover's on it, not drawn here)
       _s.set(sc, sc, sc < 1 ? 3 / LP.sleeveT : 1).multiplyScalar(h.i === i && h.ready ? 0 : 1)

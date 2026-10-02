@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Plane, Vector3, type Group } from 'three'
 import { sdk } from '../../lib/spotify/player'
@@ -31,7 +31,9 @@ function Driver() {
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
     const d = getDeck()
-    live.lid += ((d.lid ? 1 : 0) - live.lid) * Math.min(1, dt * 2.4)
+    // (swung wide quicker than it's let back)
+    const lidTo = !d.lid ? 0 : live.wide ? EW.lid.wide / EW.lid.open : 1
+    live.lid += (lidTo - live.lid) * Math.min(1, dt * (lidTo > live.lid ? 6 : 2.4))
     // the arm: lowered slowly (the cue's damped), lifted quicker
     const up = d.held || !d.arm.down || !d.on ? 1 : 0
     live.lift += Math.max(-dt / 0.9, Math.min(dt / 0.3, up - live.lift))
@@ -201,91 +203,60 @@ export function Turntable({ gate }: { gate?: () => boolean } = {}) {
 export const stylusNow = () => stylusAt(live.a)
 
 /**
- * The disc turned over (face 1 up) the way a hand does it, in one smooth movement through these poses:
- *   tipped     its left side lifted (its right edge, under the arm's rest, stays down): the hole rises off the spindle
- *   slid       eased left, its edge out from under the arm
- *   up         lifted level, higher than it's wide (on its edge, it's still clear of the deck)
- *   over       turned over
- * and back down the same way, the other face up. Up on its edge it's brought forward too (toward the strip): the
- * open lid leans back over the deck's back half, and a record standing there would go through its glass. A record just put on comes down onto the spindle that way too
- * (from up, slid, tipped). The poses are joined by a smooth curve (Catmull-Rom through them, still at the ends).
+ * The disc put on, and turned over (face 1 up), straight up and down: the lid swung wide first (./victrola EW.lid.wide:
+ * at its usual 68 its front pane hangs over the back of the platter), the disc lifted straight up off the spindle
+ * till it can turn over clear of the platter and the arm, turned over about its front-to-back line, and set straight
+ * back down. Put on: straight down from above. Each stretch eased in and out.
  */
-type Pose = [x: number, y: number, rz: number, z: number] // (rz: the turn about the front-to-back axis; less lowers the right side; z: forward)
-function curve(keys: Pose[], times: number[], t: number): Pose {
-  const n = keys.length
-  if (t <= times[0]) return keys[0]
-  if (t >= times[n - 1]) return keys[n - 1]
-  let i = 0
-  while (t > times[i + 1]) i++
-  const h = times[i + 1] - times[i]
-  const u = (t - times[i]) / h
-  // tangents: through the neighbours (none at the ends: it starts and stops still)
-  const tan = (j: number, c: number) => (j === 0 || j === n - 1 ? 0 : ((keys[j + 1][c] - keys[j - 1][c]) / (times[j + 1] - times[j - 1])) * h)
-  const out: number[] = []
-  for (let c = 0; c < 4; c++) {
-    const p0 = keys[i][c]
-    const p1 = keys[i + 1][c]
-    const m0 = tan(i, c)
-    const m1 = tan(i + 1, c)
-    const u2 = u * u
-    const u3 = u2 * u
-    out.push((2 * u3 - 3 * u2 + 1) * p0 + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * p1 + (u3 - u2) * m1)
-  }
-  return out as Pose
+const ease = (x: number) => {
+  const c = Math.max(0, Math.min(1, x))
+  return c * c * (3 - 2 * c)
 }
+const WIDEN = 0.35 // (s: the lid swung wide before the disc moves)
 function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; children: React.ReactNode }) {
   const g = useRef<Group>(null)
   const from = useRef<0 | 1>(face) // (the face up when it last settled)
   const clock = useRef(0)
   const arriving = useRef(true)
-  // (the tip that lifts the hole clear of the spindle with the right edge left down; the slide that clears the arm)
-  const tip = Math.asin((EW.platter.spindleH + 3) / r)
-  const slide = -26
-  const H = r + 35
-  // (forward enough that, on its edge, its back edge is in front of the open lid's front edge: z -62 from the
-  // cabinet's middle, the spindle at -14)
-  const fwd = Math.max(0, r - 14 - 62 + 45)
-  const path = useMemo(() => {
-    const down = (f: number): Pose => [0, 0, f * Math.PI, 0]
-    const tipped = (f: number): Pose => [0, r * Math.sin(tip), f * Math.PI - tip, 0]
-    const slid = (f: number): Pose => [slide, r * Math.sin(tip) + 6, f * Math.PI - tip, fwd * 0.4]
-    const up = (f: number): Pose => [slide, H, f * Math.PI, fwd]
-    return { down, tipped, slid, up }
-  }, [r, tip, H, fwd])
+  // (high enough that, on its edge, its lower half clears the platter and the arm: its radius and a little)
+  const H = r + 18
+  useEffect(() => () => void (live.wide = false), [])
   useFrame((_, dtRaw) => {
     const o = g.current
     if (!o) return
     const dt = Math.min(dtRaw, 0.05)
-    const P = path
-    let pose: Pose
+    let y = 0
+    let turn = from.current * Math.PI
     if (arriving.current) {
-      // put on: in from above, down the last part of the way
+      // put on: from above, straight down onto the spindle
+      live.wide = true
       clock.current += dt
-      const keys = [[slide, H + 60, face * Math.PI, fwd] as Pose, P.slid(face), P.tipped(face), P.down(face)]
-      const times = [0, 0.55, 0.85, 1.15]
-      pose = curve(keys, times, clock.current)
-      if (clock.current >= 1.15) {
+      const k = clock.current - WIDEN
+      y = (H + 40) * (1 - ease(k / 0.85))
+      turn = face * Math.PI
+      if (k >= 0.85) {
         arriving.current = false
-        clock.current = 0
-      }
-    } else if (face !== from.current) {
-      clock.current += dt
-      const f0 = from.current
-      // (over: the turn continues the same way round from where it was)
-      const keys = [P.down(f0), P.tipped(f0), P.slid(f0), P.up(f0), [slide, H, (f0 + 1) * Math.PI, fwd] as Pose, P.slid(f0 + 1 as 0 | 1), P.tipped(f0 + 1 as 0 | 1), P.down(f0 + 1 as 0 | 1)]
-      const times = [0, 0.35, 0.6, 1.0, 1.55, 1.95, 2.2, 2.55]
-      pose = curve(keys, times, clock.current)
-      if (clock.current >= 2.55) {
         from.current = face
         clock.current = 0
-        pose = P.down(face)
+        live.wide = false
       }
-    } else pose = P.down(face)
-    o.position.x = pose[0]
-    o.position.z = pose[3]
-    o.rotation.z = pose[2]
-    // (its thickness made up as it turns over: the disc's turned about its own middle)
-    o.position.y = pose[1] + (t * (1 - Math.cos(pose[2]))) / 2
+    } else if (face !== from.current) {
+      // over: up, turned, down
+      live.wide = true
+      clock.current += dt
+      const k = clock.current - WIDEN
+      y = H * (ease(k / 0.55) - ease((k - 1.25) / 0.55))
+      turn = (from.current + ease((k - 0.5) / 0.8)) * Math.PI
+      if (k >= 1.8) {
+        from.current = face
+        clock.current = 0
+        live.wide = false
+        y = 0
+        turn = face * Math.PI
+      }
+    }
+    o.position.set(0, y + (t * (1 - Math.cos(turn))) / 2, 0) // (its thickness made up as it turns: turned about its own middle)
+    o.rotation.z = turn
   })
   return <group ref={g}>{children}</group>
 }

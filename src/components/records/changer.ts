@@ -39,7 +39,7 @@ export async function turnTo(k: number, band: number | 'last') {
   const o = getDeck().on
   if (!o) return
   setDeck({ on: { ...o, disc: Math.floor(k / 2), face: (k % 2) as 0 | 1 } })
-  await wait(2800) // (tipped off the spindle, lifted, turned over, set down: ./Turntable's Flip)
+  await wait(2800) // (the lid swung wide, lifted, turned over, set down: ./Turntable's Flip)
   if (!go()) return
   const starts = bandStarts(o.p.sides[k])
   setDeck({ arm: { a: starts[band === 'last' ? starts.length - 1 : band], down: true } })

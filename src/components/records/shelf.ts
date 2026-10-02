@@ -83,6 +83,20 @@ export async function pressIn(id: CrateId, uri: string) {
   }
 }
 
+/** a record put on: back in the front of its crate (where a hand puts it back), so it's the first one found */
+export function toFront(uri: string) {
+  const crates = { ...s.crates }
+  let moved = false
+  for (const id of Object.keys(crates) as CrateId[]) {
+    const i = crates[id].findIndex((p) => p.uri === uri)
+    if (i > 0) {
+      crates[id] = [crates[id][i], ...crates[id].slice(0, i), ...crates[id].slice(i + 1)]
+      moved = true
+    }
+  }
+  if (moved) set({ crates })
+}
+
 /** the crate filled with what matches what she wrote */
 export const digFor = (q: string) => fillDig(q, () => dig(q))
 /** the crate filled with an artist's albums */

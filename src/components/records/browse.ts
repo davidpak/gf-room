@@ -123,6 +123,8 @@ export function backToCrate() {
   set({ mode: 'crate' })
   lookAt({ spot: crateSpot, i: null })
 }
+/** the front record up next time the crate's opened */
+export const frontUp = () => set({ i: 0 })
 /** out of the crate altogether */
 export function leaveCrate() {
   set({ mode: 'none' })

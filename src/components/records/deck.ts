@@ -35,8 +35,9 @@ export const useDeck = () => useSyncExternalStore((f) => (subs.add(f), () => voi
 export const now = () => performance.now() / 1000
 export const press = (k: string) => setDeck({ pressed: { ...s.pressed, [k]: now() } })
 
-/** the moving parts, as they are this frame */
-export const live = { a: 0, lift: 1, spin: 0, turn: 0, lid: 1 }
+/** the moving parts, as they are this frame (`wide`: a record's going on or being turned over: the lid's swung
+ *  back past upright, out of its way) */
+export const live = { a: 0, lift: 1, spin: 0, turn: 0, lid: 1, wide: false }
 
 /** the side up on the platter */
 export const sideUp = (o: OnPlatter) => o.p.sides[2 * o.disc + o.face]
