@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { CuboidCollider, CylinderCollider } from '@react-three/rapier'
+import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier'
 import { Quaternion, Vector3, type Group } from 'three'
 import { Static } from '../../lib/render/Static'
 import { Prompts } from '../prompt/Prompts'
@@ -10,14 +10,14 @@ import { CRATES, type CrateId } from '../records/library'
 import { LooseRecords, takeLoose } from '../records/Loose'
 import { askDig } from '../records/Overlay'
 import { CRATE, STAND, shelfTop } from '../records/rack'
-import { useFillCrates } from '../records/shelf'
+import { useFillCrates, useShelf } from '../records/shelf'
 import { Stand } from '../records/Stand'
 import { Turntable } from '../records/Turntable'
 import { EW, platterTop } from '../records/victrola'
 import { LiveProp, liveBody, setPrompt } from './Physical'
 import { clickSpot, frameAround, getLook, lookAt, type Spot } from './look'
 import { AFrame } from './CookieStand'
-import { CANOPY, MusicCanopy, MusicRug, NowPlayingEasel, Notes, useSpinningFace } from './MusicDecor'
+import { Bunting, CANOPY, PicksRack, RACK, RUG, VinylWall, MusicCanopy, MusicRug, NowPlayingEasel, Notes, useSpinningFace } from './MusicDecor'
 import { SET } from './set'
 import type { CarState } from './Car'
 
@@ -74,6 +74,14 @@ function SpinningSign() {
 }
 const SIGN = { w: 760, len: 1100, lean: 0.22, x: -1500, z: 980, rot: 0.32 }
 const EASEL_AT = { x: 1000, z: 430, rot: -0.35 }
+const PICKS_AT = { x: -1010, z: 470, rot: 0.55 }
+
+/** the picks rack: her all-time favourites (or, till those come, what's on repeat, what's saved) */
+function Picks() {
+  const sh = useShelf()
+  const [records, title] = sh.crates.alltime.length ? [sh.crates.alltime, 'All-Time Picks ♡'] : sh.crates.repeat.length ? [sh.crates.repeat, 'On Repeat ♡'] : [sh.crates.saved, 'Rina\'s Picks ♡']
+  return <PicksRack records={records.slice(0, 3)} title={title} />
+}
 
 export function QuadMusic({ car }: { car: { current: CarState } }) {
   useFillCrates()
@@ -138,8 +146,9 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
     clickSpot(standSpot)
   }
   const prompt = useMemo(() => setPrompt('music', 'Reset Record Stand', (o) => o.copy(world(0, STAND.h + 700, 0))), [])
-  const home = (lx: number, ly: number, lz: number, rot = 0) => {
-    const w = world(lx, ly, lz)
+  // (on the rug: what stands on it stands on its top)
+  const home = (lx: number, ly: number, lz: number, rot = 0, onRug = true) => {
+    const w = world(lx, ly + (onRug ? RUG.t : 0), lz)
     return { x: w.x, y: w.y, z: w.z, rot: A.rot + rot }
   }
   const legX = STAND.w / 2 - STAND.leg.inset - STAND.leg.s / 2
@@ -193,16 +202,24 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
         <CuboidCollider args={[S(EW.w), S(EW.cab), S(EW.d)]} position={[0, S(EW.cab), 0]} mass={EW.mass} friction={0.8} />
       </LiveProp>
       {/* the canopy over it all, the rug under, the easel with the jacket of what's on */}
-      <group position={[A.x, LAWN, A.z]} rotation={[0, A.rot, 0]} scale={K} onClick={toStand}>
-        <Static>
-          <MusicRug />
-        </Static>
+      <group position={[A.x, LAWN, A.z]} rotation={[0, A.rot, 0]}>
+        <group scale={K} onClick={toStand}>
+          <Static>
+            <MusicRug />
+          </Static>
+        </group>
+        {/* (its top solid, and deep, so what's dropped on it rests on it, not in it) */}
+        <RigidBody type="fixed" colliders={false}>
+          <CuboidCollider args={[S(RUG.w) * 0.97, 20, S(RUG.d) * 0.97]} position={[0, RUG.t * K - 20, 0]} friction={0.9} />
+        </RigidBody>
       </group>
       <LiveProp id="musiccanopy" label="" set="music" at={home(0, 0, 0)} car={car} lift={0} feelPts={[-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * CANOPY.hx * K, sz * CANOPY.hz * K] as [number, number]))} feelR={14}>
         <group scale={K} onClick={toStand}>
           <Static>
             <MusicCanopy />
+            <Bunting />
           </Static>
+          <VinylWall />
         </group>
         {[-1, 1].map((sx) =>
           [-1, 1].map((sz) => (
@@ -214,13 +231,19 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
         )}
         <CuboidCollider args={[(CANOPY.hx + CANOPY.over) * K, 30 * K, (CANOPY.hz + CANOPY.over) * K]} position={[0, (CANOPY.eave + 20) * K, 0]} mass={1.2} friction={0.6} />
       </LiveProp>
+      <LiveProp id="musicpicks" label="" set="music" at={home(PICKS_AT.x, 0, PICKS_AT.z, PICKS_AT.rot)} car={car} lift={60} feelPts={[[0, 0]]} feelR={S(RACK.w)}>
+        <group scale={K} onClick={toStand}>
+          <Picks />
+        </group>
+        <CuboidCollider args={[S(RACK.w), S(RACK.h), S(RACK.d)]} position={[0, S(RACK.h), -40 * K]} mass={1.5} friction={0.8} />
+      </LiveProp>
       <LiveProp id="musiceasel" label="" set="music" at={home(EASEL_AT.x, 0, EASEL_AT.z, EASEL_AT.rot)} car={car} lift={60} feelPts={[[0, 0]]} feelR={S(400)}>
         <group scale={K} onClick={toStand}>
           <NowPlayingEasel />
         </group>
         <CuboidCollider args={[S(380), S(820), S(260)]} position={[0, S(820), -60 * K]} mass={0.8} friction={0.8} />
       </LiveProp>
-      <LiveProp id="musicsign" label="" set="music" at={home(SIGN.x, 0, SIGN.z, SIGN.rot)} car={car} lift={(SIGN.len + 200) * K} feelAlong={[-0.3 * SIGN.w * K, 0.3 * SIGN.w * K]} feelR={40}>
+      <LiveProp id="musicsign" label="" set="music" at={home(SIGN.x, 0, SIGN.z, SIGN.rot, false)} car={car} lift={(SIGN.len + 200) * K} feelAlong={[-0.3 * SIGN.w * K, 0.3 * SIGN.w * K]} feelR={40}>
         <group scale={K} onClick={toStand}>
           <SpinningSign />
         </group>

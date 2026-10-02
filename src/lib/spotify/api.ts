@@ -54,14 +54,34 @@ export async function album(id: string) {
   return { ...a, tracks: { items, next: null } }
 }
 
-/** albums by id, with their tracks (twenty to an ask) */
+/** albums by id, with their tracks: twenty to an ask, or (where Spotify won't, as it doesn't for apps still in
+ *  development mode since 2026) one at a time, a few at once */
+let batchOk = true
 export async function albums(ids: string[]) {
-  const out: Album[] = []
-  for (let i = 0; i < ids.length; i += 20) {
-    const r = await sp<{ albums: (Album | null)[] }>(`/albums?ids=${ids.slice(i, i + 20).join(',')}`)
-    out.push(...r.albums.filter((a): a is Album => !!a))
+  if (batchOk) {
+    try {
+      const out: Album[] = []
+      for (let i = 0; i < ids.length; i += 20) {
+        const r = await sp<{ albums: (Album | null)[] }>(`/albums?ids=${ids.slice(i, i + 20).join(',')}`)
+        out.push(...r.albums.filter((a): a is Album => !!a))
+      }
+      return out
+    } catch (e) {
+      console.warn('Spotify: albums in one ask refused, one at a time instead', e)
+      batchOk = false
+    }
   }
-  return out
+  const out: (Album | null)[] = new Array(ids.length).fill(null)
+  let next = 0
+  await Promise.all(
+    Array.from({ length: 3 }, async () => {
+      while (next < ids.length) {
+        const i = next++
+        out[i] = await album(ids[i]).catch((e) => (console.warn('Spotify: album', ids[i], e), null))
+      }
+    }),
+  )
+  return out.filter((a): a is Album => !!a)
 }
 const uniqueAlbums = (tracks: { album: { id: string } }[], n: number) => [...new Set(tracks.map((t) => t.album.id))].slice(0, n)
 
@@ -90,10 +110,12 @@ export async function playlists(n = 12) {
   const r = await sp<{ items: (Playlist | null)[] }>(`/me/playlists?limit=${n}`)
   return r.items.filter((p): p is Playlist => !!p)
 }
-/** a playlist's songs, in order (the first `n`) */
+/** a playlist's songs, in order (the first `n`): its items (as Spotify now calls them, each an `item`), or its
+ *  tracks (as it did, each a `track`) */
 export async function playlistTracks(id: string, n = 40) {
-  const r = await sp<{ items: { track: Track | null }[] }>(`/playlists/${id}/tracks?limit=${n}`)
-  return r.items.map((i) => i.track).filter((t): t is Track => !!t && !!t.uri && t.uri.startsWith('spotify:track:'))
+  type Row = { track?: Track | null; item?: Track | null }
+  const r = await sp<{ items: Row[] }>(`/playlists/${id}/items?limit=${n}`).catch(() => sp<{ items: Row[] }>(`/playlists/${id}/tracks?limit=${n}`))
+  return r.items.map((i) => i.item ?? i.track).filter((t): t is Track => !!t && !!t.uri && t.uri.startsWith('spotify:track:'))
 }
 
 export async function savedAlbums(limit = 20) {

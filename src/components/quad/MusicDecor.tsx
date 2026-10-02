@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, DoubleSide, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, SphereGeometry, TubeGeometry, Vector3, type Material } from 'three'
+import { BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, CylinderGeometry, DoubleSide, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, SphereGeometry, TubeGeometry, Vector3, type Material } from 'three'
 import { usePlayer } from '../../lib/spotify/player'
 import { useDeck } from '../records/deck'
 import { needle } from '../records/play'
@@ -13,7 +13,8 @@ import { bruno } from './bruno'
  * in lilac and cream stripes (a hip roof over the stand, its scalloped valance), a plank on its front saying whose
  * it is, warm string lights swagged along its eaves, a braided rug under it all, an A-frame chalkboard out front
  * that says what's spinning, a little easel beside the stand holding up the jacket of the record that's on, and,
- * while one plays, notes drifting up off the platter.
+ * while one plays, notes drifting up off the platter. And a record shop's things: a wall of records hung on strings
+ * at the back, pennants along the sides, a tiered rack out front with her all-time favourites face out.
  */
 export const CANOPY = { hx: 1150, hz: 720, over: 60, eave: 2050, peak: 2650 }
 export const RUG = { w: 2600, d: 1700, t: 6 }
@@ -415,4 +416,141 @@ export function Notes({ from }: { from: [number, number, number] }) {
       ))}
     </group>
   )
+}
+
+// ---- the vinyl wall: records hung on strings from the canopy's back rail, turning slowly
+const HANG_LABELS = ['#f5b3c6', '#d4c0ff', '#ffe08a', '#bfe8d6', '#f7c59f']
+function hangingFace(label: string) {
+  const c = document.createElement('canvas')
+  c.width = c.height = 256
+  const g = c.getContext('2d')!
+  g.fillStyle = '#1f1c24'
+  g.fillRect(0, 0, 256, 256)
+  for (let r = 40; r < 127; r += 3) {
+    g.strokeStyle = `rgba(255,255,255,${0.03 + ((r * 7) % 5) * 0.012})`
+    g.lineWidth = 1
+    g.beginPath()
+    g.arc(128, 128, r, 0, Math.PI * 2)
+    g.stroke()
+  }
+  g.fillStyle = label
+  g.beginPath()
+  g.arc(128, 128, 36, 0, Math.PI * 2)
+  g.fill()
+  g.fillStyle = '#1f1c24'
+  g.beginPath()
+  g.arc(128, 128, 4, 0, Math.PI * 2)
+  g.fill()
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  return t
+}
+const HANG_DISC = new CylinderGeometry(150, 150, 3, 48).rotateX(Math.PI / 2) // (standing, its faces toward ±z)
+const STRING = new CylinderGeometry(1.5, 1.5, 1, 4)
+const HANG_RIM = bruno({ color: '#1f1c24' })
+export function VinylWall() {
+  const { hx, hz, eave } = CANOPY
+  const mats = useMemo(() => HANG_LABELS.map((l) => { const f = bruno({ map: hangingFace(l) }); return [HANG_RIM, f, f] as Material[] }), [])
+  const discs = useMemo(() => [-900, -450, 0, 450, 900].map((x, i) => ({ x: x + ((i * 37) % 60) - 30, drop: 260 + ((i * 97) % 200), turn: 0.2 + (i % 3) * 0.12, phase: i * 1.7 })), [])
+  const refs = useRef<(Mesh | null)[]>([])
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime
+    refs.current.forEach((m, i) => {
+      if (m) m.rotation.y = Math.sin(t * discs[i].turn + discs[i].phase) * 1.1
+    })
+  })
+  return (
+    <group position={[0, eave - 40, -hz + 40]} userData={{ live: true }}>
+      {discs.map((d, i) => (
+        <group key={i} position={[Math.max(-hx + 160, Math.min(hx - 160, d.x)), 0, 0]}>
+          <mesh geometry={STRING} material={DARK} position={[0, -d.drop / 2, 0]} scale={[1, d.drop, 1]} />
+          <mesh ref={(m) => void (refs.current[i] = m)} geometry={HANG_DISC} material={mats[i]} position={[0, -d.drop - 150, 0]} castShadow />
+        </group>
+      ))}
+    </group>
+  )
+}
+
+// ---- pennant bunting along the canopy's sides
+const PENNANT = (() => {
+  const g = new BufferGeometry()
+  g.setAttribute('position', new BufferAttribute(new Float32Array([-55, 0, 0, 55, 0, 0, 0, -150, 0]), 3))
+  g.computeVertexNormals()
+  return g
+})()
+const FLAGS = ['#f5b3c6', '#fdf2e4', '#c9b6ec', '#bfe8d6', '#ffe08a'].map((c) => bruno({ color: c, side: DoubleSide, shade: '#a993c9' }))
+export function Bunting() {
+  const { hx, hz, eave } = CANOPY
+  const n = Math.floor((2 * hz) / 130)
+  return (
+    <group>
+      {[-1, 1].map((s) => (
+        <group key={s} position={[s * (hx + 8), eave - 70, 0]} rotation={[0, (s * Math.PI) / 2, 0]}>
+          {Array.from({ length: n }, (_, i) => {
+            const u = (i + 0.5) / n
+            const z = (u - 0.5) * 2 * hz
+            const sag = 60 * 4 * u * (1 - u)
+            return <mesh key={i} geometry={PENNANT} material={FLAGS[(i + (s > 0 ? 2 : 0)) % FLAGS.length]} position={[z * -s, -sag, 0]} rotation={[0, 0, (u - 0.5) * 0.2]} />
+          })}
+        </group>
+      ))}
+    </group>
+  )
+}
+
+// ---- the picks rack: a tiered wooden display rack, records face out (her all-time favourites), a card on top
+export const RACK = { w: 720, h: 920, d: 300, lean: 0.22, tiers: [110, 520] }
+function picksCard(title: string) {
+  const c = document.createElement('canvas')
+  c.width = 640
+  c.height = 200
+  slate(640, 200, (g) => {
+    g.fillStyle = '#fbf7ef'
+    g.textAlign = 'center'
+    g.font = `700 74px ${HAND}`
+    g.fillText(title, 320, 104)
+  }, c)
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  t.anisotropy = 8
+  return t
+}
+export function PicksRack({ records, title }: { records: import('../records/vinyl').Pressing[]; title: string }) {
+  const card = useMemo(() => {
+    const t = picksCard(title)
+    return [WOOD, WOOD, WOOD, WOOD, bruno({ map: t, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.15, shade: '#6f7699' }), WOOD] as Material[]
+  }, [title])
+  const g = useMemo(() => ({ back: new BoxGeometry(RACK.w, RACK.h, 24), ledge: new BoxGeometry(RACK.w, 22, 70), lip: new BoxGeometry(RACK.w, 50, 14), leg: new BoxGeometry(30, RACK.h * 0.8, 30), card: new BoxGeometry(RACK.w * 0.9, 190, 20) }), [])
+  const slots = [
+    { x: -RACK.w / 4 + 6, tier: 0 },
+    { x: RACK.w / 4 - 6, tier: 0 },
+    { x: 0, tier: 1 },
+  ]
+  return (
+    <group>
+      {/* the back, leaning back on its prop; the ledges and their lips */}
+      <group rotation={[-RACK.lean, 0, 0]}>
+        <mesh geometry={g.back} material={WOOD} position={[0, RACK.h / 2, -12]} castShadow receiveShadow />
+        {RACK.tiers.map((y) => (
+          <group key={y} position={[0, y, 0]}>
+            <mesh geometry={g.ledge} material={WOOD} position={[0, 0, 35]} castShadow />
+            <mesh geometry={g.lip} material={WOOD} position={[0, 25, 68]} castShadow />
+          </group>
+        ))}
+        <mesh geometry={g.card} material={card} position={[0, RACK.h + 60, 0]} castShadow />
+        {slots.map((s, i) =>
+          records[i] ? (
+            <group key={records[i].uri} position={[s.x, RACK.tiers[s.tier] + 11, 30]} scale={0.98}>
+              <PickJacket p={records[i]} />
+            </group>
+          ) : null,
+        )}
+      </group>
+      <mesh geometry={g.leg} material={WOOD} position={[0, RACK.h * 0.38, -RACK.h * 0.32]} rotation={[0.55, 0, 0]} castShadow />
+    </group>
+  )
+}
+function PickJacket({ p }: { p: import('../records/vinyl').Pressing }) {
+  const art = useArt(p)
+  return art ? <Jacket p={p} art={art} /> : null
 }

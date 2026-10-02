@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { typing } from '../../lib/inputLock'
 import { BoxGeometry, CanvasTexture, CatmullRomCurve3, Quaternion, SRGBColorSpace, TubeGeometry, Vector3, type Group, type Material, type Mesh } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from './bruno'
@@ -57,6 +58,7 @@ export function LookControls() {
   useEffect(() => {
     if (!l) return
     const key = (e: KeyboardEvent) => {
+      if (typing(e)) return // (letters typed in a box on the page are the box's)
       // (the spot's own keys first, Esc too: a record taken out goes back in its crate before the crate's left)
       if (l.spot.keys?.(e)) {
         e.preventDefault()

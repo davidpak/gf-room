@@ -5,7 +5,7 @@ import { bruno } from '../quad/bruno'
 import { useLook } from '../quad/look'
 import { crateRefs, lookMoved, openCrate, takeOut, useBrowse } from './browse'
 import type { CrateId } from './library'
-import { useShelf } from './shelf'
+import { crateNote, useShelf } from './shelf'
 import { Disc, Jacket, discThick, useArt } from './Record'
 import { LP, sizeOf, type Pressing } from './vinyl'
 import { CRATE } from './rack'
@@ -224,7 +224,8 @@ function Record({ p, z, pose, onPick, onTake }: { p: Pressing; z: number; pose: 
  * taken, the crate left alone: on the Quad, the first click on the stand takes in the whole stand).
  */
 export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: CrateId; label: string; onTake: (p: Pressing, disc: number, at: Object3D) => void; onCard?: () => void; empty?: string; gate?: () => boolean }) {
-  const records = useShelf().crates[id] ?? []
+  const shelf = useShelf()
+  const records = shelf.crates[id] ?? []
   const m = useMemo(() => bruno({ map: pine(), shade: C.colors.pineShade }), [])
   const mEnd = useMemo(() => {
     const t = pine()
@@ -232,7 +233,8 @@ export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: Cra
     t.repeat.set(1 / 300, 1 / 300)
     return bruno({ map: t, shade: C.colors.pineShade })
   }, [])
-  const showEmpty = records.length ? '' : empty
+  // (empty: what it says while it loads, or why it couldn't; else what it was given)
+  const showEmpty = records.length ? '' : crateNote(id, shelf) || empty
   const mFront = useMemo(() => {
     const f = bruno({ map: frontArt(label, showEmpty), shade: C.colors.pineShade })
     return [m, m, m, m, f, m]

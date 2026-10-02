@@ -1,5 +1,6 @@
 import { Waiting } from '../../lib/ready'
 import { Suspense, useCallback, useEffect, useRef } from 'react'
+import { typing } from '../../lib/inputLock'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3, type DirectionalLight, type Group, type Object3D, type PerspectiveCamera } from 'three'
 import { SET, inIsland, paveSdf } from './set'
@@ -116,7 +117,8 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       const k = MAP[e.code]
-      if (!k) return
+      // (typing in a box on the page, the Dig crate's card: its letters aren't the car's)
+      if (!k || typing(e)) return
       e.preventDefault()
       if (k === 'reset') {
         if (!e.repeat) hardReset() // (everything back: see ./reset)

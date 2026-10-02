@@ -17,6 +17,14 @@ const set = (o: Partial<Shelf>) => {
   subs.forEach((f) => f())
 }
 export const getShelf = () => s
+/** what a crate's card says while it's not full: loading, or why it couldn't be (the status Spotify answered) */
+export function crateNote(id: CrateId, sh: Shelf = s) {
+  if (sh.loading[id]) return 'pressing records…'
+  const f = sh.failed[id]
+  if (!f) return ''
+  const code = f.match(/: (\d{3})\b/)?.[1]
+  return code === '403' || code === '401' ? 'Spotify won\'t share this: log in again' : code ? `Spotify said ${code}` : 'couldn\'t reach Spotify'
+}
 export const useShelf = () => useSyncExternalStore((f) => (subs.add(f), () => void subs.delete(f)), getShelf)
 
 let loadedFor = ''
@@ -36,7 +44,8 @@ async function loadAll() {
       set({ crates: { ...s.crates, [c.id]: records }, loading: { ...s.loading, [c.id]: false }, failed: { ...s.failed, [c.id]: undefined } })
     } catch (e) {
       console.warn('crate', c.id, e)
-      set({ loading: { ...s.loading, [c.id]: false }, failed: { ...s.failed, [c.id]: String((e as Error).message ?? e) } })
+      // (empty, and saying why on its card: not the made-up records, which would look like hers)
+      set({ crates: { ...s.crates, [c.id]: [] }, loading: { ...s.loading, [c.id]: false }, failed: { ...s.failed, [c.id]: String((e as Error).message ?? e) } })
     }
   }
 }

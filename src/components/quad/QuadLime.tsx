@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { type ThreeEvent } from '@react-three/fiber'
+import { typing } from '../../lib/inputLock'
 import { CuboidCollider, useBeforePhysicsStep } from '@react-three/rapier'
 import { Euler, Quaternion, Vector3 } from 'three'
 import { Glider, type LimeRig } from '../lime/Glider'
@@ -63,7 +64,7 @@ export function QuadLime({ car, obstacles }: { car: { current: CarState }; obsta
   // getting off: E or Esc; R (everything back) too
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (!getRide() || getLook() || (e.code !== 'KeyE' && e.code !== 'Escape')) return
+      if (!getRide() || getLook() || typing(e) || (e.code !== 'KeyE' && e.code !== 'Escape')) return
       e.preventDefault()
       hopOff()
     }
