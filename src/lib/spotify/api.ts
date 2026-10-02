@@ -12,7 +12,7 @@ export type Album = {
   name: string
   album_type: string
   release_date: string
-  artists: { name: string }[]
+  artists: { id: string; name: string }[]
   images: Image[]
   total_tracks: number
   tracks?: { items: Track[]; next: string | null }
@@ -54,6 +54,48 @@ export async function album(id: string) {
   return { ...a, tracks: { items, next: null } }
 }
 
+/** albums by id, with their tracks (twenty to an ask) */
+export async function albums(ids: string[]) {
+  const out: Album[] = []
+  for (let i = 0; i < ids.length; i += 20) {
+    const r = await sp<{ albums: (Album | null)[] }>(`/albums?ids=${ids.slice(i, i + 20).join(',')}`)
+    out.push(...r.albums.filter((a): a is Album => !!a))
+  }
+  return out
+}
+const uniqueAlbums = (tracks: { album: { id: string } }[], n: number) => [...new Set(tracks.map((t) => t.album.id))].slice(0, n)
+
+/** her most played (short_term: about the last 4 weeks; medium_term: 6 months; long_term: about a year), as albums */
+export async function topAlbums(range: 'short_term' | 'medium_term' | 'long_term', n = 12) {
+  const r = await sp<{ items: (Track & { album: Album })[] }>(`/me/top/tracks?time_range=${range}&limit=50`)
+  return albums(uniqueAlbums(r.items, n))
+}
+/** what she's played lately (the last 50 songs), as albums, the latest first */
+export async function recentAlbums(n = 12) {
+  const r = await sp<{ items: { track: Track & { album: Album } }[] }>('/me/player/recently-played?limit=50')
+  return albums(uniqueAlbums(r.items.map((i) => i.track), n))
+}
+/** an artist's albums (and singles), the newest first */
+export async function artistAlbums(id: string, n = 12) {
+  const r = await sp<{ items: Album[] }>(`/artists/${id}/albums?include_groups=album,single&limit=${Math.min(50, n * 2)}`)
+  // (the same album in several editions: the first of each name)
+  const seen = new Set<string>()
+  const ids = r.items.filter((a) => !seen.has(a.name.toLowerCase()) && seen.add(a.name.toLowerCase())).map((a) => a.id)
+  return albums(ids.slice(0, n))
+}
+
+export type Playlist = { id: string; uri: string; name: string; images: Image[] | null; owner: { display_name: string }; tracks: { total: number } }
+/** her playlists (the ones she made and follows; Spotify's own made-for-you ones it no longer lets apps read) */
+export async function playlists(n = 12) {
+  const r = await sp<{ items: (Playlist | null)[] }>(`/me/playlists?limit=${n}`)
+  return r.items.filter((p): p is Playlist => !!p)
+}
+/** a playlist's songs, in order (the first `n`) */
+export async function playlistTracks(id: string, n = 40) {
+  const r = await sp<{ items: { track: Track | null }[] }>(`/playlists/${id}/tracks?limit=${n}`)
+  return r.items.map((i) => i.track).filter((t): t is Track => !!t && !!t.uri && t.uri.startsWith('spotify:track:'))
+}
+
 export async function savedAlbums(limit = 20) {
   const r = await sp<{ items: { album: Album }[] }>(`/me/albums?limit=${limit}`)
   return r.items.map((i) => i.album)
@@ -63,9 +105,10 @@ export async function savedAlbums(limit = 20) {
 export const cover = (a: Pick<Album, 'images'>) => [...a.images].sort((x, y) => y.width - x.width)[0]?.url
 
 /** play an album (or a single track) on a device, from a track and a point in it */
-export function play(device: string, contextUri: string, opts: { track?: number; ms?: number } = {}) {
+export function play(device: string, contextUri: string, opts: { track?: number; uri?: string; ms?: number } = {}) {
+  // (from a song by its uri when it's known: a playlist's positions count songs Spotify no longer has)
   const body = contextUri.startsWith('spotify:track:')
     ? { uris: [contextUri], position_ms: opts.ms ?? 0 }
-    : { context_uri: contextUri, offset: { position: opts.track ?? 0 }, position_ms: opts.ms ?? 0 }
+    : { context_uri: contextUri, offset: opts.uri ? { uri: opts.uri } : { position: opts.track ?? 0 }, position_ms: opts.ms ?? 0 }
   return sp<void>(`/me/player/play?device_id=${device}`, { method: 'PUT', body: JSON.stringify(body) })
 }

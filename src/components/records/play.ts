@@ -61,7 +61,7 @@ async function spotify(o: OnPlatter, side: Side, band: number, ms: number) {
     if (mine !== ask || !needle.playing) return
     const b = side.bands[band]
     // (a single: the song itself; an album: the album, from this song: so it carries on to the next by itself)
-    await play(dev, o.p.size === 'single' ? (b.uri ?? o.p.uri) : o.p.uri, { track: b.track, ms: Math.round(ms) })
+    await play(dev, o.p.size === 'single' ? (b.uri ?? o.p.uri) : o.p.uri, { track: b.track, uri: b.uri, ms: Math.round(ms) })
     if (mine !== ask) return
     needle.spotify = true
     needle.since = performance.now()

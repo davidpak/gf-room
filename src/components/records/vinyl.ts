@@ -59,6 +59,8 @@ export type Pressing = {
   uri: string
   title: string
   artist: string
+  /** (its first artist on Spotify: more by them, from the Dig crate) */
+  artistId?: string
   year: string
   cover: string
   /** two sides per disc */
@@ -112,7 +114,7 @@ export function cutSide(size: Size, letter: string, tracks: { i: number; t: In }
 }
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-export function press(a: { uri: string; title: string; artist: string; year: string; cover: string; tracks: In[] }): Pressing {
+export function press(a: { uri: string; title: string; artist: string; artistId?: string; year: string; cover: string; tracks: In[] }): Pressing {
   if (a.tracks.length === 1 && a.uri.startsWith('spotify:track:')) {
     // a single: the song on A; B is left smooth (no B-side to put there)
     return { ...a, size: 'single', sides: [cutSide(SINGLE, 'A', [{ i: 0, t: a.tracks[0] }]), cutSide(SINGLE, 'B', [])] }

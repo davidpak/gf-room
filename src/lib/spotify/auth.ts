@@ -17,12 +17,14 @@ const SCOPES = [
   'user-modify-playback-state',
   'user-library-read', // (her saved albums, for the crate)
   'playlist-read-private',
+  'user-top-read', // (the crates: what she plays most, this month, this year, of all time)
+  'user-read-recently-played', // (and what she's played lately)
 ]
 const KEY = 'spotify.tokens'
 const PENDING = 'spotify.pending'
 const redirect = () => `${location.origin}/spotify`
 
-type Tokens = { access: string; refresh: string; expires: number }
+type Tokens = { access: string; refresh: string; expires: number; scope?: string }
 const read = <T,>(k: string): T | null => {
   try {
     const s = localStorage.getItem(k)
@@ -45,6 +47,9 @@ const subs = new Set<() => void>()
 export const onAuth = (f: () => void) => (subs.add(f), () => void subs.delete(f))
 const tell = () => subs.forEach((f) => f())
 export const loggedIn = () => !!tokens
+/** logged in, but before the site asked for all it asks for now (the crates' top songs, what's played lately):
+ *  logging in again grants the rest */
+export const missingScopes = () => !!tokens && SCOPES.some((s) => !(tokens!.scope ?? '').split(' ').includes(s))
 
 const b64url = (b: ArrayBuffer | Uint8Array) =>
   btoa(String.fromCharCode(...new Uint8Array(b as ArrayBuffer)))
@@ -83,8 +88,8 @@ async function tokenRequest(body: Record<string, string>) {
     body: new URLSearchParams({ client_id: CLIENT_ID, ...body }),
   })
   if (!r.ok) throw new Error(`Spotify token: ${r.status} ${await r.text()}`)
-  const j = (await r.json()) as { access_token: string; refresh_token?: string; expires_in: number }
-  tokens = { access: j.access_token, refresh: j.refresh_token ?? tokens?.refresh ?? '', expires: Date.now() + j.expires_in * 1000 }
+  const j = (await r.json()) as { access_token: string; refresh_token?: string; expires_in: number; scope?: string }
+  tokens = { access: j.access_token, refresh: j.refresh_token ?? tokens?.refresh ?? '', expires: Date.now() + j.expires_in * 1000, scope: j.scope ?? tokens?.scope }
   write(KEY, tokens)
   tell()
 }

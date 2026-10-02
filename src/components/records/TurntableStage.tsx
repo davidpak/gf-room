@@ -1,125 +1,71 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useThree } from '@react-three/fiber'
+import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { PCFSoftShadowMap, Vector3 } from 'three'
 import { Canvas } from '../../lib/render/Canvas'
-import { loggedIn, login, onAuth } from '../../lib/spotify/auth'
-import { usePlayer } from '../../lib/spotify/player'
+import { World } from '../../lib/physics/World'
 import { CheckSheet } from '../check/CheckSheet'
 import { LookCamera } from '../stage/LookCamera'
 import { ToyControls } from '../stage/ToyControls'
-import { DEMO, pressSaved } from './library'
-import { getDeck, setDeck, useDeck } from './deck'
-import { EW, checkEastwood } from './victrola'
+import { getBrowse, openCrate, takeOut } from './browse'
+import { Crate } from './Crate'
+import { getDeck, setDeck } from './deck'
 import { Eastwood } from './Eastwood'
 import { Light } from './Light'
-import { lift, needle } from './play'
-import { cancelChange } from './changer'
-import { Crate } from './Crate'
-import { browseRefs, getBrowse, leaveCrate, openCrate, takeOut, useBrowse } from './browse'
+import { LooseRecords, takeLoose } from './Loose'
+import { askDig, RecordsOverlay } from './Overlay'
+import { needle } from './play'
+import { useFillCrates } from './shelf'
 import { Turntable } from './Turntable'
-import { type Pressing } from './vinyl'
+import { EW, checkEastwood } from './victrola'
 
 /**
- * The record player on its own (gallery first): the Victrola Eastwood, full size, in the Quad's evening light, her
- * records in a crate beside it (her saved albums on Spotify when she's logged in). Click the crate to go through it
- * (./browse: A / D, Enter), take a record out, click its record to put it on.
+ * The record player on its own (gallery first): the Victrola Eastwood, full size, in the Quad's evening light, three
+ * of the crates beside it (On Repeat, Saved, Dig: her own records once she's logged in with Spotify). Click a crate to
+ * go through it (./browse: A / D, Enter), click a record out of its jacket and carry it to the turntable.
  * &check: the sheet (the manual's drawing and Victrola's photos beside it, and the checks).
  */
-/** a record onto the platter, its first side up (the one there, if any, back in its jacket) */
-function putOn(p: Pressing, disc = 0) {
-  cancelChange()
-  lift()
-  needle.runout = false
-  needle.ended = false
-  leaveCrate()
-  setDeck({ on: { p, disc, face: 0 }, arm: { a: getDeck().arm.a, down: false }, lid: true })
-}
-
-function Scene({ records }: { records: Pressing[] }) {
-  const d = useDeck()
+function Scene() {
   const get = useThree((s) => s.get)
   if (import.meta.env.DEV) Object.assign(window, { __r3f: get, __deck: { getDeck, setDeck, needle }, __browse: { openCrate, takeOut, getBrowse } })
   return (
     <>
-      <Light extent={900} />
-      <Turntable />
-      <group position={[470, 0, -40]} rotation={[0, -0.35, 0]}>
-        <Crate records={records} onPut={putOn} playing={d.on?.p.uri} />
-      </group>
+      <Light extent={1100} />
+      <World floorY={0} timeStep={1 / 120}>
+        <Turntable />
+        {/* (the cabinet, for what's dropped on it) */}
+        <RigidBody type="fixed" colliders={false}>
+          <CuboidCollider args={[EW.w / 2, EW.cab / 2, EW.d / 2]} position={[0, EW.cab / 2, 0]} />
+        </RigidBody>
+        {(
+          [
+            ['repeat', 'On Repeat', -0.35],
+            ['saved', 'Saved', -0.5],
+            ['dig', 'Dig', -0.65],
+          ] as const
+        ).map(([id, label, rot], i) => (
+          <group key={id} position={[470 + i * 330, 0, -40 + i * 160]} rotation={[0, rot, 0]}>
+            <Crate id={id} label={label} onTake={takeLoose} onCard={id === 'dig' ? () => askDig() : undefined} empty={id === 'dig' ? 'click to ask for anything' : ''} />
+            <RigidBody type="fixed" colliders={false}>
+              <CuboidCollider args={[190, 100, 140]} position={[0, 100, 0]} />
+            </RigidBody>
+          </group>
+        ))}
+        <LooseRecords />
+      </World>
       <LookCamera />
     </>
   )
 }
 
-/** what's written about the record up (going through the crate) or out: the album, how it's pressed, what to do */
-function About() {
-  const b = useBrowse()
-  // (the page's own title and hint step aside meanwhile)
-  useEffect(() => {
-    document.body.classList.toggle('browsing', b.mode !== 'none')
-  }, [b.mode])
-  const p = b.mode !== 'none' ? browseRefs.records[b.i] : null
-  if (!p) return null
-  const discs = p.sides.length / 2
-  const songs = p.sides.reduce((n, x) => n + x.bands.length, 0)
-  const min = Math.round(p.sides.reduce((n, x) => n + x.ms, 0) / 60000)
-  const letters = p.sides.filter((x) => x.bands.length).map((x) => x.letter)
-  const pressed = p.size === 'single' ? '7" single · 45 RPM' : `${discs === 1 ? 'one 12" record' : `${discs} × 12" records`} · sides ${letters[0]}–${letters[letters.length - 1]} · 33⅓ RPM`
-  const t: React.CSSProperties = { font: "700 18px 'Gaegu', 'Nunito', cursive", color: '#fff4e6', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }
-  return (
-    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, zIndex: 21, pointerEvents: 'none', textAlign: 'center' }}>
-      <div style={{ ...t, fontSize: 28 }}>{p.title}</div>
-      <div style={t}>
-        {p.artist}
-        {p.year ? ` · ${p.year.slice(0, 4)}` : ''}
-        {b.mode === 'crate' ? `  ·  ${b.i + 1} of ${browseRefs.records.length}` : ''}
-      </div>
-      {b.mode === 'out' && (
-        <div style={{ ...t, fontWeight: 400, opacity: 0.85 }}>
-          {pressed} · {songs} songs · {min} min
-        </div>
-      )}
-      <div style={{ ...t, fontWeight: 400, fontSize: 16, opacity: 0.75, marginTop: 6 }}>
-        {b.mode === 'crate'
-          ? 'A / D or ← → to flip through · Enter (or click it) to take it out · Esc to step back'
-          : `click ${discs > 1 ? 'a record' : 'the record'} to put it on · A / D for the next one · Esc to put it back`}
-      </div>
-    </div>
-  )
-}
-
-function Status() {
-  const looking = useBrowse().mode !== 'none'
-  const isIn = useSyncExternalStore(onAuth, loggedIn)
-  const p = usePlayer()
-  const d = useDeck()
-  if (looking) return null
-  const box: React.CSSProperties = { position: 'fixed', left: '50%', bottom: 84, transform: 'translateX(-50%)', font: "700 18px 'Gaegu', 'Nunito', cursive", color: '#fff4e6', zIndex: 20, textAlign: 'center', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }
-  if (!isIn)
-    return (
-      <button onClick={login} style={{ ...box, background: '#2b2538', border: '2px solid #fff4e6', borderRadius: 999, padding: '6px 18px', cursor: 'pointer', textShadow: 'none' }}>
-        ♪ her own records, with sound (log in with Spotify)
-      </button>
-    )
-  if (p.error) return <div style={box}>{p.error}</div>
-  if (d.on && p.track && !p.paused) return <div style={box}>♪ {p.track.name} · {p.track.artists.map((a) => a.name).join(', ')}</div>
-  return null
-}
-
 export function TurntableStage() {
-  const isIn = useSyncExternalStore(onAuth, loggedIn)
-  const [records, setRecords] = useState<Pressing[]>(DEMO)
-  useEffect(() => {
-    if (isIn) pressSaved(12).then((r) => r.length && setRecords(r), console.error)
-  }, [isIn])
+  useFillCrates()
   return (
     <>
-      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 5, far: 20000, position: [60, 640, 900] }}>
-        <Scene records={records} />
-        <ToyControls target={[40, 60, 0]} minDistance={150} maxDistance={4000} maxPolarAngle={Math.PI / 2 - 0.05} />
+      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 5, far: 20000, position: [300, 900, 1500] }}>
+        <Scene />
+        <ToyControls target={[300, 60, 0]} minDistance={150} maxDistance={5000} maxPolarAngle={Math.PI / 2 - 0.05} />
       </Canvas>
-      <Status />
-      <About />
+      <RecordsOverlay />
     </>
   )
 }

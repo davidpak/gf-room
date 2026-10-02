@@ -3,7 +3,8 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Plane, Vector3, type Group } from 'three'
 import { sdk } from '../../lib/spotify/player'
 import { getDeck, live, now, press, setDeck, sideUp, useDeck } from './deck'
-import { EW, angleFor, deckY, stylusAt } from './victrola'
+import { EW, angleFor, deckY, platterTop, stylusAt } from './victrola'
+import { spindle } from './Loose'
 import { Eastwood } from './Eastwood'
 import { bandStarts, drop, lift, needle, tick } from './play'
 import { cancelChange, changing, sideEnded, sideFrom, sideIndex, turnTo } from './changer'
@@ -179,6 +180,8 @@ export function Turntable() {
   return (
     <group ref={root}>
       <Driver />
+      {/* (where the spindle is: a loose record let go near it goes on: ./Loose) */}
+      <object3D ref={(o) => void (spindle.current = o)} position={[EW.platter.x, platterTop, EW.platter.z]} />
       <Eastwood on={on}>
         {d.on && art && S && (
           <Flip key={`${d.on.p.uri}/${d.on.disc}`} face={d.on.face} t={discThick(S)} r={S.r}>
