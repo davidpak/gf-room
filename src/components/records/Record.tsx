@@ -111,7 +111,7 @@ function face(S: { r: number; hole: number; label: number }, under: boolean) {
       const x = r * Math.cos(th)
       const y = r * Math.sin(th)
       pos.push(x, y, z)
-      uv.push(under ? 1 - (x / S.r + 1) / 2 : (x / S.r + 1) / 2, (y / S.r + 1) / 2)
+      uv.push((x / S.r + 1) / 2, (y / S.r + 1) / 2)
     }
   })
   for (let j = 0; j < radii.length - 1; j++)
@@ -124,7 +124,7 @@ function face(S: { r: number; hole: number; label: number }, under: boolean) {
   g.setAttribute('position', new Float32BufferAttribute(pos, 3))
   g.setAttribute('uv', new Float32BufferAttribute(uv, 2))
   g.setIndex(idx)
-  // (up for the top; the face under turned over the other way: its picture read the right way round from below)
+  // (up for the top; for the face under, turned over the other way: seen from below, its picture reads the right way)
   g.rotateX(under ? Math.PI / 2 : -Math.PI / 2)
   g.computeVertexNormals()
   return g

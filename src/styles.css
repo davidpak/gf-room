@@ -117,3 +117,8 @@ body {
 .overlay[hidden] {
   display: none;
 }
+
+/* going through the records (../components/records/browse): the page's title and hint step aside */
+body.browsing .overlay {
+  display: none;
+}

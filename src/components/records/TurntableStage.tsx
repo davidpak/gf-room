@@ -1,10 +1,11 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { useThree, type ThreeEvent } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { PCFSoftShadowMap, Vector3 } from 'three'
 import { Canvas } from '../../lib/render/Canvas'
 import { loggedIn, login, onAuth } from '../../lib/spotify/auth'
 import { usePlayer } from '../../lib/spotify/player'
 import { CheckSheet } from '../check/CheckSheet'
+import { LookCamera } from '../stage/LookCamera'
 import { ToyControls } from '../stage/ToyControls'
 import { DEMO, pressSaved } from './library'
 import { getDeck, setDeck, useDeck } from './deck'
@@ -14,14 +15,14 @@ import { Light } from './Light'
 import { lift, needle } from './play'
 import { cancelChange } from './changer'
 import { Crate } from './Crate'
-import { Showcase, showRecord, usePicked } from './Showcase'
+import { browseRefs, getBrowse, leaveCrate, openCrate, takeOut, useBrowse } from './browse'
 import { Turntable } from './Turntable'
 import { type Pressing } from './vinyl'
 
 /**
  * The record player on its own (gallery first): the Victrola Eastwood, full size, in the Quad's evening light, her
- * records in a crate beside it (her saved albums on Spotify when she's logged in). Click a record to take it out and
- * look at it (./Showcase); click its record to put it on.
+ * records in a crate beside it (her saved albums on Spotify when she's logged in). Click the crate to go through it
+ * (./browse: A / D, Enter), take a record out, click its record to put it on.
  * &check: the sheet (the manual's drawing and Victrola's photos beside it, and the checks).
  */
 /** a record onto the platter, its first side up (the one there, if any, back in its jacket) */
@@ -30,29 +31,34 @@ function putOn(p: Pressing, disc = 0) {
   lift()
   needle.runout = false
   needle.ended = false
-  showRecord(null)
+  leaveCrate()
   setDeck({ on: { p, disc, face: 0 }, arm: { a: getDeck().arm.a, down: false }, lid: true })
 }
 
 function Scene({ records }: { records: Pressing[] }) {
   const d = useDeck()
   const get = useThree((s) => s.get)
-  if (import.meta.env.DEV) Object.assign(window, { __r3f: get, __deck: { getDeck, setDeck, needle } })
+  if (import.meta.env.DEV) Object.assign(window, { __r3f: get, __deck: { getDeck, setDeck, needle }, __browse: { openCrate, takeOut, getBrowse } })
   return (
     <>
       <Light extent={900} />
       <Turntable />
       <group position={[470, 0, -40]} rotation={[0, -0.35, 0]}>
-        <Crate records={records} onPick={showRecord} playing={d.on?.p.uri} />
+        <Crate records={records} onPut={putOn} playing={d.on?.p.uri} />
       </group>
-      <Showcase onPut={putOn} />
+      <LookCamera />
     </>
   )
 }
 
-/** what's written about the record taken out to look at: the album, how it's pressed, what to do */
+/** what's written about the record up (going through the crate) or out: the album, how it's pressed, what to do */
 function About() {
-  const p = usePicked()
+  const b = useBrowse()
+  // (the page's own title and hint step aside meanwhile)
+  useEffect(() => {
+    document.body.classList.toggle('browsing', b.mode !== 'none')
+  }, [b.mode])
+  const p = b.mode !== 'none' ? browseRefs.records[b.i] : null
   if (!p) return null
   const discs = p.sides.length / 2
   const songs = p.sides.reduce((n, x) => n + x.bands.length, 0)
@@ -66,19 +72,24 @@ function About() {
       <div style={t}>
         {p.artist}
         {p.year ? ` · ${p.year.slice(0, 4)}` : ''}
+        {b.mode === 'crate' ? `  ·  ${b.i + 1} of ${browseRefs.records.length}` : ''}
       </div>
-      <div style={{ ...t, fontWeight: 400, opacity: 0.85 }}>
-        {pressed} · {songs} songs · {min} min
-      </div>
+      {b.mode === 'out' && (
+        <div style={{ ...t, fontWeight: 400, opacity: 0.85 }}>
+          {pressed} · {songs} songs · {min} min
+        </div>
+      )}
       <div style={{ ...t, fontWeight: 400, fontSize: 16, opacity: 0.75, marginTop: 6 }}>
-        click {discs > 1 ? 'a record' : 'the record'} to put it on · click anywhere else (or Esc) to put it back
+        {b.mode === 'crate'
+          ? 'A / D or ← → to flip through · Enter (or click it) to take it out · Esc to step back'
+          : `click ${discs > 1 ? 'a record' : 'the record'} to put it on · A / D for the next one · Esc to put it back`}
       </div>
     </div>
   )
 }
 
 function Status() {
-  const looking = usePicked()
+  const looking = useBrowse().mode !== 'none'
   const isIn = useSyncExternalStore(onAuth, loggedIn)
   const p = usePlayer()
   const d = useDeck()
