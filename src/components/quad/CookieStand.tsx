@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { Holdable } from '../../lib/physics/Holdable'
 import { Prompts, type PromptItem } from '../prompt/Prompts'
 import { bruno } from './bruno'
+import { StringLights } from './NightLights'
 import { addCookie, useCookieCount } from './cookies'
 import { clickSpot, frameAround, getLook, type Spot } from './look'
 import { onReset } from './reset'
@@ -1141,6 +1142,8 @@ export function CookieStand({ car }: { car: { current: CarState } }) {
             </group>
           ))}
           <mesh geometry={roof} material={tex.roof} castShadow receiveShadow />
+          {/* string lights round its eaves, under the valance's hem (warm at night) */}
+          <StringLights hx={half + CANOPY.over - 30} hz={half + CANOPY.over - 30} y={eave - 290} skip={[2]} pool={11} />
           {[0, 1, 2, 3].map((i) => {
             const a = (i * Math.PI) / 2
             const h = half + CANOPY.over

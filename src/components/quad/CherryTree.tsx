@@ -320,3 +320,12 @@ function buildTree(model: number) {
   blossom.setIndex(ci)
   return { wood, blossom }
 }
+
+/** where a variant's trunk tops out (its lean as built: the same first draw), and its dome's size: for what hangs in
+ *  it (./NightLights' fairy lights). In the tree's own frame (before its place, turn and scale). */
+export function treeFrame(model: number) {
+  const V = VARIANTS[model % VARIANTS.length]
+  const la = rng(V.seed)() * Math.PI * 2
+  const lean = new Vector3(Math.cos(la), 0, Math.sin(la)).multiplyScalar(Math.tan(V.lean))
+  return { top: new Vector3(lean.x * V.h, V.h, lean.z * V.h), lean, w: V.w, tall: V.tall }
+}
