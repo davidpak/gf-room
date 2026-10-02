@@ -58,7 +58,9 @@ function Driver() {
   return null
 }
 
-export function Turntable() {
+/** `gate`: asked before any of its buttons, knobs, arm or lid work (true: they don't: on the Quad, only once it's
+ *  looked at closely) */
+export function Turntable({ gate }: { gate?: () => boolean } = {}) {
   const d = useDeck()
   const art = useArt(d.on?.p ?? null)
   const { camera, gl, raycaster, pointer } = useThree()
@@ -150,6 +152,8 @@ export function Turntable() {
       needle.runout = false
     },
   }
+  // (each part asks the gate first)
+  const gated = Object.fromEntries(Object.entries(on).map(([k, f]) => [k, (e: ThreeEvent<PointerEvent>) => (gate?.() ? undefined : (f as (e: ThreeEvent<PointerEvent>) => void)(e))])) as typeof on
   function skip(by: number) {
     press(by < 0 ? 'prev' : 'next')
     const s = getDeck()
@@ -182,7 +186,7 @@ export function Turntable() {
       <Driver />
       {/* (where the spindle is: a loose record let go near it goes on: ./Loose) */}
       <object3D ref={(o) => void (spindle.current = o)} position={[EW.platter.x, platterTop, EW.platter.z]} />
-      <Eastwood on={on}>
+      <Eastwood on={gated}>
         {d.on && art && S && (
           <Flip key={`${d.on.p.uri}/${d.on.disc}`} face={d.on.face} t={discThick(S)} r={S.r}>
             <Disc p={d.on.p} art={art} disc={d.on.disc} />

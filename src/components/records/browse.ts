@@ -26,6 +26,11 @@ const set = (o: Partial<Browse>) => {
 export const getBrowse = () => s
 export const useBrowse = () => useSyncExternalStore((f) => (subs.add(f), () => void subs.delete(f)), getBrowse)
 
+/** the spot above the crates, if they're part of one (the Quad's record stand): Esc from a crate, and taking a
+ *  record out, go back to it rather than to the car */
+let parent: Spot | null = null
+export const setBrowseParent = (p: Spot | null) => void (parent = p)
+
 /** each crate's place in the world, and where a record taken out of it stands (for framing them) */
 export const crateRefs = new Map<CrateId, { crate: Object3D | null; out: Object3D | null }>()
 const records = (): Pressing[] => (s.crate ? getShelf().crates[s.crate] : []) ?? []
@@ -57,7 +62,16 @@ export const crateSpot: Spot = {
     frameAround(pos, at, aspect, _c, 600 * k, 660 * k, toward(o, 0.55))
     lower(pos, at, 300 * k)
   },
-  keys: (e) => step(e) || (e.key === 'Enter' || e.key === ' ' ? (takeOut(s.i), true) : false),
+  keys: (e) => {
+    if (e.key === 'Escape' && parent) {
+      leaveCrate()
+      return true
+    }
+    return step(e) || (e.key === 'Enter' || e.key === ' ' ? (takeOut(s.i), true) : false)
+  },
+  get back() {
+    return parent ? 'back to the stand' : undefined
+  },
 }
 export const recordSpot: Spot = {
   key: 'record',
@@ -111,7 +125,7 @@ export function backToCrate() {
 export function leaveCrate() {
   set({ mode: 'none' })
   const k = getLook()?.spot.key
-  if (k === 'crate' || k === 'record') lookAt(null)
+  if (k === 'crate' || k === 'record') lookAt(parent ? { spot: parent, i: null } : null)
 }
 /** the look's gone elsewhere (Esc from the crate, a click on nothing, the car driven off): the crate let go too */
 export function lookMoved() {

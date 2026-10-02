@@ -220,9 +220,10 @@ function Record({ p, z, pose, onPick, onTake }: { p: Pressing; z: number; pose: 
 /**
  * A crate of records: `id` which (./library), `label` its name on its card. `onTake` a record clicked out of its
  * jacket (the pressing, which disc, the disc's place in the world). `onCard`: its card clicked (the Dig crate: what
- * to look for); `empty` written small on the card while it's empty.
+ * to look for); `empty` written small on the card while it's empty. `gate`: asked first on a click (true: the click's
+ * taken, the crate left alone: on the Quad, the first click on the stand takes in the whole stand).
  */
-export function Crate({ id, label, onTake, onCard, empty = '' }: { id: CrateId; label: string; onTake: (p: Pressing, disc: number, at: Object3D) => void; onCard?: () => void; empty?: string }) {
+export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: CrateId; label: string; onTake: (p: Pressing, disc: number, at: Object3D) => void; onCard?: () => void; empty?: string; gate?: () => boolean }) {
   const records = useShelf().crates[id] ?? []
   const m = useMemo(() => bruno({ map: pine(), shade: C.colors.pineShade }), [])
   const mEnd = useMemo(() => {
@@ -259,6 +260,7 @@ export function Crate({ id, label, onTake, onCard, empty = '' }: { id: CrateId; 
   const gap = Math.min(28, (C.in.d - 50) / Math.max(1, n - 1))
   const open = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
+    if (gate?.()) return
     if (!records.length) return onCard?.()
     if (!mine) openCrate(id)
   }
@@ -280,6 +282,7 @@ export function Crate({ id, label, onTake, onCard, empty = '' }: { id: CrateId; 
         receiveShadow
         onClick={(e) => {
           e.stopPropagation()
+          if (gate?.()) return
           if (onCard) onCard()
           else if (records.length && !mine) openCrate(id)
         }}
@@ -296,7 +299,7 @@ export function Crate({ id, label, onTake, onCard, empty = '' }: { id: CrateId; 
               p={p}
               z={C.in.d / 2 - 30 - i * gap}
               pose={pose}
-              onPick={() => (!mine ? openCrate(id, i) : b.mode === 'crate' && b.i === i ? takeOut(i) : openCrate(id, i))}
+              onPick={() => gate?.() || (!mine ? openCrate(id, i) : b.mode === 'crate' && b.i === i ? takeOut(i) : openCrate(id, i))}
               onTake={(disc, at) => onTake(p, disc, at)}
             />
           </group>

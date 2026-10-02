@@ -60,28 +60,29 @@ const useChoice = () => useSyncExternalStore((f) => (csubs.add(f), () => void cs
 if (import.meta.env.DEV && typeof window !== 'undefined') Object.assign(window, { __cookies: { choose } }) // (for trying them from the console)
 
 // ---- materials
-const FRAME = bruno({ color: '#d7d9df', shade: '#9794ad', sheen: 0.3 })
-const WOOD = bruno({ color: '#c99a68', shade: '#927796' })
-const HINGE = bruno({ color: '#9a9ca6', shade: '#6d6a86', sheen: 0.4 })
+export const FRAME = bruno({ color: '#d7d9df', shade: '#9794ad', sheen: 0.3 })
+export const WOOD = bruno({ color: '#c99a68', shade: '#927796' })
+export const HINGE = bruno({ color: '#9a9ca6', shade: '#6d6a86', sheen: 0.4 })
 const MINT = bruno({ color: '#a9dcc8', shade: '#7f8fb8', sheen: 0.35 })
 const CREAM = bruno({ color: '#fbf1e2', shade: '#b5a6c6' })
 const CHROME = bruno({ color: '#e4e6ec', shade: '#a19eb8', sheen: 0.5 })
-const DARK = bruno({ color: '#2c2830' })
+export const DARK = bruno({ color: '#2c2830' })
 const LAMP = bruno({ color: '#ff6a5c', emissive: '#ff4a3c', emissiveIntensity: 0.8, warm: 0 })
-const RBOX = new RoundedBoxGeometry(1, 1, 1, 2, 0.2)
-const TUBE = new CylinderGeometry(1, 1, 1, 10)
+export const RBOX = new RoundedBoxGeometry(1, 1, 1, 2, 0.2)
+export const TUBE = new CylinderGeometry(1, 1, 1, 10)
 const mats = new Map<string, Material>()
 const matOf = (c: string) => mats.get(c) ?? (mats.set(c, bruno({ color: c, shade: '#8f7a9c' })), mats.get(c)!)
 
 /** a rounded box, real mm */
-function Block({ size, at, m, rot }: { size: [number, number, number]; at: [number, number, number]; m: Material; rot?: [number, number, number] }) {
+export function Block({ size, at, m, rot }: { size: [number, number, number]; at: [number, number, number]; m: Material; rot?: [number, number, number] }) {
   return <mesh geometry={RBOX} material={m} position={at} rotation={rot} scale={size} castShadow receiveShadow />
 }
 
 // ---- painted: the canopy's stripes (and its scalloped valance), the gingham, the chalkboards, the plank
 const PINK = '#f5b3c6'
 const CREAMY = '#fdf2e4'
-function stripes(scallop: boolean) {
+/** the canopy's cloth: stripes of two colours (its valance with a scalloped hem: `scallop`) */
+export function stripes(scallop: boolean, one = PINK, two = CREAMY) {
   const W = 512
   const H = scallop ? 96 : 512
   const c = document.createElement('canvas')
@@ -89,7 +90,7 @@ function stripes(scallop: boolean) {
   c.height = H
   const g = c.getContext('2d')!
   for (let i = 0; i < 8; i++) {
-    g.fillStyle = i % 2 ? CREAMY : PINK
+    g.fillStyle = i % 2 ? two : one
     g.fillRect((i * W) / 8, 0, W / 8, H)
   }
   const map = new CanvasTexture(c)
@@ -130,9 +131,9 @@ function gingham() {
   t.wrapS = t.wrapT = RepeatWrapping
   return t
 }
-const HAND = "'Gaegu', 'Nunito', cursive"
+export const HAND = "'Gaegu', 'Nunito', cursive"
 /** a chalkboard's face: the green-black slate and its chalk dust; `draw` writes on it */
-function slate(W: number, H: number, draw: (g: CanvasRenderingContext2D) => void, canvas?: HTMLCanvasElement) {
+export function slate(W: number, H: number, draw: (g: CanvasRenderingContext2D) => void, canvas?: HTMLCanvasElement) {
   const c = canvas ?? document.createElement('canvas')
   c.width = W
   c.height = H
@@ -184,7 +185,7 @@ function slate(W: number, H: number, draw: (g: CanvasRenderingContext2D) => void
   return c
 }
 /** a little chalk star (four points) */
-function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, colour = '#fbf7ef') {
+export function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, colour = '#fbf7ef') {
   g.fillStyle = colour
   g.beginPath()
   g.moveTo(x, y - r)

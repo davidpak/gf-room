@@ -1,10 +1,10 @@
-import { useMemo, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { CuboidCollider } from '@react-three/rapier'
+import { CuboidCollider, CylinderCollider } from '@react-three/rapier'
 import { Quaternion, Vector3, type Group } from 'three'
 import { Static } from '../../lib/render/Static'
 import { Prompts } from '../prompt/Prompts'
-import { useBrowse } from '../records/browse'
+import { setBrowseParent, useBrowse } from '../records/browse'
 import { Crate } from '../records/Crate'
 import { CRATES, type CrateId } from '../records/library'
 import { LooseRecords, takeLoose } from '../records/Loose'
@@ -13,9 +13,11 @@ import { CRATE, STAND, shelfTop } from '../records/rack'
 import { useFillCrates } from '../records/shelf'
 import { Stand } from '../records/Stand'
 import { Turntable } from '../records/Turntable'
-import { EW } from '../records/victrola'
+import { EW, platterTop } from '../records/victrola'
 import { LiveProp, liveBody, setPrompt } from './Physical'
-import { clickSpot, frameAround, type Spot } from './look'
+import { clickSpot, frameAround, getLook, lookAt, type Spot } from './look'
+import { AFrame } from './CookieStand'
+import { CANOPY, MusicCanopy, MusicRug, NowPlayingEasel, Notes, useSpinningFace } from './MusicDecor'
 import { SET } from './set'
 import type { CarState } from './Car'
 
@@ -25,12 +27,16 @@ import type { CarState } from './Car'
  * the GameCube's toy scale (0.24). The stand and the player loose like everything (the car shoves them, the hand
  * carries them); the crates part of the stand.
  *
+ *   the stand    click any of it: the camera takes in the whole stand (its canopy, its sign, its easel); from there:
  *   the player   click it: the camera comes down over it, its buttons, arm and knobs to hand (../records/Turntable)
  *   a crate      click it: the camera comes in over it; A / D flip through, Enter takes one out (a shelf crate
  *                slides out from under the top first); click a record out of its jacket: it's out, to carry
  *   Dig          its card: what to look for (an artist, an album, a song); or "more by" from a record taken out
  *   a record     carried over the platter and let go, it goes on
+ *   Esc          back a step: from a record to its crate, from a crate or the player to the stand, then the car
  *   R            all of it back as it was (or its prompt, when anything's out of place)
+ * Dressed like the cookie stand (./MusicDecor): a striped canopy with string lights and its name on a plank, a
+ * braided rug, a chalkboard out front saying what's spinning, an easel with the playing record's jacket on it.
  */
 const K = 0.24
 const LAWN = 4
@@ -61,8 +67,36 @@ const _q = new Quaternion()
 const _c = new Vector3()
 const _n = new Vector3()
 
+/** the chalkboard out front, saying what's spinning (its face kept up to date) */
+function SpinningSign() {
+  const face = useSpinningFace()
+  return <AFrame w={SIGN.w} len={SIGN.len} lean={SIGN.lean} face={face} />
+}
+const SIGN = { w: 760, len: 1100, lean: 0.22, x: -1500, z: 980, rot: 0.32 }
+const EASEL_AT = { x: 1000, z: 430, rot: -0.35 }
+
 export function QuadMusic({ car }: { car: { current: CarState } }) {
   useFillCrates()
+  // ---- looking: the whole stand first; from there, the player or a crate; Esc back a step at a time
+  const standSpot = useMemo<Spot>(
+    () => ({
+      key: 'music',
+      items: [],
+      frame: (pos, look, aspect) => {
+        const b = liveBody('musicstand')
+        if (!b) return
+        const t = b.translation()
+        const r = b.rotation()
+        _q.set(r.x, r.y, r.z, r.w)
+        // (the canopy and its plank, the sign out front, the easel, all in; a little from the left, a little above)
+        _c.set(-250, 1150, 350).multiplyScalar(K).applyQuaternion(_q).add(t as Vector3)
+        _n.set(-0.18, 0.3, 1).normalize().applyQuaternion(_q)
+        frameAround(pos, look, aspect, _c, 3600 * K, 3000 * K, _n)
+      },
+      hint: 'click the record player, or a crate to go through it',
+    }),
+    [],
+  )
   const playerSpot = useMemo<Spot>(
     () => ({
       key: 'turntable',
@@ -80,9 +114,29 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
         frameAround(pos, look, aspect, _c, 470 * K, 520 * K, _n)
       },
       hint: 'POWER, then drag the arm over a record · CUE lifts it · drag the big knob for volume',
+      back: 'back to the stand',
+      keys: (e) => {
+        if (e.key !== 'Escape') return false
+        lookAt({ spot: standSpot, i: null })
+        return true
+      },
     }),
-    [],
+    [standSpot],
   )
+  useEffect(() => {
+    setBrowseParent(standSpot)
+    return () => setBrowseParent(null)
+  }, [standSpot])
+  /** a click on any of it from afar: the whole stand first (true: the click's taken) */
+  const first = () => {
+    if (getLook()) return false
+    clickSpot(standSpot)
+    return true
+  }
+  const toStand = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation()
+    clickSpot(standSpot)
+  }
   const prompt = useMemo(() => setPrompt('music', 'Reset Record Stand', (o) => o.copy(world(0, STAND.h + 700, 0))), [])
   const home = (lx: number, ly: number, lz: number, rot = 0) => {
     const w = world(lx, ly, lz)
@@ -90,19 +144,24 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
   }
   const legX = STAND.w / 2 - STAND.leg.inset - STAND.leg.s / 2
   const crate = (id: CrateId) => (
-    <Crate id={id} label={labelOf(id)} onTake={takeLoose} onCard={id === 'dig' ? () => askDig() : undefined} empty={id === 'dig' ? 'click to ask for anything' : ''} />
+    <Crate id={id} label={labelOf(id)} onTake={takeLoose} onCard={id === 'dig' ? () => askDig() : undefined} empty={id === 'dig' ? 'click to ask for anything' : ''} gate={first} />
   )
+  // (the player: from afar, the stand; from the stand, the player; looked at, its own parts work)
   const toPlayer = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
-    clickSpot(playerSpot)
+    if (!getLook()) clickSpot(standSpot)
+    else if (getLook()?.spot.key !== 'turntable') lookAt({ spot: playerSpot, i: null })
   }
+  const notClose = () => getLook()?.spot.key !== 'turntable'
   return (
     <>
       <LiveProp id="musicstand" label="" set="music" at={home(0, 0, 0)} car={car} lift={60} feelPts={[-1, 0, 1].map((u) => [u * STAND.w * 0.33 * K, 0] as [number, number])} feelR={S(STAND.d)}>
         <group scale={K}>
-          <Static>
-            <Stand />
-          </Static>
+          <group onClick={toStand}>
+            <Static>
+              <Stand />
+            </Static>
+          </group>
           {/* the crates: three on the top beside the player, four on the shelf */}
           {TOP.map((id, i) => (
             <group key={id} position={[STAND.topCrates[i], STAND.h, 0]}>
@@ -127,9 +186,46 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
       </LiveProp>
       <LiveProp id="musicplayer" label="" set="music" at={home(STAND.player.x, STAND.h, STAND.player.z)} car={car} lift={40} feelPts={[[0, 0]]} feelR={S(EW.w)}>
         <group scale={K} onClick={toPlayer}>
-          <Turntable />
+          <Turntable gate={notClose} />
+          {/* (notes drift up off the platter while a record plays) */}
+          <Notes from={[EW.platter.x, platterTop, EW.platter.z]} />
         </group>
         <CuboidCollider args={[S(EW.w), S(EW.cab), S(EW.d)]} position={[0, S(EW.cab), 0]} mass={EW.mass} friction={0.8} />
+      </LiveProp>
+      {/* the canopy over it all, the rug under, the easel with the jacket of what's on */}
+      <group position={[A.x, LAWN, A.z]} rotation={[0, A.rot, 0]} scale={K} onClick={toStand}>
+        <Static>
+          <MusicRug />
+        </Static>
+      </group>
+      <LiveProp id="musiccanopy" label="" set="music" at={home(0, 0, 0)} car={car} lift={0} feelPts={[-1, 1].flatMap((sx) => [-1, 1].map((sz) => [sx * CANOPY.hx * K, sz * CANOPY.hz * K] as [number, number]))} feelR={14}>
+        <group scale={K} onClick={toStand}>
+          <Static>
+            <MusicCanopy />
+          </Static>
+        </group>
+        {[-1, 1].map((sx) =>
+          [-1, 1].map((sz) => (
+            <group key={sx * 3 + sz}>
+              <CylinderCollider args={[(CANOPY.eave / 2) * K, 30 * K]} position={[sx * CANOPY.hx * K, (CANOPY.eave / 2) * K, sz * CANOPY.hz * K]} mass={0.3} friction={0.8} />
+              <CuboidCollider args={[60 * K, 10 * K, 60 * K]} position={[sx * CANOPY.hx * K, 30 * K, sz * CANOPY.hz * K]} mass={1} friction={0.9} />
+            </group>
+          )),
+        )}
+        <CuboidCollider args={[(CANOPY.hx + CANOPY.over) * K, 30 * K, (CANOPY.hz + CANOPY.over) * K]} position={[0, (CANOPY.eave + 20) * K, 0]} mass={1.2} friction={0.6} />
+      </LiveProp>
+      <LiveProp id="musiceasel" label="" set="music" at={home(EASEL_AT.x, 0, EASEL_AT.z, EASEL_AT.rot)} car={car} lift={60} feelPts={[[0, 0]]} feelR={S(400)}>
+        <group scale={K} onClick={toStand}>
+          <NowPlayingEasel />
+        </group>
+        <CuboidCollider args={[S(380), S(820), S(260)]} position={[0, S(820), -60 * K]} mass={0.8} friction={0.8} />
+      </LiveProp>
+      <LiveProp id="musicsign" label="" set="music" at={home(SIGN.x, 0, SIGN.z, SIGN.rot)} car={car} lift={(SIGN.len + 200) * K} feelAlong={[-0.3 * SIGN.w * K, 0.3 * SIGN.w * K]} feelR={40}>
+        <group scale={K} onClick={toStand}>
+          <SpinningSign />
+        </group>
+        <CuboidCollider args={[S(SIGN.w), 10 * K, SIGN.len * Math.sin(SIGN.lean) * K]} position={[0, 10 * K, 0]} mass={1} friction={0.8} />
+        <CuboidCollider args={[S(SIGN.w), S(SIGN.len * Math.cos(SIGN.lean)), (SIGN.len * Math.sin(SIGN.lean) * K) / 2]} position={[0, S(SIGN.len * Math.cos(SIGN.lean)), 0]} mass={0.8} friction={0.8} />
       </LiveProp>
       <LooseRecords scale={K} />
       <Prompts items={[prompt]} far={9000} />
