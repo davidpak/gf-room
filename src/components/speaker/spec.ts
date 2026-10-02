@@ -23,7 +23,7 @@
  *          woofer, midrange, port and tweeter sit behind the grille is laid out from the reviews' words; the
  *          foam's depth; radii
  *
- * Its frame: the cabinet's middle at x 0, z 0, its bottom at y 0, its front (the grille) toward +z. `side` -1 / 1:
+ * Its frame: the cabinet's middle at x 0, z 0, its bottom at y 0, its front (the baffle) toward +z. `side` -1 / 1:
  * left / right of a pair, mirror images (the tweeter toward the middle) [E].
  */
 export const L100 = {
@@ -34,19 +34,9 @@ export const L100 = {
   edge: 6.5, // [P] the walnut seen round the front (the sides', top's, bottom's front edges)
   round: 3, // [E] its corners' radius
   // (the black baffle flush with the walnut's front edges; the grille snaps on over it [HTH])
-  /** the grille: a black-stained frame (it snaps on: [HTH]) holding the Quadrex foam */
-  grille: {
-    cols: 10, // [P]
-    rows: 17, // [P]
-    pitch: 35.8, // [P]
-    groove: 8, // [P] (the block's face 27.8)
-    base: 7, // [E] the foam's sheet behind the blocks
-    relief: 13, // [E] how far the blocks stand out of it
-    frame: 22, // [E] the frame's depth (wood, stained black): the woofer's surround clear behind the foam
-    badge: { col: 1, row: 15, w: 26, h: 21 }, // [P] (col / row from 0: from the left, from the top)
-    colors: { black: '#26232b', orange: '#e2763a', blue: '#2f5f97' }, // [JBL]: the three it comes in
-  },
-  /** behind the grille: the drivers, the port, the attenuators (y up from the bottom, x from the middle) */
+  badge: { w: 40, h: 17, y: 30 }, // [E] the JBL badge on the baffle, under the woofer
+  // (no grille: the Quadrex foam it comes with is left off, the drivers on show)
+  /** the drivers, the port, the attenuators (y up from the bottom, x from the middle) */
   woofer: { r: 150, cone: 122, dust: 50, x: 0, y: 205 }, // [JBL] 12" (300); where: [E] centred, low
   mid: { r: 68, cone: 52, dust: 18, x: -78, y: 452 }, // [JBL] 5¼" (130 cone); [EC] beside the port; where: [E]
   port: { r: 63.5, x: 78, y: 452, flare: 8 }, // [HTH] 5" front port; [EC] beside the midrange; where: [E]
@@ -89,14 +79,9 @@ export type Check = { what: string; value: string; ok: boolean }
 export function checkSpeaker(): Check[] {
   const out: Check[] = []
   const c = (what: string, value: string, ok: boolean) => out.push({ what, value, ok })
-  const G = L100.grille
-  c('cabinet 636.6 × 389.7 × 371.5 [JBL]', `${L100.h} × ${L100.w} × ${L100.d}`, L100.h === 636.6 && L100.w === 389.7 && L100.d === 371.5)
-  const gw = G.cols * G.pitch
-  const gh = G.rows * G.pitch
-  c('the grille’s blocks fill the front, its margins as measured [P]', `${gw.toFixed(0)} × ${gh.toFixed(0)}; margins ${((L100.w - gw) / 2).toFixed(1)} / ${((L100.h - gh) / 2).toFixed(1)}`, Math.abs((L100.w - gw) / 2 - 15.9) < 1 && Math.abs((L100.h - gh) / 2 - 13.8) < 1)
-  c('a block’s face 27.8 between 8 grooves [P]', `${G.pitch - G.groove}`, Math.abs(G.pitch - G.groove - 27.8) < 0.2)
-  c('the badge in place of a block, second row from the bottom [P]', `col ${G.badge.col}, row ${G.badge.row}`, G.badge.row === G.rows - 2 && G.badge.w < G.pitch - G.groove + 2)
-  // behind the grille: everything on the baffle, nothing overlapping
+  const B = L100.badge
+  c('the badge under the woofer, on the baffle', `y ${B.y} ± ${B.h / 2}, the woofer's foot at ${L100.woofer.y - L100.woofer.r}`, B.y + B.h / 2 < L100.woofer.y - L100.woofer.r - 2 && B.y - B.h / 2 > L100.edge)
+  // everything on the baffle, nothing overlapping
   const parts = [
     ['woofer', L100.woofer],
     ['mid', L100.mid],

@@ -11,12 +11,8 @@ import { JS120, L100, checkSpeaker } from './spec'
 
 /**
  * The record stand's speakers on their own (gallery first): a pair of JBL L100 Classics on JS-120 stands, mirror
- * images, a speaker's width and a half apart. Click a grille: it comes off and leans against its speaker (again: back
- * on). "play" pumps the cones as a record would. &check: the sheet (JBL's photo beside the same views, the checks).
- * &grille=orange|black|blue: the real colours (the toy's pastel blue otherwise).
+ * images, a speaker's width and a half apart. "play" pumps the cones as a record would. &check: the sheet (JBL's photo beside the same views, the checks).
  */
-const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams()
-const COLOR = params.get('grille') ? L100.grille.colors[params.get('grille') as 'orange' | 'black' | 'blue'] ?? '#7d9ee0' : '#7d9ee0'
 
 function Scene() {
   const get = useThree((s) => s.get)
@@ -26,7 +22,7 @@ function Scene() {
       <Light extent={900} />
       {[-1, 1].map((s) => (
         <group key={s} position={[s * 330, 0, 0]}>
-          <SpeakerOnStand side={s as -1 | 1} color={COLOR} />
+          <SpeakerOnStand side={s as -1 | 1} />
         </group>
       ))}
     </>
@@ -54,12 +50,12 @@ export function SpeakerStage() {
   )
 }
 
-/** one, still, grille on, for the sheet */
+/** one, still, for the sheet */
 function One() {
   return (
     <>
       <Light extent={700} />
-      <SpeakerOnStand color={L100.grille.colors.black} interactive={false} />
+      <SpeakerOnStand />
     </>
   )
 }
@@ -70,15 +66,15 @@ export function SpeakerCheck() {
     <CheckSheet
       scene={() => <One />}
       views={[
-        { kind: 'image', label: 'JBL’s photo: the three grilles on JS-120s (the black one straight on)', src: '/reference/jbl-l100-classic-trio.jpg' },
-        { kind: 'ortho', label: 'front (black foam, as the middle one)', from: new Vector3(0, 420, 3000), at: mid, zoom: 0.45 },
+        { kind: 'image', label: 'JBL’s photo (grilles on: ours is left bare) on JS-120s', src: '/reference/jbl-l100-classic-trio.jpg' },
+        { kind: 'ortho', label: 'front', from: new Vector3(0, 420, 3000), at: mid, zoom: 0.45 },
         { kind: 'ortho', label: 'side (7° back on the stand)', from: new Vector3(3000, 420, 0), at: mid, zoom: 0.45 },
         { kind: 'image', label: 'JBL’s JS-120 from the side (the uprights at the back)', src: '/reference/jbl-js120-side.jpg' },
         { kind: 'hero', label: 'as in JBL’s photo (drag)', position: [-700, 650, 1500], target: [0, 400, 0], fov: 30 },
         {
           kind: 'text',
           label: 'spec (mm) and its check',
-          text: `JBL L100 Classic  ${L100.h} × ${L100.w} × ${L100.d}, ${L100.mass} kg; Quadrex ${L100.grille.cols} × ${L100.grille.rows} at ${L100.grille.pitch}
+          text: `JBL L100 Classic  ${L100.h} × ${L100.w} × ${L100.d}, ${L100.mass} kg; drivers 12" · 5¼" · 1", port 5"
 JS-120  ${JS120.w} × ${JS120.h} × ${JS120.d}; the speaker's bottom ${JS120.front} at the front, ${JS120.back} at the back (7°)
 
 ${results.map((r) => `${r.ok ? '✓' : '✗'} ${r.what}: ${r.value}`).join('\n')}`,
