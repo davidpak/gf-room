@@ -51,12 +51,12 @@ const DESK_CORD = 950
 const DESK_PLAN: [number, number][] = [[340, -305]]
 /**
  * The charger's cable on the desk: out of its top, over its face toward the lamp's left (away from
- * the back corner), across the base and off it, then a loose loop round toward the middle and out
+ * the back corner), across the base and off it, then a loose loop
  * toward the middle of the desk. (x, z) steps in the lamp's frame, left being -x.
  */
 const CHARGER_LOOP: [number, number][] = [[-14, 10], [-85, 10], [-165, 100], [-185, 220], [-145, 340], [-65, 400], [15, 420]]
 /**
- * Plugged into her laptop: the head as above (off the lamp's base), then behind the laptop
+ * Plugged into her laptop: the head as above (off the lamp's base), then
  * close behind the laptop, round its back left corner and into its back port from the left. (x, z)
  * in the desktop's frame; the middle ones bow toward the wall as far as the cable's length needs.
  */
