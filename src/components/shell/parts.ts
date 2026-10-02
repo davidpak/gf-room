@@ -10,7 +10,7 @@ const page = <M extends Record<string, unknown>>(load: () => Promise<M>, name: k
 
 export type Part = { title: string; hint: string; stage: Page; check?: Page }
 export const PARTS = {
-  room: { title: "Rina's room", hint: 'drag to orbit · right-drag to pan · scroll to zoom · WASD + Q/E to fly · F to reset · click things', stage: page(() => import('../room/RoomStage'), 'RoomStage'), check: page(() => import('../room/RoomStage'), 'RoomCheck') },
+  room: { title: "Rina's room", hint: 'W A S D to walk · press the wheel and drag to look round · right-drag to step · scroll to step forward / back · shift faster · F back to the door · click things', stage: page(() => import('../room/RoomStage'), 'RoomStage'), check: page(() => import('../room/RoomStage'), 'RoomCheck') },
   quad: { title: 'The Quad', hint: 'drive: W A S D or the arrows · space to brake · R to start over · scroll to zoom', stage: page(() => import('../quad/QuadStage'), 'QuadStage') },
   doll: { title: 'David, crocheted', hint: 'drag to look · he fidgets like a toy (rigged for walking next)', stage: page(() => import('../doll/DollStage'), 'DollStage'), check: page(() => import('../doll/DollStage'), 'DollCheck') },
   closet: { title: 'Closet', hint: 'click a mirror door to slide it · drag to look', stage: page(() => import('../closet/ClosetStage'), 'ClosetStage') },

@@ -15,7 +15,7 @@ import { DeskSetup } from '../desk/DeskSetup'
 import { DESK } from '../desk/spec'
 import { Closet } from '../closet/Closet'
 import { CLOSET } from '../closet/spec'
-import { FreeCamera, VIEW } from './FreeCamera'
+import { FirstPerson, START } from './FirstPerson'
 import { Ambience } from './Ambience'
 import { useCutaway } from './cutaway'
 import { Shell } from './Shell'
@@ -31,8 +31,8 @@ import { ROOM } from './spec'
  *
  *   on it   everything from the desk's page, live (../desk/DeskSetup): the lamp, David crocheted against it,
  *           her laptop and charger, the mints, the tissues, the cords to the outlet on the wall behind
- *   camera  free, like Blender's viewport (./FreeCamera); outside the room, the near walls and the
- *           ceiling cut away and the room floats like a diorama (./Shell, ./cutaway)
+ *   camera  first person (./FirstPerson): standing at eye height, walking about inside the walls (the
+ *           cutaway in ./Shell still works for the check sheet's views from outside)
  *   click   the lamp, the blinds (tilt), the door (swing), the drawers, the closet mirrors, the keypad,
  *           the pillows, everything on the desk...
  *   light   for now the gallery's plain toy light (../stage/ToyLights) and finishing (Effects): the room's
@@ -125,7 +125,7 @@ function Scene({ play = false, onReady }: { play?: boolean; onReady?: () => void
         <Furniture />
         <Ready onReady={onReady} />
       </World>
-      {play && <FreeCamera />}
+      {play && <FirstPerson />}
     </>
   )
 }
@@ -134,13 +134,13 @@ function Scene({ play = false, onReady }: { play?: boolean; onReady?: () => void
 const HERO: [number, number, number] = [-1350, 2200, 1650]
 const TARGET: [number, number, number] = [300, 500, -900]
 
-/** The room as a little diorama with a free camera (./FreeCamera). It fades up once everything has loaded. */
+/** Standing in the room, first person (./FirstPerson). It fades up once everything has loaded. */
 export function RoomStage() {
   const [ready, setReady] = useState(false)
   const onReady = useCallback(() => setReady(true), [])
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <Canvas shadows={{ type: PCFShadowMap }} dpr={1.5} camera={{ position: [...VIEW.position], fov: VIEW.fov, near: 10, far: 60000 }} gl={{ antialias: false }}>
+      <Canvas shadows={{ type: PCFShadowMap }} dpr={1.5} camera={{ position: [...START.position], fov: START.fov, near: 10, far: 15000 }} gl={{ antialias: false }}>
         <Scene play onReady={onReady} />
         <Effects aoRadius={40} />
       </Canvas>
