@@ -14,7 +14,9 @@ import { BALL, ballGeometry, build, dashes, dist, FOLDS, H, KEEL, LAYER, LINE, L
  *   folding    hover it and its folds show, dashed; hover one and it lights, click (a click, not a drag) and the paper
  *              swings over along it, wherever it's lying. The dart's order matters: a fold before its time and the
  *              sheet's crumpled into a ball. Its body changes with it: a sheet (thin, the size of what's folded), a
- *              plane (a slab of wing, a keel under it), a ball
+ *              plane (a slab of wing, a keel under it), a ball. Folded in half, it's turned on its side, the half
+ *              whose wing's next up (as you'd lay it down to fold it); each wing folded down flat over its half, it's
+ *              turned over for the other; both down, they open back out level and it's set upright, a dart
  *   in the air let go of it moving and the air has it:
  *                a plane   lift on the square of its speed along its own up (capped), drag for a 5:1 glide; it turns its
  *                          nose into the wind and rolls its wings level, so however it's let go it straightens out and
@@ -35,16 +37,22 @@ const _u = new Vector3()
 const _w = new Vector3()
 const _q = new Quaternion()
 const UP = new Vector3(0, 1, 0)
+const ALONG = new Vector3(0, 0, 1)
+/** what lies on something settles into it a hair (the solver's soft contact: about this much, in the world's units,
+ *  whatever the scale): the paper's drawn up off its body by as much */
+const SETTLE = 0.3
 
 export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef }: { at: [number, number, number]; rot?: number; color: string; k?: number; /** changed: it's laid back out where it started, flat (the same body: never one the hand might be holding swapped out) */ reset?: number; zoom?: Zoom; bodyRef?: RefObject<RapierRigidBody | null> }) {
   const own = useRef<RapierRigidBody>(null)
   const body = bodyRef ?? own
   const inner = useRef<Group>(null)
-  const { world } = useRapier()
+  const { world, rapier } = useRapier()
   const mat = paperMat(color)
   // the paper: its facets, what's folded, the bends after the flat folds
   const st = useRef({ facets: sheet(W, H), done: [] as number[], bend: null as Bend | null })
-  const anim = useRef<null | { f: Fold; t: number; moving?: Facet[]; stayed?: Facet[]; next?: Facet[]; axis?: { p: Vector3; k: Vector3 } }>(null)
+  const anim = useRef<null | { f: Fold; t: number; open?: boolean; moving?: Facet[]; stayed?: Facet[]; next?: Facet[]; axis?: { p: Vector3; k: Vector3 } }>(null)
+  // turned to lie another way (on a side to fold a wing, upright once it's a dart): from, to, its rise
+  const roll = useRef<null | { t: number; rate: number; q0: Quaternion; q1: Quaternion; p0: Vector3; dy: number; lift: number }>(null)
   const crumple = useRef(0)
   const held = useRef(false)
   const [geo, setGeo] = useState(() => build(st.current.facets, null))
@@ -53,10 +61,12 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
     if (!reset) return
     st.current = { facets: sheet(W, H), done: [], bend: null }
     anim.current = null
+    roll.current = null
     crumple.current = 0
     setGeo(build(st.current.facets, null))
     const b = body.current
     if (!b) return
+    b.setBodyType(rapier.RigidBodyType.Dynamic, true)
     b.setTranslation({ x: at[0], y: at[1], z: at[2] }, true)
     _q.setFromAxisAngle(UP, rot)
     b.setRotation({ x: _q.x, y: _q.y, z: _q.z, w: _q.w }, true)
@@ -85,8 +95,22 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
   const ready = (f: Fold) => f.needs.every((n) => done.includes(n))
   const topRank = () => new Set(st.current.facets.map((f) => f.layer)).size
 
+  /** turned about its own length to `theta` (its heading kept), rising `dy` (and `lift` at the turn's middle, clear
+   *  of what it's on) */
+  const present = (theta: number, dy: number, lift: number, rate = 2.2) => {
+    const b = body.current
+    if (!b || held.current) return
+    const r = b.rotation()
+    const q0 = new Quaternion(r.x, r.y, r.z, r.w)
+    const nose = new Vector3(0, 0, -1).applyQuaternion(q0)
+    const q1 = new Quaternion().setFromAxisAngle(UP, Math.atan2(-nose.x, -nose.z)).multiply(new Quaternion().setFromAxisAngle(ALONG, theta))
+    const t = b.translation()
+    roll.current = { t: 0, rate, q0, q1, p0: new Vector3(t.x, t.y, t.z), dy, lift }
+    b.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
+  }
+
   const doFold = (f: Fold) => {
-    if (anim.current || crumple.current) return
+    if (anim.current || crumple.current || roll.current) return
     if (!ready(f)) {
       crumple.current = 0.001
       crumpleSound()
@@ -131,13 +155,40 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
           setGeo(build(s.facets, s.bend))
         }
       } else if (a.f.bend && s.bend) {
-        s.bend[a.f.bend] = e
+        if (a.open) s.bend.bL = s.bend.bR = 1 - 0.5 * e
+        else s.bend[a.f.bend] = e
         setGeo(build(s.facets, s.bend))
         if (a.t >= 1) {
-          s.done = [...s.done, a.f.id]
           anim.current = null
-          redraw((n) => n + 1)
+          const wing = a.f.bend !== 'a'
+          const other = a.f.bend === 'bL' ? 'bR' : 'bL'
+          if (wing && !a.open && s.bend[other] >= 1) {
+            // both wings down: opened back out level, and set upright
+            anim.current = { f: a.f, t: 0, open: true }
+            present(0, -3.5 * k, 60 * k, 1.3) // (let go only once it's a dart, its body a dart's: slower than the opening)
+          } else {
+            s.done = [...s.done, a.f.id]
+            // in half: on its side, the left half up; a wing down: over, the other half up
+            if (a.f.bend === 'a') present(-Math.PI / 2, 3.5 * k, 8 * k)
+            else if (wing && !a.open) present(other === 'bR' ? Math.PI / 2 : -Math.PI / 2, 0, 60 * k)
+            redraw((n) => n + 1)
+          }
         }
+      }
+    }
+    const ro = roll.current
+    const rb = body.current
+    if (ro && rb) {
+      ro.t = Math.min(1, ro.t + dt * ro.rate)
+      const e = ro.t * ro.t * (3 - 2 * ro.t)
+      rb.setNextKinematicRotation(_q.copy(ro.q0).slerp(ro.q1, e))
+      rb.setNextKinematicTranslation(_v.copy(ro.p0).add(_w.set(0, ro.dy * e + ro.lift * Math.sin(Math.PI * ro.t), 0)))
+      if (ro.t >= 1) {
+        roll.current = null
+        rb.setBodyType(rapier.RigidBodyType.Dynamic, true)
+        rb.setLinvel({ x: 0, y: 0, z: 0 }, true)
+        rb.setAngvel({ x: 0, y: 0, z: 0 }, true)
+        redraw((n) => n + 1) // (its folds show again)
       }
     }
     if (crumple.current > 0 && crumple.current < 1) {
@@ -217,7 +268,7 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
       document.body.style.cursor = 'pointer'
       return
     }
-    if (kind !== 'sheet' || anim.current || held.current) return
+    if (kind !== 'sheet' || anim.current || roll.current || held.current) return
     const p = local(e)
     let f: Fold | null = null
     if (st.current.bend) f = left.find((l) => l.bend === (p.x < 0 ? 'bL' : 'bR')) ?? null
@@ -260,14 +311,16 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
   }
 
   const lines = useMemo(() => {
-    if (kind !== 'sheet' || !(zoom ? zoom.on : near) || anim.current) return []
+    if (kind !== 'sheet' || !(zoom ? zoom.on : near) || anim.current || roll.current) return []
     const rank = topRank()
     return left.map((f) => ({ id: f.id, geo: dashes(f.seg, rank, st.current.bend, f.id === hover ? 1.4 : 0.8) }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, near, hover, geo, left.length, zoom?.on])
+  }, [kind, near, hover, geo, left.length, zoom?.on, !!roll.current])
   const ball = useMemo(ballGeometry, [])
 
   // its body, as it is now
+  const b0 = st.current.bend
+  const wingsDown = !!b0 && (b0.bL > 0 || b0.bR > 0)
   const colliders = useMemo(() => {
     if (kind === 'ball') return <BallCollider key="ball" args={[BALL * 0.85 * k]} position={[0, BALL * k, 0]} mass={0.01} friction={0.8} />
     if (kind === 'plane')
@@ -277,7 +330,13 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
           <CuboidCollider key="keel" args={[3 * k, (KEEL / 2) * k, (H / 2 - 20) * k]} position={[0, (KEEL / 2) * k, 0]} mass={0.004} friction={0.6} />
         </>
       )
-    if (st.current.bend) return <CuboidCollider key="bent" args={[12 * k, (W / 4) * k, (H / 2) * k]} position={[0, (W / 4) * k, 0]} mass={0.01} friction={0.8} /> // (folded in half: its halves standing up off the crease)
+    if (st.current.bend) {
+      // (folded in half: a slab, its halves up off the crease; once a wing's down flat it reaches below the crease too,
+      // lying on its side then)
+      const lo = wingsDown ? 2 * KEEL - W / 2 - 4 : 0
+      const hi = W / 2 + 2
+      return <CuboidCollider key={`bent${wingsDown}`} args={[3.5 * k, ((hi - lo) / 2) * k, (H / 2) * k]} position={[0, ((hi + lo) / 2) * k, 0]} mass={0.01} friction={0.8} />
+    }
     // a sheet: the size of what's folded, its layers' thickness
     let x0 = Infinity
     let x1 = -Infinity
@@ -293,7 +352,7 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
     const t = 1 + topRank() * LAYER
     return <CuboidCollider key={`sheet${done.length}`} args={[((x1 - x0) / 2) * k, (t / 2) * k, ((y1 - y0) / 2) * k]} position={[((x0 + x1) / 2) * k, (t / 2) * k, (-(y0 + y1) / 2) * k]} mass={0.01} friction={0.9} />
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, done.length, k, !!st.current.bend])
+  }, [kind, done.length, k, !!st.current.bend, wingsDown])
 
   const c = crumple.current
   return (
@@ -311,6 +370,10 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
         onGrab: () => {
           held.current = true
           out()
+          if (roll.current) {
+            roll.current = null
+            body.current?.setBodyType(rapier.RigidBodyType.Dynamic, true)
+          }
           if (zoom?.on) zoom.close() // (picked up: back to the car's view, to carry it and throw it from there)
         },
         onRelease: (b) => {
@@ -324,7 +387,7 @@ export function PaperSheet({ at, rot = 0, color, k = 1, reset = 0, zoom, bodyRef
         },
       }}
     >
-      <group ref={inner} scale={k}>
+      <group ref={inner} scale={k} position={[0, SETTLE, 0]}>
         {c < 1 && (
           <group scale={1 - c * 0.85} rotation={[c * 1.3, c * 2, c * 0.7]}>
             <mesh geometry={geo} material={mat} castShadow onPointerMove={over} onPointerOut={out} onClick={click} />

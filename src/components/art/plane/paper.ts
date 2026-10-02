@@ -9,7 +9,9 @@ import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
  * A sheet of paper and its folds, drawn (./PaperSheet holds it, folds it, flies it; ./fold does the folding):
  *
  *   FOLDS      the dart's seven: the two top corners in to the middle, the new slanted edges in to the middle again,
- *              in half (the keel turning down), each wing folded out; each with what must be done before it
+ *              in half (the keel turning down), each wing folded down flat over its half (as paper's folded: on its
+ *              side, then turned over for the other), and last both opened back out level; each with what must be
+ *              done before it
  *   place      where a point of the folded-flat paper is, with the paper bent so far (the keel, the wings)
  *   build      the paper's mesh from its facets (a fold swinging over, if one is)
  *   dashes     a fold's dashed line, lying on the paper's top
@@ -48,7 +50,12 @@ export function paperMat(color: string) {
         g.fillRect(r() * 256, r() * 256, 1 + r() * 2, 1)
       }
     })
-    paperMats.set(color, bruno({ map: t ?? undefined, color: '#ffffff', shade: '#9d93ad', side: DoubleSide }))
+    const m = bruno({ map: t ?? undefined, color: '#ffffff', shade: '#9d93ad', side: DoubleSide })
+    // (wins a tie in depth with what it lies on: it lies a hair over the cloth, and far off that's no depth at all)
+    m.polygonOffset = true
+    m.polygonOffsetFactor = -1
+    m.polygonOffsetUnits = -2
+    paperMats.set(color, m)
   }
   return paperMats.get(color)!
 }
@@ -57,39 +64,40 @@ export const LINE_ON = bruno({ color: '#e7839f', shade: '#a05470', emissive: '#e
 
 const _v = new Vector3()
 
-/** the bends after the flat folds: a (in half), bL bR (the wings), each 0..1 */
+/** the bends after the flat folds: a (in half), bL bR (the wings: 0 up with the half, ½ out level, 1 down flat over
+ *  the half's outside), each 0..1 */
 export type Bend = { a: number; bL: number; bR: number }
-/** where a point of the folded-flat paper (x across, y along) on layer `rank` is, with the paper bent so far: in
- *  the plane's own frame (x across, y up, -z its nose). Folded in half, each half turns up off the middle crease
- *  (the crease the keel's bottom edge, along y 0; the folds' flaps inside the keel), then each wing turns back out
- *  flat from the top of it */
-export function place(x: number, y: number, rank: number, bend: Bend | null, out: Vector3) {
-  if (!bend) return out.set(x, 0.6 + rank * LAYER, -y)
+/** where a point of the folded-flat paper (x across, y along) on layer `rank` (of `top` layers) is, with the paper
+ *  bent so far: in the plane's own frame (x across, y up, -z its nose). Folded in half, each half turns up off the
+ *  middle crease (the crease the keel's bottom edge, along y 0), the folds' flaps turning inside the keel and the
+ *  sheet itself outermost; then each wing turns about its fold line, on the half's outside: out, and on down flat
+ *  over the half (its layers stacked back over in reverse, as paper's are) */
+export function place(x: number, y: number, rank: number, bend: Bend | null, out: Vector3, top = 0) {
+  const o = 0.6 + rank * LAYER
+  if (!bend) return out.set(x, o, -y)
   const s = x < 0 ? -1 : 1
   const d = Math.abs(x)
   const al = (bend.a * Math.PI) / 2 // (each half turned up about the middle)
-  const be = al * (1 - (s < 0 ? bend.bL : bend.bR)) // (each wing turned back out flat from the half)
+  const M = 1 + top * LAYER // (how far out the half's outermost layer is, once up)
+  // the half: along u from the crease, its top face's normal n (inward once it's up), its layers out along -n
   const ux = s * Math.cos(al)
   const uy = Math.sin(al)
-  const wx = s * Math.cos(be)
-  const wy = Math.sin(be)
-  let px: number
-  let py: number
-  let nx: number
-  let ny: number
+  const nx = -s * Math.sin(al)
+  const ny = Math.cos(al)
   if (d <= KEEL) {
-    px = ux * d
-    py = uy * d
-    nx = -s * Math.sin(al)
-    ny = Math.cos(al)
-  } else {
-    px = ux * KEEL + wx * (d - KEEL)
-    py = uy * KEEL + wy * (d - KEEL)
-    nx = -s * Math.sin(be)
-    ny = Math.cos(be)
+    const off = o - M * bend.a
+    return out.set(ux * d + nx * off, uy * d + ny * off, -y)
   }
-  const o = 0.6 + rank * LAYER
-  return out.set(px + nx * o, py + ny * o, -y)
+  // the wing: turned by ph about its fold line, which runs along the half's outside at the wing's root
+  const ph = Math.PI * (s < 0 ? bend.bL : bend.bR)
+  const ex = -nx // (outward)
+  const ey = -ny
+  const h0 = M * bend.a - 0.4
+  const c = Math.cos(ph)
+  const sn = Math.sin(ph)
+  const r = d - KEEL
+  const q = 0.4 - o
+  return out.set(ux * KEEL + ex * h0 + (ux * c + ex * sn) * r + (ex * c - ux * sn) * q, uy * KEEL + ey * h0 + (uy * c + ey * sn) * r + (ey * c - uy * sn) * q, -y)
 }
 
 /** the folded paper's mesh: each facet a fan, both sides */
@@ -103,7 +111,7 @@ export function build(facets: Facet[], bend: Bend | null, moving?: { facets: Fac
     const pts = now(f)
     const base = pos.length / 3
     pts.forEach(([x, y], i) => {
-      place(x, y, rank(f.layer), bend, _v)
+      place(x, y, rank(f.layer), bend, _v, ranks.length)
       if (rot && moving) {
         // (swinging over: turned about the fold line)
         _v.sub(moving.axis.p).applyAxisAngle(moving.axis.k, moving.th).add(moving.axis.p)
@@ -125,8 +133,9 @@ export function build(facets: Facet[], bend: Bend | null, moving?: { facets: Fac
   return g
 }
 
-/** a dashed line along a segment of the paper, lying on its top */
+/** a dashed line along a segment of the paper, lying on its top (folded in half: on the half's outside) */
 export function dashes(seg: [V2, V2], rank: number, bend: Bend | null, wide: number) {
+  const up = !!bend && bend.a > 0.5
   const [a, b] = seg
   const len = Math.hypot(b[0] - a[0], b[1] - a[1])
   const n = Math.max(1, Math.floor(len / 9))
@@ -146,8 +155,8 @@ export function dashes(seg: [V2, V2], rank: number, bend: Bend | null, wide: num
     ] as const) {
       const x = a[0] + dx * t - dy * o * wide
       const y = a[1] + dy * t + dx * o * wide
-      place(x, y, rank, bend, _v)
-      pos.push(_v.x, _v.y + 0.3, _v.z)
+      place(x, y, up ? -1.5 : rank, bend, _v, rank)
+      pos.push(_v.x, _v.y + (up ? 0 : 0.3), _v.z)
     }
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3)
   }
