@@ -63,45 +63,22 @@ export function inksOf(im: HTMLImageElement | HTMLCanvasElement | null): Inks {
   return { label: hex(pick.r, pick.g, pick.b), ink: lum > 140 ? '#1d1a24' : '#fbf3e6', spine: hex(ar / n, ag / n, ab / n), spineInk: avgLum > 140 ? '#1d1a24' : '#fbf3e6', rim: '#2a2a30', palette }
 }
 
-/** how it's pressed: classic black, or (a fancy pressing) the cover's colour, or two of them marbled; the same album always the same */
-export type Pressed = 'black' | 'colour' | 'marble'
+/** how it's pressed: classic black (most), or one solid colour, the cover's own; the same album always the same */
+export type Pressed = 'black' | 'colour'
 export function pressedAs(uri: string): Pressed {
   let h = 0
   for (const ch of uri) h = (h * 33 + ch.charCodeAt(0)) >>> 0
-  const f = (h % 1000) / 1000
-  return f < 0.45 ? 'black' : f < 0.8 ? 'colour' : 'marble'
+  return (h % 1000) / 1000 < 0.6 ? 'black' : 'colour'
 }
 
-/** the vinyl itself before the grooves are cut in it: its colour at each point (drawn small, scaled up) */
-function vinylBase(kind: Pressed, pal: RGB[], seed: number, size: number) {
+/** the vinyl itself before the grooves are cut in it: one solid colour */
+function vinylBase(kind: Pressed, pal: RGB[], size: number) {
   const c = document.createElement('canvas')
   c.width = c.height = size
   const g = c.getContext('2d')!
-  const css = (q: RGB, k = 1) => `rgb(${q[0] * k}, ${q[1] * k}, ${q[2] * k})`
-  if (kind === 'black') {
-    g.fillStyle = 'rgb(26, 26, 27)'
-    g.fillRect(0, 0, size, size)
-  } else if (kind === 'colour') {
-    g.fillStyle = css(pal[0], 0.85)
-    g.fillRect(0, 0, size, size)
-  } else {
-    // two colours swirled together, a pale vein between
-    const img = g.createImageData(size, size)
-    const a = pal[0]
-    const b = pal[1]
-    const v = pal[2]
-    for (let y = 0; y < size; y++)
-      for (let x = 0; x < size; x++) {
-        const u = x / size
-        const w = y / size
-        const t = 0.5 + 0.5 * Math.sin(9 * u + 4 * Math.sin(7 * w + seed) + 2.5 * Math.sin(13 * (u + w) + seed * 2))
-        const vein = Math.max(0, 1 - Math.abs(t - 0.5) / 0.035)
-        const o = (y * size + x) * 4
-        for (let k = 0; k < 3; k++) img.data[o + k] = (a[k] * t + b[k] * (1 - t)) * 0.85 * (1 - vein * 0.6) + v[k] * vein * 0.6
-        img.data[o + 3] = 255
-      }
-    g.putImageData(img, 0, 0)
-  }
+  const q = pal[0]
+  g.fillStyle = kind === 'black' ? 'rgb(26, 26, 27)' : `rgb(${q[0] * 0.85}, ${q[1] * 0.85}, ${q[2] * 0.85})`
+  g.fillRect(0, 0, size, size)
   return c
 }
 
@@ -167,9 +144,7 @@ export function drawSide(p: Pressing, side: Side, inks: Inks, size = 2048): Text
   }
   // the vinyl, then the grooves pressed into it (darker where they're cut, lighter on the smooth gaps)
   const kind = pressedAs(p.uri)
-  let seed = 0
-  for (const ch of p.uri) seed = (seed + ch.charCodeAt(0) * 7) % 97
-  g.drawImage(vinylBase(kind, inks.palette, seed, 512), 0, 0, size, size)
+  g.drawImage(vinylBase(kind, inks.palette, 16), 0, 0, size, size)
   const img = g.getImageData(0, 0, size, size)
   const d = img.data
   const h = size / 2
