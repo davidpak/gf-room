@@ -1,6 +1,6 @@
 // Measures a page as David's machine sees it: headless Edge on the real GPU (ANGLE D3D11), 2560x1440 CSS at 1.5,
 // unthrottled (the app's browser pane is throttled when hidden: useless for timing). Over CDP, no packages.
-//   node tools/measure.mjs "<url>" [seconds of frames] [expression to print at the end]
+//   node scripts/measure.mjs "<url>" [seconds of frames] [expression to print at the end]
 //   the loader's marks (page-*, ready:*: where load time goes), rAF frame times, draw numbers, a CPU+GPU frame cost.
 // env: PROF=1 profile the load (ALL=1: library code too) · FRAMES=1 with PROF: profile 4 s of frames instead
 //      PRE="<expr>" run before the frames (toggle things, time parts) · INJECT="<js>" run before the page's own code
