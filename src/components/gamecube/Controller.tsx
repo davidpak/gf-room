@@ -1,79 +1,160 @@
 import { useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { CapsuleGeometry, CylinderGeometry, ExtrudeGeometry, LatheGeometry, Shape, TorusGeometry, Vector2, type BufferGeometry, type Material, type Mesh } from 'three'
+import { BufferAttribute, BufferGeometry, CatmullRomCurve3, CylinderGeometry, ExtrudeGeometry, LatheGeometry, Path, Shape, TorusGeometry, Vector2, type Material, type Mesh } from 'three'
+import { Vector3 } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from '../quad/bruno'
 import { anchor } from './anchors'
-import { COLORS, PAD } from './spec'
+import { GRIP, PAD2 } from './pad'
+import { COLORS } from './spec'
 import { getCube, padButton } from './state'
 
 /**
- * A GameCube controller [C], toy style: its body (the top's outline extruded, rounded over), the two grips hanging
- * from it toward you, and its buttons, each its own part. Its frame: the origin under its middle at the ground, +y
- * up, +z toward whoever holds it (its cable leaves the far side, -z). START, A and B (and X, Y) click: they dip, and
- * the game hears them (./state); \`pad\` is which port it's in. \`color\`: 'indigo' or 'black'.
+ * A GameCube controller [C], built from its measured spec (./pad: dimensions.com's drawing, top and side), toy style.
+ * Its frame: the origin on the ground under its middle (the grips' ends are what it stands on), +z toward whoever
+ * holds it, its cable leaving the far side (-z).
+ *
+ *   the top    its outline from above (the grips cut away), a slab; the two lobes raised on it (round the main stick
+ *              and the D-pad, round A and the C-stick), START in the lower middle between them
+ *   the grips  each a tube swept from the shoulder (the trigger's housing) down and toward you to its rounded end,
+ *              through sections taken off the outline from above and the side's profile
+ *   on top     the main stick in its octagonal gate, its round surround; A in its well, B, the kidney X and Y (their
+ *              outlines extruded); the D-pad cross in its well; the yellow C-stick in its gate; START; L and R on the
+ *              far edge, Z on R
+ *
+ * START, A, B, X and Y click: they dip, and the game hears them (./state); `pad` is which port it's in. `color`:
+ * 'indigo' or 'black'.
  */
-const TOPY = 30 // (its top's height, resting on its grips' ends and its body's underside)
-/** the top's outline (x right, y away from you) */
-const OUTLINE = (() => {
+const P = PAD2
+const TOP = -Math.min(...P.under.map((u) => u[1])) // (the top's height: the grips' ends on the ground)
+const ZC = P.d / 2
+const Z = (z: number) => z - ZC // (the drawing's z from the far edge, to the model's from its middle)
+const shape = (pts: [number, number][], mirror = false) => {
   const s = new Shape()
-  const pts = [
-    [0, 33],
-    [34, 39],
-    [60, 30],
-    [74, 9],
-    [75, -14],
-    [64, -34],
-    [44, -40],
-    [24, -30],
-    [0, -24],
-    [-24, -30],
-    [-44, -40],
-    [-64, -34],
-    [-75, -14],
-    [-74, 9],
-    [-60, 30],
-    [-34, 39],
-  ].map(([x, y]) => new Vector2(x * 0.907, y)) // (narrowed by its rounding over)
-  s.moveTo(0, 33)
-  s.splineThru([...pts.slice(1), pts[0]])
+  const q = mirror ? [...pts].reverse().map(([x, z]) => [-x, z] as [number, number]) : pts
+  // (smoothed through its points: the drawing's are ~5 mm apart, and a wall turned at each would show its facets)
+  const smooth = new CatmullRomCurve3(q.map(([x, z]) => new Vector3(x, -Z(z), 0)), true, 'centripetal').getSpacedPoints(Math.max(60, q.length * 4))
+  s.setFromPoints(smooth.slice(0, -1).map((p) => new Vector2(p.x, p.y)))
   return s
-})()
-const BODY = new ExtrudeGeometry(OUTLINE, { depth: 8, bevelEnabled: true, bevelThickness: 7, bevelSize: 7, bevelSegments: 4, curveSegments: 40, steps: 1 })
-  .rotateX(-Math.PI / 2)
-  .translate(0, TOPY - 15, 0) // (its body 8 to 30 up, held up on its grips)
-const GRIP = new CapsuleGeometry(14, 28, 6, 16)
-// (the caps' profiles from the bottom up, so they face out)
-const STICK_CAP = new LatheGeometry(
-  [
-    [0, 0],
-    [10, 0],
-    [10.5, 1.8],
-    [9.5, 3.6],
-    [6, 4.4],
-    [0, 4.5],
-  ].map(([x, y]) => new Vector2(x, y)),
-  28,
-)
-const C_CAP = new LatheGeometry(
-  [
-    [0, 0],
-    [7.2, 0],
-    [7, 2.6],
-    [5, 4],
-    [0, 4],
-  ].map(([x, y]) => new Vector2(x, y)),
-  24,
-)
-const GATE = new CylinderGeometry(1, 1, 1, 8)
-const ROUND = new CylinderGeometry(1, 1, 1, 28)
-const ARC = (from: number, to: number) => new TorusGeometry(15.5, 4.6, 10, 20, to - from).rotateZ(from).rotateX(-Math.PI / 2)
-const XB = ARC(-0.75, 0.5)
-const YB = ARC(1.05, 2.15)
-const DPAD = new RoundedBoxGeometry(19, 4, 6.4, 2, 1.4)
-const TRIGGER = new RoundedBoxGeometry(32, 11, 16, 2, 4)
-const ZB = new RoundedBoxGeometry(22, 5, 9, 2, 2)
-const STRAIN = new CylinderGeometry(3.4, 4.2, 12, 12).rotateX(Math.PI / 2)
+}
+/** a plan shape stood up between heights y0 and y1, rounded over by b */
+const slab = (s: Shape, y0: number, y1: number, b: number) =>
+  new ExtrudeGeometry(s, { depth: y1 - y0 - 2 * b, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelSegments: 3, curveSegments: 16 }).rotateX(-Math.PI / 2).translate(0, y0 + b, 0)
+
+/** an outline moved in by d (each point along the bisector of its edges; the outlines here run clockwise from above) */
+const inset = (pts: [number, number][], d: number) =>
+  pts.map((p, i): [number, number] => {
+    const a = pts[(i - 1 + pts.length) % pts.length]
+    const b = pts[(i + 1) % pts.length]
+    const tx = b[0] - a[0]
+    const tz = b[1] - a[1]
+    const l = Math.hypot(tx, tz) || 1
+    // (the inward normal: for a clockwise loop (seen from above, z toward you), to the right of the way it runs)
+    return [p[0] - (tz / l) * d * WIND, p[1] + (tx / l) * d * WIND]
+  })
+/** which way the outlines run (+1 or -1): from their signed area */
+const area = (pts: [number, number][]) => pts.reduce((s, p, i) => { const q = pts[(i + 1) % pts.length]; return s + p[0] * q[1] - q[0] * p[1] }, 0)
+const WIND = Math.sign(area(PAD2.lobe))
+
+/** the top's outline with the grips cut off (their tubes take over from it) */
+const CORE = P.outline.filter(([x, z]) => !(x < -43 && z > 31) && !(x > 43 && z > 31))
+
+/** a grip: its sections swept into a tube, closed at both ends */
+function gripGeometry(side: 1 | -1) {
+  const N = 24
+  const pos: number[] = []
+  const idx: number[] = []
+  // (between the measured sections, smoothly: Catmull-Rom through them)
+  const sec = GRIP
+  const lerp = (i: number, t: number, k: 'x' | 'h' | 'a' | 'b' | 'z') => {
+    const p0 = sec[Math.max(0, i - 1)][k]
+    const p1 = sec[i][k]
+    const p2 = sec[Math.min(sec.length - 1, i + 1)][k]
+    const p3 = sec[Math.min(sec.length - 1, i + 2)][k]
+    const t2 = t * t
+    const t3 = t2 * t
+    return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+  }
+  const rings: { x: number; y: number; z: number; a: number; b: number }[] = []
+  for (let i = 0; i < sec.length - 1; i++)
+    for (let s = 0; s < 4; s++) {
+      const t = s / 4
+      rings.push({ x: side * lerp(i, t, 'x'), y: TOP + lerp(i, t, 'h'), z: Z(lerp(i, t, 'z')), a: Math.max(0.5, lerp(i, t, 'a')), b: Math.max(0.5, lerp(i, t, 'b')) })
+    }
+  const last = sec[sec.length - 1]
+  rings.push({ x: side * last.x, y: TOP + last.h, z: Z(last.z), a: last.a, b: last.b })
+  for (const r of rings)
+    for (let j = 0; j < N; j++) {
+      const th = (j / N) * Math.PI * 2
+      pos.push(r.x + r.a * Math.cos(th), r.y + r.b * Math.sin(th), r.z)
+    }
+  for (let i = 0; i < rings.length - 1; i++)
+    for (let j = 0; j < N; j++) {
+      const a = i * N + j
+      const b = i * N + ((j + 1) % N)
+      if (side > 0) idx.push(a, b, a + N, b, b + N, a + N)
+      else idx.push(a, a + N, b, b, a + N, b + N)
+    }
+  // (the ends: a fan to each ring's middle)
+  const cap = (i: number, flip: boolean) => {
+    const r = rings[i]
+    const c = pos.length / 3
+    pos.push(r.x, r.y, r.z)
+    for (let j = 0; j < N; j++) {
+      const a = i * N + j
+      const b = i * N + ((j + 1) % N)
+      if (flip !== side < 0) idx.push(c, b, a)
+      else idx.push(c, a, b)
+    }
+  }
+  cap(0, true)
+  cap(rings.length - 1, false)
+  const g = new BufferGeometry()
+  g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3))
+  g.setIndex(idx)
+  g.computeVertexNormals()
+  return g
+}
+
+/** a round button turned from its profile (from its rim up to its domed middle) */
+const button = (r: number, h: number, dome: number) =>
+  new LatheGeometry(
+    [[0, 0], [r, 0], [r, h - 0.8], [r - 0.6, h], [r * 0.5, h + dome * 0.8], [0, h + dome]].map(([x, y]) => new Vector2(x, y)),
+    32,
+  )
+/** an octagonal rim (a gate): out to `outer` at its corners, its hole `inner`, `t` high */
+const gate = (inner: number, outer: number, t: number) => {
+  const oct = (r: number, into: Path) => {
+    for (let i = 0; i <= 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      if (i) into.lineTo(r * Math.cos(a), r * Math.sin(a))
+      else into.moveTo(r * Math.cos(a), r * Math.sin(a))
+    }
+  }
+  const s = new Shape()
+  oct(outer, s)
+  const hole = new Path()
+  oct(inner, hole)
+  s.holes.push(hole)
+  return new ExtrudeGeometry(s, { depth: t, bevelEnabled: false }).rotateX(-Math.PI / 2)
+}
+/** the D-pad's cross */
+const cross = () => {
+  const { span, arm } = P.dpad
+  const h = span / 2
+  const a = arm / 2
+  const s = new Shape(
+    [[-a, -h], [a, -h], [a, -a], [h, -a], [h, a], [a, a], [a, h], [-a, h], [-a, a], [-h, a], [-h, -a], [-a, -a]].map(([x, y]) => new Vector2(x, y)),
+  )
+  return new ExtrudeGeometry(s, { depth: 1.6, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 2 }).rotateX(-Math.PI / 2)
+}
+/** X or Y: its kidney outline, about its own middle */
+const kidney = (pts: [number, number][]) => {
+  const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length
+  const cz = pts.reduce((s, p) => s + p[1], 0) / pts.length
+  const g = new ExtrudeGeometry(new Shape(pts.map(([x, z]) => new Vector2(x - cx, -(z - cz)))), { depth: P.rise.xy - 1.2, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.6, bevelSegments: 2 }).rotateX(-Math.PI / 2)
+  return { g, x: cx, z: cz }
+}
 
 const looks = {
   indigo: { body: COLORS.indigo, shade: '#3a3070', grip: '#5246a8', trigger: '#7468cc' },
@@ -89,7 +170,7 @@ const BTN = {
 }
 
 /** a button on its top: clicked, it dips, and the game hears it */
-function Key({ k, pad, geo, m, at, scale = [1, 1, 1], rot = 0, act }: { k: string; pad: number; geo: BufferGeometry; m: Material; at: [number, number, number]; scale?: [number, number, number]; rot?: number; act?: () => void }) {
+function Key({ k, pad, geo, m, at, act }: { k: string; pad: number; geo: BufferGeometry; m: Material; at: [number, number, number]; act?: () => void }) {
   const ref = useRef<Mesh>(null)
   useFrame(() => {
     const o = ref.current
@@ -110,45 +191,84 @@ function Key({ k, pad, geo, m, at, scale = [1, 1, 1], rot = 0, act }: { k: strin
         onPointerOut: () => (document.body.style.cursor = ''),
       }
     : {}
-  return <mesh ref={ref} geometry={geo} material={m} position={at} scale={scale} rotation={[0, rot, 0]} {...on} />
+  return <mesh ref={ref} geometry={geo} material={m} position={at} castShadow {...on} />
 }
 
 export function Controller({ color, pad }: { color: 'indigo' | 'black'; pad: number }) {
   const l = looks[color]
   const mats = useMemo(() => ({ body: bruno({ color: l.body, shade: l.shade }), grip: bruno({ color: l.grip, shade: l.shade }), trigger: bruno({ color: l.trigger, shade: l.shade }) }), [l])
-  const T = TOPY + 0.2
+  const geo = useMemo(() => {
+    const x = kidney(P.X)
+    const y = kidney(P.Y)
+    return {
+      // (the slab, rounded well over; the lobes a raised step on it, set in a little from where the two outlines meet so
+      // their walls never lie on the slab's)
+      core: slab(shape(CORE), TOP - 17, TOP - 3, 4.5),
+      lobeL: slab(shape(inset(P.lobe, 0.8)), TOP - 5.5, TOP, 2),
+      lobeR: slab(shape(inset(P.lobe, 0.8), true), TOP - 5.5, TOP, 2),
+      gripL: gripGeometry(-1),
+      gripR: gripGeometry(1),
+      gate: gate(P.stick.gate - 1.6, P.stick.gate + 0.4, 0.9),
+      surround: new TorusGeometry(P.stick.surround, 0.7, 6, 48).rotateX(Math.PI / 2),
+      shaft: new CylinderGeometry(P.stick.shaft, P.stick.shaft + 0.6, P.stick.top - P.stick.capT, 20),
+      cap: new LatheGeometry(
+        // (the cap: its rim, its top with two rings stepped into it)
+        [[0, 0], [P.stick.cap, 0], [P.stick.cap + 0.3, 1.6], [P.stick.cap, P.stick.capT], [5.9, P.stick.capT], [5.6, P.stick.capT - 0.5], [4.2, P.stick.capT - 0.5], [4.0, P.stick.capT - 1], [0, P.stick.capT - 1]].map(([a, b]) => new Vector2(a, b)),
+        32,
+      ),
+      cgate: gate(P.cstick.gate - 1.6, P.cstick.gate + 0.4, 0.9),
+      cshaft: new CylinderGeometry(2.6, 3, 4, 16),
+      ccap: new LatheGeometry([[0, 0], [P.cstick.cap, 0], [P.cstick.cap, 2], [P.cstick.cap - 1, 3], [0, 3.3]].map(([a, b]) => new Vector2(a, b)), 28),
+      dwell: new TorusGeometry(P.dpad.well, 0.6, 6, 40).rotateX(Math.PI / 2),
+      awell: new TorusGeometry(P.a.well, 0.6, 6, 48).rotateX(Math.PI / 2),
+      cross: cross(),
+      a: button(P.a.r, P.rise.a - 1, 1),
+      b: button(P.b.r, P.rise.b - 0.8, 0.8),
+      start: button(P.start.r, P.rise.start + 2.2, 0.4),
+      x,
+      y,
+      trigger: new RoundedBoxGeometry(P.trigger.x1 - P.trigger.x0, 13, P.trigger.z1 - P.trigger.z0, 2, 3),
+      zb: new RoundedBoxGeometry(P.z.x1 - P.z.x0, 3.5, P.z.z1 - P.z.z0, 2, 1.4),
+      strain: new CylinderGeometry(3.4, 4.2, 10, 12).rotateX(Math.PI / 2),
+    }
+  }, [])
   const press = (b: 'start' | 'a' | 'b' | 'x' | 'y') => () => padButton(b, pad)
+  const T = TOP
   return (
     <group>
-      <mesh geometry={BODY} material={mats.body} castShadow receiveShadow />
-      {/* the grips, under its sides, reaching toward you (what it stands on), splayed */}
-      {[-1, 1].map((s) => (
-        <mesh key={s} geometry={GRIP} material={mats.grip} position={[s * PAD.grip.x, 14.5, PAD.grip.z]} rotation={[Math.PI / 2 + 0.1, s * 0.22, 0, 'YXZ']} castShadow />
-      ))}
-      {/* the main stick in its gate, the D-pad */}
-      <mesh geometry={GATE} material={BTN.gate} position={[-42, T, -8]} scale={[15, 1.4, 15]} rotation={[0, Math.PI / 8, 0]} />
-      <mesh geometry={ROUND} material={BTN.gate} position={[-42, T + 3, -8]} scale={[4, 6, 4]} />
-      <mesh geometry={STICK_CAP} material={BTN.grey} position={[-42, T + 5, -8]} castShadow />
-      <mesh geometry={DPAD} material={BTN.grey} position={[-22, T + 1.6, 20]} castShadow />
-      <mesh geometry={DPAD} material={BTN.grey} position={[-22, T + 1.6, 20]} rotation={[0, Math.PI / 2, 0]} castShadow />
-      {/* START; A, B, X, Y (live: they dip); the C-stick */}
+      <mesh geometry={geo.core} material={mats.body} castShadow receiveShadow />
+      <mesh geometry={geo.lobeL} material={mats.body} castShadow receiveShadow />
+      <mesh geometry={geo.lobeR} material={mats.body} castShadow receiveShadow />
+      <mesh geometry={geo.gripL} material={mats.grip} castShadow receiveShadow />
+      <mesh geometry={geo.gripR} material={mats.grip} castShadow receiveShadow />
+      {/* the main stick: its surround, its gate, its shaft and cap */}
+      <mesh geometry={geo.surround} material={mats.body} position={[P.stick.x, T, Z(P.stick.z)]} />
+      <mesh geometry={geo.gate} material={BTN.gate} position={[P.stick.x, T - 0.2, Z(P.stick.z)]} />
+      <mesh geometry={geo.shaft} material={BTN.gate} position={[P.stick.x, T + (P.stick.top - P.stick.capT) / 2, Z(P.stick.z)]} />
+      <mesh geometry={geo.cap} material={BTN.grey} position={[P.stick.x, T + P.stick.top - P.stick.capT, Z(P.stick.z)]} castShadow />
+      {/* the D-pad in its well; the C-stick in its gate */}
+      <mesh geometry={geo.dwell} material={mats.body} position={[P.dpad.x, T, Z(P.dpad.z)]} />
+      <mesh geometry={geo.cross} material={BTN.grey} position={[P.dpad.x, T - 0.5, Z(P.dpad.z)]} castShadow />
+      <mesh geometry={geo.cgate} material={BTN.gate} position={[P.cstick.x, T - 0.2, Z(P.cstick.z)]} />
+      <mesh geometry={geo.cshaft} material={BTN.gate} position={[P.cstick.x, T + 2, Z(P.cstick.z)]} />
+      <mesh geometry={geo.ccap} material={BTN.c} position={[P.cstick.x, T + P.cstick.top - 3.3, Z(P.cstick.z)]} castShadow />
+      <mesh geometry={geo.awell} material={mats.body} position={[P.a.x, T, Z(P.a.z)]} />
+      {/* START; A, B, X, Y (live: they dip) */}
       <group userData={{ live: true }}>
-      <Key k="start" pad={pad} geo={ROUND} m={BTN.grey} at={[0, T + 1.2, -4]} scale={[3.8, 2.4, 3.8]} act={press('start')} />
-      <Key k="a" pad={pad} geo={ROUND} m={BTN.a} at={[38, T + 2, -4]} scale={[10.5, 4, 10.5]} act={press('a')} />
-      <Key k="b" pad={pad} geo={ROUND} m={BTN.b} at={[19, T + 1.8, 13]} scale={[6, 3.6, 6]} act={press('b')} />
-      <Key k="x" pad={pad} geo={XB} m={BTN.grey} at={[38, T + 2.2, -4]} act={press('x')} />
-      <Key k="y" pad={pad} geo={YB} m={BTN.grey} at={[38, T + 2.2, -4]} act={press('y')} />
+        <Key k="start" pad={pad} geo={geo.start} m={BTN.grey} at={[P.start.x, T - 3, Z(P.start.z)]} act={press('start')} />
+        <Key k="a" pad={pad} geo={geo.a} m={BTN.a} at={[P.a.x, T - 0.5, Z(P.a.z)]} act={press('a')} />
+        <Key k="b" pad={pad} geo={geo.b} m={BTN.b} at={[P.b.x, T - 0.5, Z(P.b.z)]} act={press('b')} />
+        <Key k="x" pad={pad} geo={geo.x.g} m={BTN.grey} at={[geo.x.x, T - 0.5, Z(geo.x.z)]} act={press('x')} />
+        <Key k="y" pad={pad} geo={geo.y.g} m={BTN.grey} at={[geo.y.x, T - 0.5, Z(geo.y.z)]} act={press('y')} />
       </group>
-      <mesh geometry={GATE} material={BTN.gate} position={[27, T, 26]} scale={[10, 1.4, 10]} rotation={[0, Math.PI / 8, 0]} />
-      <mesh geometry={C_CAP} material={BTN.c} position={[27, T + 2.5, 26]} castShadow />
-      {/* L and R under the back shoulders, Z on the right one */}
+      {/* L and R on the far edge, Z on R */}
       {[-1, 1].map((s) => (
-        <mesh key={s} geometry={TRIGGER} material={mats.trigger} position={[s * 50, TOPY - 15, -30]} rotation={[0, s * -0.32, 0]} />
+        <mesh key={s} geometry={geo.trigger} material={mats.trigger} position={[(s * (P.trigger.x0 + P.trigger.x1)) / 2, T - 8, Z((P.trigger.z0 + P.trigger.z1) / 2) - 1]} castShadow />
       ))}
-      <mesh geometry={ZB} material={BTN.z} position={[50, TOPY - 5, -38]} rotation={[0, -0.35, 0]} />
+      <mesh geometry={geo.zb} material={BTN.z} position={[(P.z.x0 + P.z.x1) / 2, T - 0.2, Z((P.z.z0 + P.z.z1) / 2)]} castShadow />
       {/* the cable leaving its far side */}
-      <mesh geometry={STRAIN} material={mats.grip} position={[0, TOPY - 13, -40]} />
-      <group ref={anchor(`pad${pad}`)} position={[0, TOPY - 13, -46]} rotation={[0, Math.PI, 0]} />
+      <mesh geometry={geo.strain} material={mats.grip} position={[0, T + P.cableAt.h, Z(0) - 4]} />
+      <group ref={anchor(`pad${pad}`)} position={[0, T + P.cableAt.h, Z(0) - 9]} rotation={[0, Math.PI, 0]} />
     </group>
   )
 }

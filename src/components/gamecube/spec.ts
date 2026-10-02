@@ -25,14 +25,7 @@ const IN = 25.4
 
 export { CUBE } from './cube' // ([G]: measured, with its sources and checks)
 export const DISC = { r: 40, hole: 7.5, t: 1.2 }
-export const PAD = {
-  w: 150,
-  d: 105,
-  h: 34, // (the body's thickness, the grips under it deeper)
-  grip: { x: 50, z: 34 }, // (each grip's middle)
-  cable: 2000,
-  mass: 0.19,
-}
+export { PAD2 as PAD } from './pad' // ([C]: measured, with its sources and checks)
 export const CASE = { w: 135, h: 190, t: 14 }
 export const TV = {
   w: 520,

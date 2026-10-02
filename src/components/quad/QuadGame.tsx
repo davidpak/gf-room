@@ -203,7 +203,7 @@ export function QuadGame({ car }: { car: { current: CarState } }) {
         </Static>
       </Piece>
       {LAYOUT.pads.map((p, i) => (
-        <Piece key={i} car={car} id={`pad${i + 1}`} home={at(p)} feelR={S(PAD.w) * 0.8} body={<CuboidCollider args={[S(140), S(30), S(96)]} position={[0, 15 * K, 6 * K]} mass={PAD.mass} friction={0.8} />}>
+        <Piece key={i} car={car} id={`pad${i + 1}`} home={at(p)} feelR={S(PAD.w) * 0.8} body={<CuboidCollider args={[S(PAD.w), S(48), S(PAD.d)]} position={[0, 24 * K, 0]} mass={PAD.mass} friction={0.8} />}>
           <Static>
             <Controller color={p.color} pad={i + 1} />
           </Static>
