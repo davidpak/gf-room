@@ -8,7 +8,8 @@ import { ToyControls } from '../stage/ToyControls'
 import { Disc, Jacket, useArt } from './Record'
 import { Light } from './Light'
 import { LP, checkVinyl, type Pressing } from './vinyl'
-import { DEMO, pressSaved } from './library'
+import { DEMO } from './library'
+import { useFillCrates, useShelf } from './shelf'
 
 /**
  * Records on their own (gallery first): her saved albums on Spotify pressed into records (logged out: three made-up
@@ -62,10 +63,8 @@ function Scene({ records }: { records: Pressing[] }) {
 
 export function RecordsStage() {
   const isIn = useSyncExternalStore(onAuth, loggedIn)
-  const [records, setRecords] = useState<Pressing[]>(DEMO)
-  useEffect(() => {
-    if (isIn) pressSaved().then((r) => r.length && setRecords(r), console.error)
-  }, [isIn])
+  useFillCrates()
+  const records = useShelf().crates.saved.slice(0, 6)
   return (
     <>
       <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 5, far: 30000, position: [0, 900, 1900] }}>

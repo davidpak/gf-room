@@ -3,22 +3,22 @@ import { loggedIn, login, missingScopes, onAuth } from '../../lib/spotify/auth'
 import { usePlayer } from '../../lib/spotify/player'
 import { openCrate, recordUp, useBrowse } from './browse'
 import { useDeck } from './deck'
-import { CRATES } from './library'
-import { digFor, digMore, useShelf } from './shelf'
+import { LABEL } from './library'
+import { digFor, digMore, getShelf, showSaved, useShelf } from './shelf'
 
 /**
  * What the page writes about the records (the same on the record player's own page and on the Quad):
  *   the record up or out: its album, artist, year, how it's pressed, what to do (and, out: more by this artist,
- *   into the Dig crate)
+ *   into the crate in place of hers); while the crate holds what she dug for: back to her own records
  *   otherwise: log in (or again, for the crates' newer permissions), or what's playing
- *   the Dig crate's card: what to look for
+ *   the Dig card: what to look for (what's found goes in the crate)
  */
 const T: React.CSSProperties = { font: "700 18px 'Gaegu', 'Nunito', cursive", color: '#fff4e6', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }
 const PILL: React.CSSProperties = { ...T, background: '#2b2538', border: '2px solid #fff4e6', borderRadius: 999, padding: '5px 16px', cursor: 'pointer', textShadow: 'none', pointerEvents: 'auto' }
 
 let asking = false
 const askSubs = new Set<() => void>()
-/** the Dig crate's card, to write on */
+/** the Dig card, to write on */
 export const askDig = (on = true) => {
   asking = on
   askSubs.forEach((f) => f())
@@ -34,7 +34,7 @@ function About({ bottom, hints }: { bottom: number; hints: boolean }) {
     document.body.classList.toggle('browsing', b.mode !== 'none')
   }, [b.mode])
   if (!p || !b.crate) return null
-  const crate = CRATES.find((c) => c.id === b.crate)
+  const crate = b.crate ? { label: b.crate === 'dig' ? shelf.dug || LABEL.dig : LABEL[b.crate] } : null
   const discs = p.sides.length / 2
   const songs = p.sides.reduce((k, x) => k + x.bands.length, 0)
   const min = Math.round(p.sides.reduce((k, x) => k + x.ms, 0) / 60000)
@@ -61,14 +61,27 @@ function About({ bottom, hints }: { bottom: number; hints: boolean }) {
       )}
       {hints && (
       <div style={{ ...T, fontWeight: 400, fontSize: 16, opacity: 0.75, marginTop: 4 }}>
-        {b.mode === 'crate' ? 'A / D or ← → to flip through · Enter (or click it) to take it out · Esc to step back' : `click ${discs > 1 ? 'a record' : 'the record'} to take it out of the jacket, then carry it to the turntable · A / D for the next one · Esc to put it back`}
+        {b.mode === 'crate' ? 'A / D or ← → to flip through · Enter (or click it) to take it out · Esc to step back' : `click ${discs > 1 ? 'a record' : 'the record'} to play it · A / D for the next one · Esc to put it back`}
       </div>
       )}
-      {b.mode === 'out' && p.artistId && (
-        <button style={{ ...PILL, fontSize: 16, marginTop: 6 }} onClick={() => digMore(p.artistId!, p.artist.split(',')[0]).then(() => openCrate('dig'))}>
-          ⛏ more by {p.artist.split(',')[0]}
-        </button>
-      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        {b.mode === 'out' && p.artistId && (
+          <button style={{ ...PILL, fontSize: 16 }} onClick={() => digMore(p.artistId!, p.artist.split(',')[0]).then(() => openCrate('dig', 0))}>
+            ⛏ more by {p.artist.split(',')[0]}
+          </button>
+        )}
+        {b.crate === 'dig' && (
+          <button
+            style={{ ...PILL, fontSize: 16 }}
+            onClick={() => {
+              showSaved()
+              openCrate('saved', 0)
+            }}
+          >
+            ♡ back to her records
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -102,7 +115,7 @@ function Status({ bottom }: { bottom: number }) {
   return null
 }
 
-/** the Dig crate's card: an index card to write on (what to look for) */
+/** the Dig card: an index card to write on (what to look for) */
 function DigCard() {
   const on = useAsking()
   const isIn = useSyncExternalStore(onAuth, loggedIn)
@@ -117,7 +130,7 @@ function DigCard() {
     if (!q.trim()) return
     await digFor(q.trim())
     askDig(false)
-    openCrate('dig')
+    if (getShelf().crates.dig.length) openCrate('dig', 0)
   }
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', zIndex: 40, background: 'rgba(27,21,48,0.35)' }} onClick={() => askDig(false)}>
@@ -151,7 +164,7 @@ function DigCard() {
               style={{ width: '100%', font: "700 24px 'Gaegu', cursive", border: 0, borderBottom: '2px solid #2b2538', background: 'transparent', outline: 'none', marginTop: 6, color: '#2b2538' }}
             />
             <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button style={{ ...PILL, color: '#fff4e6' }}>{shelf.loading.dig ? 'pressing…' : 'press them into the crate'}</button>
+              <button style={{ ...PILL, color: '#fff4e6' }}>{shelf.loading.dig ? 'digging…' : 'dig them into the crate'}</button>
               {shelf.failed.dig && <span style={{ color: '#b91c1c', fontSize: 16 }}>couldn’t: {shelf.failed.dig.slice(0, 60)}</span>}
             </div>
           </form>

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { memo, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Canvas } from '../../lib/render/Canvas'
 import { CanvasTexture, Fog, PCFSoftShadowMap, SRGBColorSpace } from 'three'
@@ -23,7 +23,7 @@ import { RecordsOverlay } from '../records/Overlay'
 import { PaintBox } from '../art/PaintBox'
 import { DolphinButton } from '../gamecube/DolphinButton'
 import '../art/art.css'
-import { getLook, lookBack, useLook } from './look'
+import { getLook, lookBack, useLook, useLookKey } from './look'
 import { grabRules } from '../../lib/physics/Hand'
 import './quad.css'
 import { SET } from './set'
@@ -60,7 +60,18 @@ function Clock() {
   return null
 }
 
-function Scene({ car, paused }: { car: { current: CarState }; paused: boolean }) {
+/** the car, still while the camera's in close on something (only it redrawn as the look comes and goes) */
+function QuadCar({ car, obstacles }: { car: { current: CarState }; obstacles: Obstacle[] }) {
+  const paused = !!useLook()
+  return <Car state={car} obstacles={obstacles} movers={propObstacles} paused={paused} />
+}
+
+/**
+ * The Quad itself. Memoized, and given nothing that changes: the camera looking at one thing then another (the
+ * stand, its crate, a record) is a state change up in QuadStage, and without this the whole Quad's components ran
+ * again on each (a tenth of a second, every click). What follows the look follows it itself (useLook).
+ */
+const Scene = memo(function Scene({ car }: { car: { current: CarState } }) {
   const background = useMemo(sky, [])
   const fog = useMemo(() => new Fog(LOOK.fog, 7000, 18000), [])
   // what the car bumps into: the trunks, the lamps, the building and the hedges (the benches it shoves: ./Physical)
@@ -126,30 +137,39 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
       <Photos car={car} />
       <Building />
       <Hedges />
-      <Car state={car} obstacles={obstacles} movers={propObstacles} paused={paused} />
+      <QuadCar car={car} obstacles={obstacles} />
     </>
   )
-}
+})
 
 setCarWell(CAR_SHAPE.well)
 
 export function QuadStage() {
   const car = useRef<CarState>({ x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
-  // (in close on something, the hand leaves things be: clicks there are for what's looked at; a record taken out still carries)
+  // (in close on something, the hand leaves things be: clicks there are for what's looked at)
   grabRules.allow = (spec) => !getLook() || !!spec.whileLooking
   if (import.meta.env.DEV) Object.assign(window, { __quadCar: car }) // (for trying it from the console)
-  const look = useLook()
-  const looking = !!look
   return (
     <>
-      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 50, far: 40000, position: [0, 3300, 3900] }} onPointerMissed={() => lookBack()}>
-        <Scene car={car} paused={looking} />
+      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={CAMERA} onPointerMissed={lookBack}>
+        <Scene car={car} />
       </Canvas>
       <LookControls />
       <RideHint />
-      <PaintBox on={look?.spot.key === 'easel'} bottom={124} />
-      <DolphinButton show={look?.spot.key === 'gametv'} bottom={124} />
-      <RecordsOverlay bottom={150} hints={false} status={look?.spot.key === 'turntable'} />
+      <LookOverlays />
+    </>
+  )
+}
+const CAMERA = { fov: 30, near: 50, far: 40000, position: [0, 3300, 3900] as [number, number, number] }
+
+/** what the page shows for the spot looked at (on their own: the look changing redraws only these, not the Canvas) */
+function LookOverlays() {
+  const key = useLookKey()
+  return (
+    <>
+      <PaintBox on={key === 'easel'} bottom={124} />
+      <DolphinButton show={key === 'gametv'} bottom={124} />
+      <RecordsOverlay bottom={150} hints={false} status={key === 'turntable'} />
     </>
   )
 }

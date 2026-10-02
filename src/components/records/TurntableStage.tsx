@@ -8,20 +8,22 @@ import { LookCamera } from '../stage/LookCamera'
 import { ToyControls } from '../stage/ToyControls'
 import { getBrowse, openCrate, takeOut } from './browse'
 import { Crate } from './Crate'
+import { VinylWarm } from './Record'
 import { getDeck, setDeck } from './deck'
 import { Eastwood } from './Eastwood'
 import { Light } from './Light'
-import { LooseRecords, takeLoose } from './Loose'
+import { LABEL } from './library'
 import { askDig, RecordsOverlay } from './Overlay'
 import { needle } from './play'
-import { useFillCrates } from './shelf'
+import { playOn } from './putOn'
+import { useFillCrates, useShelf } from './shelf'
 import { Turntable } from './Turntable'
 import { EW, checkEastwood } from './victrola'
 
 /**
- * The record player on its own (gallery first): the Victrola Eastwood, full size, in the Quad's evening light, three
- * of the crates beside it (On Repeat, Saved, Dig: her own records once she's logged in with Spotify). Click a crate to
- * go through it (./browse: A / D, Enter), click a record out of its jacket and carry it to the turntable.
+ * The record player on its own (gallery first): the Victrola Eastwood, full size, in the Quad's evening light, the
+ * crate beside it (her saved albums once she's logged in with Spotify, or what she dug for). Click the crate to go
+ * through it (./browse: A / D, Enter), click a record out of its jacket: it goes on and plays.
  * &check: the sheet (the manual's drawing and Victrola's photos beside it, and the checks).
  */
 function Scene() {
@@ -36,25 +38,19 @@ function Scene() {
         <RigidBody type="fixed" colliders={false}>
           <CuboidCollider args={[EW.w / 2, EW.cab / 2, EW.d / 2]} position={[0, EW.cab / 2, 0]} />
         </RigidBody>
-        {(
-          [
-            ['repeat', 'On Repeat', -0.35],
-            ['saved', 'Saved', -0.5],
-            ['dig', 'Dig', -0.65],
-          ] as const
-        ).map(([id, label, rot], i) => (
-          <group key={id} position={[470 + i * 330, 0, -40 + i * 160]} rotation={[0, rot, 0]}>
-            <Crate id={id} label={label} onTake={takeLoose} onCard={id === 'dig' ? () => askDig() : undefined} empty={id === 'dig' ? 'click to ask for anything' : ''} />
-            <RigidBody type="fixed" colliders={false}>
-              <CuboidCollider args={[190, 100, 140]} position={[0, 100, 0]} />
-            </RigidBody>
-          </group>
-        ))}
-        <LooseRecords />
+        <VinylWarm />
+        <group position={[520, 0, 60]} rotation={[0, -0.45, 0]}>
+          <TheCrate />
+        </group>
       </World>
       <LookCamera />
     </>
   )
+}
+
+function TheCrate() {
+  const sh = useShelf()
+  return <Crate id={sh.showing} label={sh.showing === 'dig' ? LABEL.dig : LABEL.saved} note={sh.showing === 'dig' ? sh.dug : ''} onPlay={(p, disc) => playOn(p, disc)} />
 }
 
 export function TurntableStage() {
@@ -66,6 +62,9 @@ export function TurntableStage() {
         <ToyControls target={[300, 60, 0]} minDistance={150} maxDistance={5000} maxPolarAngle={Math.PI / 2 - 0.05} />
       </Canvas>
       <RecordsOverlay />
+      <button onClick={() => askDig()} style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 20, font: "700 18px 'Gaegu', cursive", background: '#2b2538', color: '#fff4e6', border: '2px solid #fff4e6', borderRadius: 999, padding: '5px 16px', cursor: 'pointer' }}>
+        ⛏ dig for records
+      </button>
     </>
   )
 }

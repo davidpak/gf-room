@@ -12,8 +12,7 @@ import type { Pressing } from './vinyl'
  *               the one before, after (the one up sinks back)
  *   a record    Enter, Space, or a click on the one up: it comes out, up in front of the crate, its record (both,
  *               for a double album) sliding out of its jacket, and the camera comes in to it; A / D go on to the
- *               next one out. Click one of its records: it comes out of the jacket for real (./Loose), to be
- *               carried to the turntable
+ *               next one out. Click one of its records: it goes on the turntable
  *   back        Esc: the record back in the crate, then the crate left
  */
 export type Browse = { mode: 'none' | 'crate' | 'out'; crate: CrateId | null; i: number }
@@ -33,6 +32,7 @@ export const setBrowseParent = (p: Spot | null) => void (parent = p)
 
 /** each crate's place in the world, and where a record taken out of it stands (for framing them) */
 export const crateRefs = new Map<CrateId, { crate: Object3D | null; out: Object3D | null }>()
+
 const records = (): Pressing[] => (s.crate ? getShelf().crates[s.crate] : []) ?? []
 /** the record up (or out) now */
 export const recordUp = () => (s.mode === 'none' ? null : (records()[s.i] ?? null))
@@ -76,7 +76,7 @@ export const crateSpot: Spot = {
 export const recordSpot: Spot = {
   key: 'record',
   items: [],
-  hint: 'click a record to take it out of its jacket · A / D for the next one',
+  hint: 'click a record to play it · A / D for the next one',
   back: 'put it back',
   frame: (pos, at, aspect) => {
     const o = s.crate && crateRefs.get(s.crate)?.out

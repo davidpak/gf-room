@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, CylinderGeometry, DoubleSide, Mesh, MeshBasicMaterial, PlaneGeometry, SRGBColorSpace, SphereGeometry, TubeGeometry, Vector3, type Material } from 'three'
+import { BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, Color, CylinderGeometry, DoubleSide, Matrix4, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace, SphereGeometry, TubeGeometry, Vector3, type InstancedMesh, type Material } from 'three'
 import { usePlayer } from '../../lib/spotify/player'
 import { useDeck } from '../records/deck'
 import { needle } from '../records/play'
 import { Jacket, useArt } from '../records/Record'
+import { StillSleeves } from '../records/Sleeves'
 import { DARK, FRAME, HAND, RBOX, WOOD, slate, star, stripes } from './CookieStand'
 import { bruno } from './bruno'
 
@@ -423,7 +424,8 @@ export function Notes({ from }: { from: [number, number, number] }) {
 
 // ---- the vinyl wall: records hung on strings from the canopy's back rail, turning slowly
 const HANG_LABELS = ['#f5b3c6', '#d4c0ff', '#ffe08a', '#bfe8d6', '#f7c59f']
-function hangingFace(label: string) {
+/** (the face's black and grooves stay black under any colour; its label, white, takes the disc's) */
+function hangingFace(label = '#ffffff') {
   const c = document.createElement('canvas')
   c.width = c.height = 256
   const g = c.getContext('2d')!
@@ -449,35 +451,54 @@ function hangingFace(label: string) {
   return t
 }
 const HANG_DISC = (() => {
-  // (standing, its faces toward ±z; two groups: its rim, then both faces)
+  // (standing, its faces toward ±z; one material: its rim's uv in the face picture's black corner)
   const g = new CylinderGeometry(150, 150, 3, 48).rotateX(Math.PI / 2)
-  const [torso, top, bottom] = g.groups
+  const [torso] = g.groups
+  const uv = g.attributes.uv
+  for (let k = torso.start; k < torso.start + torso.count; k++) uv.setXY(g.index!.getX(k), 0.02, 0.02)
   g.clearGroups()
-  g.addGroup(torso.start, torso.count, 0)
-  g.addGroup(top.start, top.count + bottom.count, 1)
   return g
 })()
 const STRING = new CylinderGeometry(1.5, 1.5, 1, 4)
-const HANG_RIM = bruno({ color: '#1f1c24' })
+const HANG_FACE = bruno({ map: hangingFace() })
+const HANG = { hx: CANOPY.hx, discs: [-900, -450, 0, 450, 900].map((x, i) => ({ x: Math.max(-CANOPY.hx + 160, Math.min(CANOPY.hx - 160, x + ((i * 37) % 60) - 30)), drop: 260 + ((i * 97) % 200), turn: 0.2 + (i % 3) * 0.12, phase: i * 1.7 })) }
+/** the records hung from the back rail: their strings (still: for <Static>) */
+export function VinylStrings() {
+  return (
+    <group position={[0, CANOPY.eave - 40, -CANOPY.hz + 40]}>
+      {HANG.discs.map((d, i) => (
+        <mesh key={i} geometry={STRING} material={DARK} position={[d.x, -d.drop / 2, 0]} scale={[1, d.drop, 1]} />
+      ))}
+    </group>
+  )
+}
+const _hm = new Matrix4()
+const _hq = new Quaternion()
+const _hy = new Vector3(0, 1, 0)
+const _hp = new Vector3()
+const _h1 = new Vector3(1, 1, 1)
+/** …and the records on them, turning slowly (one draw) */
 export function VinylWall() {
-  const { hx, hz, eave } = CANOPY
-  const mats = useMemo(() => HANG_LABELS.map((l) => { const f = bruno({ map: hangingFace(l) }); return [HANG_RIM, f] as Material[] }), [])
-  const discs = useMemo(() => [-900, -450, 0, 450, 900].map((x, i) => ({ x: x + ((i * 37) % 60) - 30, drop: 260 + ((i * 97) % 200), turn: 0.2 + (i % 3) * 0.12, phase: i * 1.7 })), [])
-  const refs = useRef<(Mesh | null)[]>([])
+  const ref = useRef<InstancedMesh>(null)
+  useEffect(() => {
+    const m = ref.current
+    if (!m) return
+    HANG.discs.forEach((_, i) => m.setColorAt(i, new Color(HANG_LABELS[i % HANG_LABELS.length])))
+    if (m.instanceColor) m.instanceColor.needsUpdate = true
+  }, [])
   useFrame(({ clock }) => {
+    const m = ref.current
+    if (!m) return
     const t = clock.elapsedTime
-    refs.current.forEach((m, i) => {
-      if (m) m.rotation.y = Math.sin(t * discs[i].turn + discs[i].phase) * 1.1
+    HANG.discs.forEach((d, i) => {
+      _hq.setFromAxisAngle(_hy, Math.sin(t * d.turn + d.phase) * 1.1)
+      m.setMatrixAt(i, _hm.compose(_hp.set(d.x, -d.drop - 150, 0), _hq, _h1))
     })
+    m.instanceMatrix.needsUpdate = true
   })
   return (
-    <group position={[0, eave - 40, -hz + 40]} userData={{ live: true }}>
-      {discs.map((d, i) => (
-        <group key={i} position={[Math.max(-hx + 160, Math.min(hx - 160, d.x)), 0, 0]}>
-          <mesh geometry={STRING} material={DARK} position={[0, -d.drop / 2, 0]} scale={[1, d.drop, 1]} />
-          <mesh ref={(m) => void (refs.current[i] = m)} geometry={HANG_DISC} material={mats[i]} position={[0, -d.drop - 150, 0]} />
-        </group>
-      ))}
+    <group position={[0, CANOPY.eave - 40, -CANOPY.hz + 40]}>
+      <instancedMesh ref={ref} args={[HANG_DISC, HANG_FACE, HANG.discs.length]} frustumCulled={false} />
     </group>
   )
 }
@@ -509,8 +530,13 @@ export function Bunting() {
   )
 }
 
-// ---- the picks rack: a tiered wooden display rack, records face out (her all-time favourites), a card on top
+// ---- the picks rack: a tiered wooden display rack, records face out (a few of hers: one draw, ../records/Sleeves), a card on top
 export const RACK = { w: 720, h: 920, d: 300, lean: 0.22, tiers: [110, 520] }
+const slots = [
+  { x: -RACK.w / 4 + 6, tier: 0 },
+  { x: RACK.w / 4 - 6, tier: 0 },
+  { x: 0, tier: 1 },
+]
 function picksCard(title: string) {
   const c = document.createElement('canvas')
   c.width = 640
@@ -532,11 +558,7 @@ export function PicksRack({ records, title }: { records: import('../records/viny
     return [WOOD, WOOD, WOOD, WOOD, bruno({ map: t, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.15, shade: '#6f7699' }), WOOD] as Material[]
   }, [title])
   const g = useMemo(() => ({ back: new BoxGeometry(RACK.w, RACK.h, 24), ledge: new BoxGeometry(RACK.w, 22, 70), lip: new BoxGeometry(RACK.w, 50, 14), leg: new BoxGeometry(30, RACK.h * 0.8, 30), card: new BoxGeometry(RACK.w * 0.9, 190, 20) }), [])
-  const slots = [
-    { x: -RACK.w / 4 + 6, tier: 0 },
-    { x: RACK.w / 4 - 6, tier: 0 },
-    { x: 0, tier: 1 },
-  ]
+  const place = useMemo(() => (i: number, m: Matrix4) => m.makeScale(0.98, 0.98, 0.98).setPosition(slots[i].x, RACK.tiers[slots[i].tier] + 11, 30), [])
   return (
     <group>
       {/* the back, leaning back on its prop; the ledges and their lips */}
@@ -549,19 +571,10 @@ export function PicksRack({ records, title }: { records: import('../records/viny
           </group>
         ))}
         <mesh geometry={g.card} material={card} position={[0, RACK.h + 60, 0]} castShadow />
-        {slots.map((s, i) =>
-          records[i] ? (
-            <group key={records[i].uri} position={[s.x, RACK.tiers[s.tier] + 11, 30]} scale={0.98}>
-              <PickJacket p={records[i]} />
-            </group>
-          ) : null,
-        )}
+        <StillSleeves records={records.slice(0, slots.length)} place={place} who="picks" />
       </group>
       <mesh geometry={g.leg} material={WOOD} position={[0, RACK.h * 0.38, -RACK.h * 0.32]} rotation={[0.55, 0, 0]} castShadow />
     </group>
   )
 }
-function PickJacket({ p }: { p: import('../records/vinyl').Pressing }) {
-  const art = useArt(p)
-  return art ? <Jacket p={p} art={art} lite /> : null
-}
+

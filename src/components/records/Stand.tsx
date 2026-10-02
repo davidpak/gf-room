@@ -6,13 +6,9 @@ import { pineTexture } from './Crate'
 import { CRATE, STAND } from './rack'
 
 /**
- * The record stand: a two-tier pine table, the Victrola on top at the left, three crates beside it, four more on the
- * shelf below (the way record stands are: a console table with crates under it). Our own design, sized round what it
- * holds: [EW] the player 322 × 312; [CRATE] a crate 358 wide outside, 278 deep. mm; its frame: its middle, its feet
- * at y 0, its front toward +z.
- *
- * The crates under the top can't lift a record out where they stand (the top's in the way): going through one, it
- * slides out from under, forward (./QuadMusic).
+ * The record stand: a two-tier pine table, the Victrola on top at the left, the crate beside it, the Dig box; the
+ * back stock on the shelf below. Our own design, sized round what it holds: [EW] the player 322 × 312; [CRATE] the
+ * crate 358 wide outside. mm; its frame: its middle, its feet at y 0, its front toward +z.
  */
 const S = STAND
 

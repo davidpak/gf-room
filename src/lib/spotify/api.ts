@@ -22,8 +22,8 @@ export type Me = { id: string; display_name: string; product: string; country: s
 /**
  * Asking Spotify, gently. An app in development mode has a small allowance of asks (past it: 429, "Too many
  * requests", every ask refused for a while), so:
- *   remembered  what's asked is kept (in memory, and in this browser for next time): an album for a week, her
- *               listening for an hour, a search for a day; asked again inside that, it isn't asked
+ *   remembered  what's asked is kept (in memory, and in this browser for next time): an album for a week, a
+ *               search or an artist's albums for a day; asked again inside that, it isn't asked
  *   one at a time   a little apart; the same ask while it's out waits for that one's answer
  *   told to wait    a 429 holds every ask for as long as Spotify says (Retry-After), then that ask once more; a long
  *               wait isn't waited out: the ask fails, saying so (`SpotifyResting`)
@@ -31,11 +31,18 @@ export type Me = { id: string; display_name: string; product: string; country: s
 const DAY = 24 * 3600_000
 const ttlFor = (path: string) =>
   path.startsWith('/albums/') ? 7 * DAY
-  : path.startsWith('/me/top/') || path.startsWith('/me/albums') || path.startsWith('/me/playlists') ? 3600_000
-  : path.startsWith('/me/player/recently') ? 600_000
-  : path.startsWith('/search') || path.startsWith('/playlists/') || path.startsWith('/artists/') ? DAY
+  : path.startsWith('/search') || path.startsWith('/artists/') ? DAY
   : 0
 const STORE = 'spotify.ask.'
+// (what this page no longer asks for, kept by an earlier one (her top songs, albums with every country they're sold
+// in): let go, it's only taking room)
+try {
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith(STORE) && (!ttlFor(k.slice(STORE.length)) || !k.includes('market=')))
+    .forEach((k) => localStorage.removeItem(k))
+} catch {
+  /* (no storage) */
+}
 const mem = new Map<string, { at: number; v: unknown }>()
 function recall(path: string): unknown {
   const ttl = ttlFor(path)
@@ -120,14 +127,14 @@ export const me = () => sp<Me>('/me')
 
 export async function search(q: string) {
   const r = await sp<{ albums: { items: Album[] }; tracks: { items: (Track & { album: Album })[] } }>(
-    `/search?${new URLSearchParams({ q, type: 'album,track', limit: '10' })}`,
+    `/search?${new URLSearchParams({ q, type: 'album,track', limit: '10', market: 'from_token' })}`,
   )
   return { albums: r.albums.items.filter(Boolean), tracks: r.tracks.items.filter(Boolean) }
 }
 
 /** an album with all its tracks (past the first page, for long ones) */
 export async function album(id: string) {
-  const a = await sp<Album>(`/albums/${id}`)
+  const a = await sp<Album>(`/albums/${id}?market=from_token`)
   const items = [...(a.tracks?.items ?? [])]
   let next = a.tracks?.next ?? null
   while (next) {
@@ -138,83 +145,27 @@ export async function album(id: string) {
   return { ...a, tracks: { items, next: null } }
 }
 
-/** albums by id, with their tracks: twenty to an ask, or (where Spotify won't, as it doesn't for apps still in
- *  development mode since 2026) one at a time, a few at once */
-let batchOk = true
-export async function albums(ids: string[]) {
-  if (batchOk) {
-    try {
-      const out: Album[] = []
-      for (let i = 0; i < ids.length; i += 20) {
-        const r = await sp<{ albums: (Album | null)[] }>(`/albums?ids=${ids.slice(i, i + 20).join(',')}`)
-        out.push(...r.albums.filter((a): a is Album => !!a))
-      }
-      return out
-    } catch (e) {
-      console.warn('Spotify: albums in one ask refused, one at a time instead', e)
-      batchOk = false
-    }
-  }
-  const out: (Album | null)[] = new Array(ids.length).fill(null)
-  let next = 0
-  await Promise.all(
-    Array.from({ length: 3 }, async () => {
-      while (next < ids.length) {
-        const i = next++
-        out[i] = await album(ids[i]).catch((e) => (console.warn('Spotify: album', ids[i], e), null))
-      }
-    }),
-  )
-  return out.filter((a): a is Album => !!a)
-}
-/** the albums of some songs, each once, in order */
-const uniqueAlbums = (tracks: { album: Album }[], n: number) => {
-  const seen = new Set<string>()
-  return tracks.map((t) => t.album).filter((a) => a && !seen.has(a.id) && seen.add(a.id)).slice(0, n)
-}
-
-/** her most played (short_term: about the last 4 weeks; medium_term: 6 months; long_term: about a year), as their
- *  albums (as Spotify gives them with the songs: no track lists: those are asked for when a record's taken out) */
-export async function topAlbums(range: 'short_term' | 'medium_term' | 'long_term', n = 12) {
-  const r = await sp<{ items: (Track & { album: Album })[] }>(`/me/top/tracks?time_range=${range}&limit=50`)
-  return uniqueAlbums(r.items, n)
-}
-/** what she's played lately (the last 50 songs), as their albums, the latest first */
-export async function recentAlbums(n = 12) {
-  const r = await sp<{ items: { track: Track & { album: Album } }[] }>('/me/player/recently-played?limit=50')
-  return uniqueAlbums(
-    r.items.map((i) => i.track),
-    n,
-  )
-}
 /** an artist's albums (and singles), the newest first, each name once */
 export async function artistAlbums(id: string, n = 12) {
-  const r = await sp<{ items: Album[] }>(`/artists/${id}/albums?include_groups=album,single&limit=${Math.min(50, n * 2)}`)
+  const r = await sp<{ items: Album[] }>(`/artists/${id}/albums?include_groups=album,single&market=from_token&limit=${Math.min(50, n * 2)}`)
   const seen = new Set<string>()
   return r.items.filter((a) => !seen.has(a.name.toLowerCase()) && seen.add(a.name.toLowerCase())).slice(0, n)
 }
 
-export type Playlist = { id: string; uri: string; name: string; images: Image[] | null; owner: { display_name: string }; tracks: { total: number } }
-/** her playlists (the ones she made and follows; Spotify's own made-for-you ones it no longer lets apps read) */
-export async function playlists(n = 12) {
-  const r = await sp<{ items: (Playlist | null)[] }>(`/me/playlists?limit=${n}`)
-  return r.items.filter((p): p is Playlist => !!p)
-}
-/** a playlist's songs, in order (the first `n`): its items (as Spotify now calls them, each an `item`), or its
- *  tracks (as it did, each a `track`) */
-export async function playlistTracks(id: string, n = 40) {
-  type Row = { track?: Track | null; item?: Track | null }
-  const r = await sp<{ items: Row[] }>(`/playlists/${id}/items?limit=${n}`).catch(() => sp<{ items: Row[] }>(`/playlists/${id}/tracks?limit=${n}`))
-  return r.items.map((i) => i.item ?? i.track).filter((t): t is Track => !!t && !!t.uri && t.uri.startsWith('spotify:track:'))
-}
-
-export async function savedAlbums(limit = 20) {
-  const r = await sp<{ items: { album: Album }[] }>(`/me/albums?limit=${limit}`)
+/**
+ * Her saved albums, the latest saved first, each with its songs (the first 50: enough for nearly any album): one ask
+ * for up to 50 (`market`: without it every album and song carries the list of countries it's sold in, most of what
+ * comes back). Not remembered here: ../../components/records/library keeps what's made of them.
+ */
+export async function savedAlbums(limit = 50) {
+  const r = await sp<{ items: { album: Album }[]; total: number }>(`/me/albums?limit=${limit}&market=from_token`)
   return r.items.map((i) => i.album)
 }
 
 /** the biggest picture of the cover (Spotify gives 640, 300, 64) */
 export const cover = (a: Pick<Album, 'images'>) => [...a.images].sort((x, y) => y.width - x.width)[0]?.url
+/** the smallest picture at least `px` across (the crate's covers: 300, not 640) */
+export const coverAt = (a: Pick<Album, 'images'>, px: number) => [...a.images].sort((x, y) => x.width - y.width).find((i) => i.width >= px)?.url ?? cover(a)
 
 /** play an album (or a single track) on a device, from a track and a point in it */
 export function play(device: string, contextUri: string, opts: { track?: number; uri?: string; ms?: number } = {}) {

@@ -10,7 +10,7 @@ import { H as PAPER_H, W as PAPER_W } from '../art/plane/paper'
 import { CANVAS, EASEL, HOOP, JAR, PAINTS, PALETTE, PAPER_COLORS, PENCILS, POT, SKETCHBOOK, STOOL, THROW, TUBE, WATERCOLOR } from '../art/spec'
 import { Prompts } from '../prompt/Prompts'
 import { LiveProp, liveBody, setPrompt } from './Physical'
-import { clickSpot, frameAround, getLook, lookBack, useLook, type Spot } from './look'
+import { clickSpot, frameAround, getLook, lookBack, useLookMine, type Spot } from './look'
 import { onReset } from './reset'
 import { SET } from './set'
 import type { CarState } from './Car'
@@ -95,9 +95,11 @@ const _q = new Quaternion()
 const _c = new Vector3()
 const _n = new Vector3()
 
+/** its own spots: the easel, the papers on the line */
+const ART_SPOT = (k: string) => k === 'easel' || k.startsWith('paper')
 export function QuadArt({ car }: { car: { current: CarState } }) {
-  const look = useLook()
-  const painting = look?.spot.key === 'easel'
+  const lookKey = useLookMine(ART_SPOT)
+  const painting = lookKey === 'easel'
   const spot = useMemo<Spot>(
     () => ({
       key: 'easel',
@@ -244,7 +246,7 @@ export function QuadArt({ car }: { car: { current: CarState } }) {
             rot={A.rot + Math.sin(i * 2.1) * 0.1}
             color={c}
             k={K}
-            zoom={{ on: look?.spot.key === key, open: () => clickSpot(paperSpots[i]), close: () => getLook()?.spot.key === key && lookBack() }}
+            zoom={{ on: lookKey === key, open: () => clickSpot(paperSpots[i]), close: () => getLook()?.spot.key === key && lookBack() }}
           />
         )
       })}

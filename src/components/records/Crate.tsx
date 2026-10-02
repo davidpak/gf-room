@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { BoxGeometry, CanvasTexture, ExtrudeGeometry, Path, RepeatWrapping, SRGBColorSpace, Shape, type Group, type InstancedMesh, type Material, type Object3D, Color, Matrix4, Quaternion, Vector3 } from 'three'
+import { BoxGeometry, CanvasTexture, Euler, ExtrudeGeometry, Matrix4, Path, Quaternion, RepeatWrapping, SRGBColorSpace, Shape, Vector3, type Group, type InstancedMesh } from 'three'
 import { bruno } from '../quad/bruno'
 import { Static } from '../../lib/render/Static'
 import { useLook } from '../quad/look'
-import { crateRefs, lookMoved, openCrate, takeOut, useBrowse } from './browse'
+import { crateRefs, getBrowse, lookMoved, openCrate, takeOut, useBrowse } from './browse'
 import type { CrateId } from './library'
 import { crateNote, useShelf } from './shelf'
-import { Disc, Jacket, discThick, useArt, type Art } from './Record'
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { Disc, Jacket, artOf, discThick, useArt } from './Record'
+import { bigCover, uploadSoon } from './covers'
+import { SLEEVE, sleeveGeometry, useSleeveCovers } from './Sleeves'
 import { LP, sizeOf, type Pressing } from './vinyl'
 import { CRATE } from './rack'
 
@@ -17,9 +18,11 @@ import { CRATE } from './rack'
  * end. Our own (no one crate it copies), sized round a 12" jacket the way record crates are: [LP] the jacket's 314 mm
  * across, a finger's room each side; 200 tall, so the records stand well out of it.
  *
- * The records stand in it covers forward, leaning back a little, front to back. Going through it (./browse): the
- * record up rises clear of the crate; taken out, it comes up in front of the crate, upright, its record (both, for a
- * double album) sliding out of its open edge, fanned; a click on one (`onTake`) takes it out for real (./Loose).
+ * The records stand in it covers forward, leaning back a little, front to back: all of them one draw (./Sleeves:
+ * their covers squares of one shared picture, ./covers). Going through it (./browse): the ones in front of the
+ * record up tip forward, as a hand flipping through does, and it rises clear of the crate (its own 640 cover put on
+ * it, sharp, close up); taken out, it comes up in front of the crate, upright, its record (both, for a double album)
+ * sliding out of its open edge, fanned; a click on one plays it (`onPlay`: onto the turntable).
  * Its label's chalked on a slate card on its front board (painted into the board: no card stuck on).
  * Its frame: its middle, its floor's underside at y 0, the low front toward +z.
  */
@@ -132,50 +135,29 @@ function frontArt(label: string, empty: string) {
   return t
 }
 
-/**
- * A record behind the front one: plain. Its cover's hidden by the one in front (its top edge all that shows), so it's
- * drawn as one piece in a colour of its own, casting no shadow: a crate of a dozen costs a dozen draws, not 150, and
- * none of their covers, backs and spines are drawn or loaded till they're seen.
- */
-const PLAIN = (() => {
-  const g = new RoundedBoxGeometry(LP.sleeve, LP.sleeve, LP.sleeveT, 2, 1.2)
-  g.clearGroups()
-  return g
-})()
-const plainMats = new Map<string, Material>()
-function plainOf(p: Pressing, art: Art | null) {
-  let h = 0
-  for (const ch of p.uri) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  const colour = art?.inks.spine ?? `hsl(${h % 360}, 32%, 68%)`
-  let m = plainMats.get(colour)
-  if (!m) plainMats.set(colour, (m = bruno({ color: colour, shade: '#9a7f9a' })))
-  return m
-}
+/** a record's place in the crate, and how it's leaned (its bottom middle; r: its turn about x) */
+type Pose = { x: number; y: number; z: number; r: number }
+const MAX = 50 // (records the crate holds: a 4.5 mm jacket every 5 mm)
 
-function Record({ p, z, pose, full, onPick, onTake }: { p: Pressing; z: number; pose: 'rest' | 'hover' | 'up' | 'out'; full: boolean; onPick: () => void; onTake: (disc: number, at: Object3D) => void }) {
-  // (its cover, back, spine: only for the one in front, or one picked out; the rest plain till then)
-  const art = useArt(full || pose !== 'rest' ? p : null)
+/**
+ * The record up (or out), close up: its jacket with its own cover (sharp at this size, where the sheet's square
+ * isn't), and, out, its records sliding out of the jacket's open edge, fanned. Placed by the crate, each frame,
+ * where its jacket in the crate is; `ready` once its cover's in hand (till then the crate's own jacket shows).
+ */
+function Hero({ p, out, onUp, onPlay, ready, place }: { p: Pressing; out: boolean; onUp: () => void; onPlay: (disc: number) => void; ready: (on: boolean) => void; place: (g: Group | null) => void }) {
+  const art = useArt(p)
+  useEffect(() => {
+    ready(!!art)
+    return () => ready(false)
+  }, [art, ready])
   const S = sizeOf(p)
-  const g = useRef<Group>(null)
   const slides = useRef<(Group | null)[]>([])
   const outT = useRef(0)
   const [over, setOver] = useState<number | null>(null)
-  // (its records only made while it's out, or going back in: a crate full of albums costs only their jackets)
+  // (its records only made while it's out, or going back in)
   const [discsOn, setDiscsOn] = useState(false)
   useFrame((_, dtRaw) => {
-    const o = g.current
-    if (!o) return
     const dt = Math.min(dtRaw, 0.05)
-    const k = Math.min(1, dt * 7)
-    const out = pose === 'out'
-    // (out: in front of the crate, upright, the whole centred; else in its place, risen as it is)
-    const want = out
-      ? { x: -fanned(p), y: OUT.y, z: OUT.z, r: 0.04 }
-      : { x: 0, y: C.floor + (pose === 'up' ? C.h + 15 : pose === 'hover' ? 40 : 0), z, r: -C.lean }
-    o.position.x += (want.x - o.position.x) * k
-    o.position.y += (want.y - o.position.y) * k
-    o.position.z += (want.z - o.position.z) * k
-    o.rotation.x += (want.r - o.rotation.x) * k
     // its records slide out once it's out (one after the other), back in before it goes back
     outT.current = out ? outT.current + dt : Math.max(0, Math.min(outT.current, 0.9) - dt * 3)
     if (out !== discsOn && (out || outT.current === 0)) setDiscsOn(out)
@@ -190,24 +172,24 @@ function Record({ p, z, pose, full, onPick, onTake }: { p: Pressing; z: number; 
   })
   const stop = (e: ThreeEvent<MouseEvent | PointerEvent>) => e.stopPropagation()
   const discs = p.sides.length / 2
+  if (!art) return null
   return (
-    <group ref={g} position={[0, C.floor, z]} rotation={[-C.lean, 0, 0]}>
+    <group ref={place}>
       <group
         onClick={(e) => {
           stop(e)
-          onPick()
+          if (!out) onUp()
         }}
         onPointerOver={(e) => {
           stop(e)
-          document.body.style.cursor = 'pointer'
+          document.body.style.cursor = out ? '' : 'pointer'
         }}
         onPointerOut={() => (document.body.style.cursor = '')}
       >
-        {art ? <Jacket p={p} art={art} shadow={false} lite={pose === 'rest'} /> : <mesh geometry={PLAIN} material={plainOf(p, null)} position={[0, LP.sleeve / 2, 0]} />}
+        <Jacket p={p} art={art} shadow={false} lite />
       </group>
-      {/* its records, behind the jacket, sliding out of its open edge (+x) when it's out */}
+      {/* its records, behind the jacket, sliding out of its open edge (+x) when it's out: a click plays one */}
       {discsOn &&
-        art &&
         Array.from({ length: discs }, (_, j) => (
           <group key={j} ref={(d) => void (slides.current[j] = d)} position={[0, S.sleeve / 2, -S.sleeveT / 2 - 2 - j * (discThick(S) + 2)]} visible={false}>
             <group
@@ -223,11 +205,9 @@ function Record({ p, z, pose, full, onPick, onTake }: { p: Pressing; z: number; 
               }}
               onClick={(e) => {
                 stop(e)
-                if (pose !== 'out') return
+                if (!out) return
                 document.body.style.cursor = ''
-                // (its pose now: the loose record starts just where this one is)
-                const at = e.eventObject.children[0]
-                if (at) onTake(j, at)
+                onPlay(j)
               }}
             >
               <group position={[0, -discThick(S) / 2, 0]}>
@@ -240,64 +220,42 @@ function Record({ p, z, pose, full, onPick, onTake }: { p: Pressing; z: number; 
   )
 }
 
-/** the records at rest behind the front one: plain jackets, all one draw (an instance each, its own colour) */
-const _m = new Matrix4()
-const _q = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -C.lean)
-const _p = new Vector3()
-const _one = new Vector3(1, 1, 1)
-const _zero = new Vector3(0, 0, 0)
-const _o = new Vector3(0, LP.sleeve / 2, 0)
-const PLAIN_MAT = bruno({ color: '#ffffff', shade: '#9a7f9a' })
-function PlainStack({ records, drawn, z, onOver, onOut, onPick }: { records: Pressing[]; drawn: (i: number) => boolean; z: (i: number) => number; onOver: (i: number) => void; onOut: (i: number) => void; onPick: (i: number) => void }) {
-  const ref = useRef<InstancedMesh>(null)
-  const n = records.length
-  useEffect(() => {
-    const m = ref.current
-    if (!m) return
-    records.forEach((p, i) => {
-      // (its middle: up its height from its foot, the foot leaned back with the rest)
-      _p.copy(_o).applyQuaternion(_q).add(new Vector3(0, C.floor, z(i)))
-      _m.compose(_p, _q, drawn(i) ? _zero : _one)
-      m.setMatrixAt(i, _m)
-      m.setColorAt(i, new Color((plainOf(p, null) as unknown as { color: Color }).color))
-    })
-    m.instanceMatrix.needsUpdate = true
-    if (m.instanceColor) m.instanceColor.needsUpdate = true
-    m.computeBoundingSphere()
+/** a record's sides drawn and sent up while nothing's happening (it's up: it may well be taken out next) */
+function warm(p: Pressing) {
+  if (!p.sides.length) return
+  const w = window as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }
+  const idle = (f: () => void) => (w.requestIdleCallback ? w.requestIdleCallback(f, { timeout: 600 }) : setTimeout(f, 60))
+  void artOf(p).then((a) => {
+    // (one side at a time: each its own idle moment)
+    const next = (k: number) => {
+      if (k >= Math.min(2, p.sides.length)) return
+      idle(() => {
+        const s = a.side(k)
+        uploadSoon(s.label)
+        uploadSoon(s.prof)
+        next(k + 1)
+      })
+    }
+    next(0)
   })
-  if (!n) return null
-  return (
-    <instancedMesh
-      key={n}
-      ref={ref}
-      args={[PLAIN, PLAIN_MAT, n]}
-      receiveShadow
-      onPointerMove={(e) => {
-        e.stopPropagation()
-        if (e.instanceId != null) onOver(e.instanceId)
-        document.body.style.cursor = 'pointer'
-      }}
-      onPointerOut={(e) => {
-        if (e.instanceId != null) onOut(e.instanceId)
-        document.body.style.cursor = ''
-      }}
-      onClick={(e) => {
-        e.stopPropagation()
-        if (e.instanceId != null) onPick(e.instanceId)
-      }}
-    />
-  )
 }
 
+const _m = new Matrix4()
+const _q = new Quaternion()
+const _e = new Euler()
+const _p = new Vector3()
+const _s = new Vector3()
+
 /**
- * A crate of records: `id` which (./library), `label` its name on its card. `onTake` a record clicked out of its
- * jacket (the pressing, which disc, the disc's place in the world). `onCard`: its card clicked (the Dig crate: what
- * to look for); `empty` written small on the card while it's empty. `gate`: asked first on a click (true: the click's
- * taken, the crate left alone: on the Quad, the first click on the stand takes in the whole stand).
+ * The crate of records: `id` which (./library), `label` its name on its card, `note` written small under it.
+ * `onPlay`: a record clicked out of its jacket (the pressing, which disc). `gate`: asked first on a click (true: the
+ * click's taken, the crate left alone: on the Quad, the first click on the stand takes in the whole stand).
  */
-export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: CrateId; label: string; onTake: (p: Pressing, disc: number, at: Object3D) => void; onCard?: () => void; empty?: string; gate?: () => boolean }) {
+export function Crate({ id, label, note = '', onPlay, gate }: { id: CrateId; label: string; note?: string; onPlay: (p: Pressing, disc: number) => void; gate?: () => boolean }) {
   const shelf = useShelf()
-  const records = shelf.crates[id] ?? []
+  const all = shelf.crates[id]
+  const records = useMemo(() => (all ?? []).slice(0, MAX), [all])
+  const n = records.length
   const m = useMemo(() => bruno({ map: pine(), shade: C.colors.pineShade }), [])
   const mEnd = useMemo(() => {
     const t = pine()
@@ -305,11 +263,9 @@ export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: Cra
     t.repeat.set(1 / 300, 1 / 300)
     return bruno({ map: t, shade: C.colors.pineShade })
   }, [])
-  // (empty: what it says while it loads, or why it couldn't; else what it was given)
-  const showEmpty = records.length ? '' : crateNote(id, shelf) || empty
-  const mFront = useMemo(() => {
-    return bruno({ map: frontArt(label, showEmpty), shade: C.colors.pineShade })
-  }, [label, showEmpty])
+  // (empty: what it says while it loads, or why it couldn't; else what it's been given)
+  const small = n ? note : crateNote(id, shelf) || note
+  const mFront = useMemo(() => bruno({ map: frontArt(label, small), shade: C.colors.pineShade }), [label, small])
   const g = useMemo(() => {
     const W = C.in.w + 2 * C.wall
     return {
@@ -323,75 +279,135 @@ export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: Cra
   const look = useLook()
   useEffect(() => lookMoved(), [look])
   const mine = b.crate === id && b.mode !== 'none'
-  const [over, setOver] = useState<number | null>(null)
-  const refs = useRef({ crate: null as Object3D | null, out: null as Object3D | null })
+  const refs = useRef({ crate: null as Group | null, out: null as Group | null })
   useEffect(() => {
     crateRefs.set(id, refs.current)
     return () => void crateRefs.delete(id)
   }, [id])
-  const n = records.length
+
+  // ---- the records: one instanced mesh, each one's pose eased toward where it's wanted
+  const mesh = useRef<InstancedMesh>(null)
+  const geo = useMemo(() => sleeveGeometry(Math.max(1, n)), [n])
+  useEffect(() => () => geo.dispose(), [geo])
+  useSleeveCovers(mesh, records, 'crate')
   const gap = Math.min(28, (C.in.d - 50) / Math.max(1, n - 1))
   const zOf = (i: number) => C.in.d / 2 - 30 - i * gap
-  const poseOf = (i: number) => (mine && b.mode === 'out' && b.i === i ? 'out' : mine && b.i === i ? 'up' : !mine && over === i ? 'hover' : 'rest') as 'rest' | 'hover' | 'up' | 'out'
-  const pick = (i: number) => gate?.() || (!mine ? openCrate(id, i) : b.mode === 'crate' && b.i === i ? takeOut(i) : openCrate(id, i))
-  // (a record that's been woken stays drawn on its own a moment after it's back at rest: it settles, then rejoins
-  // the batch)
-  const [awake, setAwake] = useState<Set<number>>(() => new Set())
-  const woken = records.map((_, i) => poseOf(i) !== 'rest')
-  const wokenKey = woken.map((w) => (w ? 1 : 0)).join('')
+  const poses = useRef<Pose[]>([])
+  const over = useRef<number | null>(null)
+  const hero = useRef({ i: -1, ready: false, g: null as Group | null })
+  const dirty = useRef(true)
   useEffect(() => {
-    const now = new Set<number>()
-    woken.forEach((w, i) => w && now.add(i))
-    setAwake((a) => new Set([...a, ...now]))
-    const t = setTimeout(() => setAwake(new Set(now)), 1200)
-    return () => clearTimeout(t)
-  }, [wokenKey]) // eslint-disable-line react-hooks/exhaustive-deps
+    poses.current = []
+    dirty.current = true
+  }, [records])
+  const heroI = mine ? b.i : -1
+  useEffect(() => {
+    hero.current.i = heroI
+    dirty.current = true
+    // (the ones either side decoded ahead, and this one's sides drawn while nothing's happening)
+    if (heroI < 0) return
+    for (const k of [heroI - 1, heroI + 1, heroI + 2]) if (records[k]) void bigCover(records[k])
+    if (records[heroI]) warm(records[heroI])
+  }, [heroI, records])
+  const want = (i: number, p: Pressing, o: Pose) => {
+    const bb = getBrowse()
+    const me = bb.crate === id && bb.mode !== 'none'
+    if (me && bb.mode === 'out' && bb.i === i) return Object.assign(o, { x: -fanned(p), y: OUT.y, z: OUT.z, r: 0.04 })
+    Object.assign(o, { x: 0, y: C.floor, z: zOf(i), r: -C.lean })
+    if (me && bb.i === i) o.y += C.h + 15
+    else if (me && bb.mode === 'crate' && i < bb.i) o.r = 0.22 // (the ones in front tipped forward)
+    else if (!me && over.current === i) o.y += 40
+    return o
+  }
+  const w: Pose = { x: 0, y: 0, z: 0, r: 0 }
+  useFrame((_, dtRaw) => {
+    const im = mesh.current
+    if (!im) return
+    const k = Math.min(1, Math.min(dtRaw, 0.05) * 8)
+    let moved = dirty.current
+    dirty.current = false
+    for (let i = 0; i < n; i++) {
+      want(i, records[i], w)
+      let c = poses.current[i]
+      if (!c) c = poses.current[i] = { ...w }
+      const d = Math.abs(w.x - c.x) + Math.abs(w.y - c.y) + Math.abs(w.z - c.z) + Math.abs(w.r - c.r) * 300
+      if (d < 0.02) continue
+      moved = true
+      c.x += (w.x - c.x) * k
+      c.y += (w.y - c.y) * k
+      c.z += (w.z - c.z) * k
+      c.r += (w.r - c.r) * k
+    }
+    const h = hero.current
+    const hp = poses.current[h.i]
+    if (h.g && hp) {
+      h.g.position.set(hp.x, hp.y, hp.z)
+      h.g.rotation.set(hp.r, 0, 0)
+    }
+    if (!moved) return
+    for (let i = 0; i < n; i++) {
+      const c = poses.current[i]
+      const sc = sizeOf(records[i]).sleeve / LP.sleeve
+      // (a 7" single: its own smaller, thinner jacket; the one up, once its sharp cover's on it, not drawn here)
+      _s.set(sc, sc, sc < 1 ? 3 / LP.sleeveT : 1).multiplyScalar(h.i === i && h.ready ? 0 : 1)
+      _m.compose(_p.set(c.x, c.y, c.z), _q.setFromEuler(_e.set(c.r, 0, 0)), _s)
+      im.setMatrixAt(i, _m)
+    }
+    im.instanceMatrix.needsUpdate = true
+    im.computeBoundingSphere()
+  })
+  const pick = (i: number) => gate?.() || (!mine ? openCrate(id, i) : b.mode === 'crate' && b.i === i ? takeOut(i) : openCrate(id, i))
   const open = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     if (gate?.()) return
-    if (!records.length) return onCard?.()
-    if (!mine) openCrate(id)
+    if (n && !mine) openCrate(id)
   }
+  const heroP = heroI >= 0 ? records[heroI] : null
+  const ready = useMemo(
+    () => (on: boolean) => {
+      hero.current.ready = on
+      dirty.current = true
+    },
+    [],
+  )
+  const place = useMemo(() => (o: Group | null) => void (hero.current.g = o), [])
   return (
     <group ref={(o) => void (refs.current.crate = o)}>
       {/* (its boards merged: a crate three draws, not eleven) */}
       <Static>
-      <group onClick={open} onPointerOver={(e) => (e.stopPropagation(), !mine && (document.body.style.cursor = 'pointer'))} onPointerOut={() => (document.body.style.cursor = '')}>
-        <mesh geometry={g.floor} material={m} position={[0, C.floor / 2, 0]} castShadow receiveShadow />
-        {[-1, 1].map((s) => (
-          <mesh key={s} geometry={g.end} material={mEnd} position={[s * (C.in.w / 2 + C.wall / 2), 0, 0]} castShadow receiveShadow />
-        ))}
-        <mesh geometry={g.back} material={m} position={[0, C.h / 2, -C.in.d / 2 - C.wall / 2]} castShadow receiveShadow />
-      </group>
-      {/* the front board, its card: the crate's name (the Dig crate: click it to say what to look for) */}
-      <mesh
-        geometry={g.front}
-        material={mFront}
-        position={[0, C.front / 2, C.in.d / 2 + C.wall / 2]}
-        castShadow
-        receiveShadow
-        onClick={(e) => {
-          e.stopPropagation()
-          if (gate?.()) return
-          if (onCard) onCard()
-          else if (records.length && !mine) openCrate(id)
-        }}
-        onPointerOver={(e) => (e.stopPropagation(), (document.body.style.cursor = 'pointer'))}
-        onPointerOut={() => (document.body.style.cursor = '')}
-      />
+        <group onClick={open} onPointerOver={(e) => (e.stopPropagation(), !mine && (document.body.style.cursor = 'pointer'))} onPointerOut={() => (document.body.style.cursor = '')}>
+          <mesh geometry={g.floor} material={m} position={[0, C.floor / 2, 0]} castShadow receiveShadow />
+          {[-1, 1].map((s) => (
+            <mesh key={s} geometry={g.end} material={mEnd} position={[s * (C.in.w / 2 + C.wall / 2), 0, 0]} castShadow receiveShadow />
+          ))}
+          <mesh geometry={g.back} material={m} position={[0, C.h / 2, -C.in.d / 2 - C.wall / 2]} castShadow receiveShadow />
+          {/* the front board, its card: the crate's name */}
+          <mesh geometry={g.front} material={mFront} position={[0, C.front / 2, C.in.d / 2 + C.wall / 2]} castShadow receiveShadow />
+        </group>
       </Static>
       {/* (where a record taken out is: the camera frames it) */}
-      <object3D ref={(o) => void (refs.current.out = o)} position={[0, OUT.y + LP.sleeve / 2, OUT.z]} />
-      {records.map((p, i) => {
-        const pose = poseOf(i)
-        if (i !== 0 && pose === 'rest' && !awake.has(i)) return null
-        return (
-          <group key={p.uri} onPointerOver={() => setOver(i)} onPointerOut={() => setOver((o) => (o === i ? null : o))}>
-            <Record p={p} z={zOf(i)} pose={pose} full={i === 0} onPick={() => pick(i)} onTake={(disc, at) => onTake(p, disc, at)} />
-          </group>
-        )
-      })}
-      <PlainStack records={records} drawn={(i) => i === 0 || poseOf(i) !== 'rest' || awake.has(i)} z={zOf} onOver={setOver} onOut={(i) => setOver((o) => (o === i ? null : o))} onPick={pick} />
+      <group ref={(o) => void (refs.current.out = o)} position={[0, OUT.y + LP.sleeve / 2, OUT.z]} />
+      {n > 0 && (
+        <instancedMesh
+          ref={mesh}
+          args={[geo, SLEEVE, n]}
+          receiveShadow
+          onPointerMove={(e) => {
+            e.stopPropagation()
+            if (e.instanceId != null) over.current = e.instanceId
+            document.body.style.cursor = 'pointer'
+          }}
+          onPointerOut={() => {
+            over.current = null
+            document.body.style.cursor = ''
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (e.instanceId != null) pick(e.instanceId)
+          }}
+        />
+      )}
+      {heroP && <Hero key={heroP.uri + heroP.sides.length} p={heroP} out={b.mode === 'out'} onUp={() => pick(heroI)} onPlay={(disc) => onPlay(heroP, disc)} ready={ready} place={place} />}
     </group>
   )
 }

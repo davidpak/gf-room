@@ -15,11 +15,8 @@ const SCOPES = [
   'user-read-private', // (her account: Premium or not)
   'user-read-playback-state',
   'user-modify-playback-state',
-  'user-library-read', // (her saved albums, for the crate)
-  'playlist-read-private',
-  'user-top-read', // (the crates: what she plays most, this month, this year, of all time)
-  'user-read-recently-played', // (and what she's played lately)
-]
+  'user-library-read', // (her saved albums: the crate)
+] // (no more than it uses: a token from before, which could see more, still does)
 const KEY = 'spotify.tokens'
 const PENDING = 'spotify.pending'
 const redirect = () => `${location.origin}/spotify`

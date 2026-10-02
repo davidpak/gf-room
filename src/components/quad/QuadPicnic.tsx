@@ -22,7 +22,7 @@ import { Butterflies, Flowers, VASE } from '../picnic/Flowers'
 import { LAYOUT } from '../picnic/layout'
 import { BASKET, BLANKET, BOOKS } from '../picnic/spec'
 import { liveBody, LiveProp, setPrompt } from './Physical'
-import { clickSpot, frameAround, useLook, type Spot } from './look'
+import { clickSpot, frameAround, useLookMine, type Spot } from './look'
 import { onReset } from './reset'
 import { onWalk, SET } from './set'
 import type { CarState } from './Car'
@@ -101,10 +101,11 @@ const BASKET_LOOK = new Vector3(0.18 * Math.cos(BASKET_ROT) + 0.85 * Math.sin(BA
 const BOOK_ROT = AT.rot + LAYOUT.open.rot
 const BOOK_LOOK = new Vector3(0.12 * Math.cos(BOOK_ROT) + 0.55 * Math.sin(BOOK_ROT), 1.6, -0.12 * Math.sin(BOOK_ROT) + 0.55 * Math.cos(BOOK_ROT)).normalize()
 
+const PICNIC_SPOT = (k: string) => k === 'picnic' || k === 'picnicbook'
 export function QuadPicnic({ car }: { car: { current: CarState } }) {
-  const look = useLook()
-  const looking = look?.spot.key === 'picnic'
-  const reading = look?.spot.key === 'picnicbook'
+  const lookKey = useLookMine(PICNIC_SPOT)
+  const looking = lookKey === 'picnic'
+  const reading = lookKey === 'picnicbook'
   const open = useRef(0)
   useFrame((_, dt) => {
     open.current += ((looking ? 1 : 0) - open.current) * Math.min(1, dt * 5)

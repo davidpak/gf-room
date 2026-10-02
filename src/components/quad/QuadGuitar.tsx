@@ -8,7 +8,7 @@ import { CASE_BOX, CaseModel } from '../guitar/Case'
 import { leanMatrix, playMatrix } from '../guitar/pose'
 import { CASE } from '../guitar/spec'
 import { LiveProp } from './Physical'
-import { clickSpot, frameAround, useLook, type Spot } from './look'
+import { clickSpot, frameAround, useLookMine, type Spot } from './look'
 import { SET } from './set'
 import type { CarState } from './Car'
 
@@ -51,10 +51,10 @@ const play = (() => {
 const CASE_AT = { x: TRUNK.x - 220, y: LAWN, z: TRUNK.z + 170, rot: -Math.PI / 2 + 0.6 }
 const O = (CASE.outside.w - 397) / 2 // (how far its shell stands out round the body)
 
+const GUITAR_SPOT = (k: string) => k === 'guitar'
 export function QuadGuitar({ car }: { car: { current: CarState } }) {
   const model = useRef<Group>(null)
-  const look = useLook()
-  const playing = look?.spot.key === 'guitar'
+  const playing = useLookMine(GUITAR_SPOT) === 'guitar'
   const pose = useRef<{ p: Vector3; q: Quaternion } | null>(null)
   useEffect(() => void (pose.current = playing ? play : null), [playing])
   const spot = useMemo<Spot>(

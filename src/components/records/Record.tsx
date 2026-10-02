@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BufferGeometry, CanvasTexture, CylinderGeometry, Float32BufferAttribute, SRGBColorSpace, Vector3, type Mesh, type Texture, type WebGLProgramParametersWithUniforms } from 'three'
+import { BufferGeometry, CanvasTexture, Color, CylinderGeometry, DataTexture, Float32BufferAttribute, RGFormat, SRGBColorSpace, Vector3, type Mesh, type Texture, type WebGLProgramParametersWithUniforms } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import '../../lib/render/bvh'
 import { LOOK, bruno } from '../quad/bruno'
-import { drawBack, drawCover, drawSide, inksOf, loadCover, type Inks } from './art'
-import { sizeOf, type Pressing } from './vinyl'
+import { drawBack, drawSide, inksOf, type Inks, type SideArt } from './art'
+import { bigCover, inksFor } from './covers'
+import { LP, sizeOf, type Pressing } from './vinyl'
 
 /**
  * A record (./vinyl) and its jacket, made from a pressing: the disc, both faces pressed with its sides (./art), the
@@ -14,7 +15,7 @@ import { sizeOf, type Pressing } from './vinyl'
  * Disc: lying in its frame's xz plane, its middle at the origin, side A up (its label's top toward -z), its bottom
  * at y 0. Jacket: standing in its xy plane, the cover toward +z, its bottom at y 0, its open edge at +x.
  */
-export type Art = { cover: Texture; back: () => Texture; side: (k: number) => Texture; inks: Inks }
+export type Art = { cover: Texture; back: () => Texture; side: (k: number) => SideArt; inks: Inks }
 const cache = new Map<string, Promise<Art>>()
 
 /** the pressing's pictures (cached by album: drawn once however many times it's shown) */
@@ -23,18 +24,11 @@ export function artOf(p: Pressing): Promise<Art> {
   const key = `${p.uri}#${p.sides.length}`
   let a = cache.get(key)
   if (!a) {
-    a = loadCover(p.cover).then((im) => {
-      const src = im ?? drawCover(p.title, p.artist)
-      const c = document.createElement('canvas')
-      c.width = c.height = 640
-      c.getContext('2d')!.drawImage(src, 0, 0, 640, 640)
-      const cover = new CanvasTexture(c)
-      cover.colorSpace = SRGBColorSpace
-      cover.anisotropy = 8
-      const inks = inksOf(c)
+    a = bigCover(p).then((cover) => {
+      const inks = inksFor(p) ?? inksOf(cover.image as CanvasImageSource)
       // (each side drawn the first time its record's shown: a crate of albums costs only their jackets)
-      const sides: Texture[] = []
-      const side = (k: number) => (sides[k] ??= drawSide(p, p.sides[k], inks, p.size === 'lp' ? 2048 : 1024))
+      const sides: SideArt[] = []
+      const side = (k: number) => (sides[k] ??= drawSide(p, p.sides[k], inks))
       let back: Texture | null = null
       return { cover, back: () => (back ??= drawBack(p, inks)), side, inks }
     })
@@ -53,9 +47,13 @@ export function useArt(p: Pressing | null) {
   return art
 }
 
-/** vinyl: bruno's light, and the grooves' sheen (Kajiya–Kay, the groove running round the middle) */
-function vinyl(map: Texture, inner: number, outer: number) {
-  const m = bruno({ map })
+/**
+ * vinyl: bruno's light; its face put together from the side's two parts (../art drawSide): the grooves, from each
+ * point's radius, read off the side's profile, and the label over them; and the grooves' sheen (Kajiya–Kay, the
+ * groove running round the middle)
+ */
+function vinyl(a: SideArt, R: number, inner: number, outer: number) {
+  const m = bruno({ map: a.label })
   const center = { value: new Vector3() }
   const base = m.onBeforeCompile
   m.onBeforeCompile = (s: WebGLProgramParametersWithUniforms, r) => {
@@ -63,8 +61,31 @@ function vinyl(map: Texture, inner: number, outer: number) {
     s.uniforms.uCenter = center
     s.uniforms.uSunDir = { value: LOOK.sun }
     s.uniforms.uGroove = { value: [inner, outer] }
+    s.uniforms.uProf = { value: a.prof }
+    s.uniforms.uProfLen = { value: a.prof.image.width * 0.05 }
+    s.uniforms.uBase = { value: a.base }
+    s.uniforms.uR = { value: R }
+    s.uniforms.uReach = { value: a.reach }
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform vec3 uCenter;\nuniform vec3 uSunDir;\nuniform vec2 uGroove;`)
+      .replace('#include <common>', `#include <common>
+uniform vec3 uCenter;
+uniform vec3 uSunDir;
+uniform vec2 uGroove;
+uniform sampler2D uProf;
+uniform float uProfLen;
+uniform vec3 uBase;
+uniform float uR;
+uniform float uReach;`)
+      .replace(
+        '#include <map_fragment>',
+        `vec2 q = (vMapUv - 0.5) * 2.0 * uR; // (mm from the middle: the face's uv spans its diameter)
+  float rq = length(q);
+  vec2 pr = texture2D(uProf, vec2(rq / uProfLen, 0.5)).rg;
+  vec3 vin = uBase * pow(pr.r * 4.0, 2.2); // (the profile's lightness, as it was on the picture's bytes)
+  vec4 lab = texture2D(map, q / (2.0 * uReach) + 0.5) * step(rq, uReach);
+  diffuseColor.rgb = mix(vin, lab.rgb, lab.a);
+  float gCut = pr.g * (1.0 - lab.a);`,
+      )
       .replace(
         '  // gloss: the evening sky',
         `  {
@@ -78,13 +99,13 @@ function vinyl(map: Texture, inner: number, outer: number) {
     vec3 H = normalize(uSunDir + V);
     float th = dot(T, H);
     float spec = pow(sqrt(max(0.0, 1.0 - th * th)), 420.0);
-    float on = smoothstep(uGroove.x, uGroove.x + 2.0, rr) * (1.0 - smoothstep(uGroove.y - 1.0, uGroove.y, rr)) * smoothstep(0.75, 0.97, diffuseColor.a); // (none on the smooth gaps)
+    float on = smoothstep(uGroove.x, uGroove.x + 2.0, rr) * (1.0 - smoothstep(uGroove.y - 1.0, uGroove.y, rr)) * smoothstep(0.5, 0.9, gCut); // (none on the smooth gaps)
     col += uLight * spec * on * 0.4 * max(0.0, dot(N, uSunDir) + 0.25);
   }
   // gloss: the evening sky`,
       )
   }
-  m.customProgramCacheKey = () => 'vinyl'
+  m.customProgramCacheKey = () => 'vinyl2'
   m.userData.center = center
   return m
 }
@@ -150,7 +171,7 @@ export function Disc({ p, art, disc = 0 }: { p: Pressing; art: Art; disc?: numbe
   const S = sizeOf(p)
   const g = discGeo(S)
   const label = S.label
-  const mats = useMemo(() => [vinyl(art.side(2 * disc), label + 4, S.r - 3), vinyl(art.side(2 * disc + 1), label + 4, S.r - 3)], [art, disc, label, S.r])
+  const mats = useMemo(() => [vinyl(art.side(2 * disc), S.r, label + 4, S.r - 3), vinyl(art.side(2 * disc + 1), S.r, label + 4, S.r - 3)], [art, disc, label, S.r])
   const rim = useMemo(() => bruno({ color: art.inks.rim, shade: '#4a4060' }), [art])
   useEffect(() => () => mats.forEach((m) => m.dispose()), [mats])
   // (the sheen turns round the disc's middle, wherever it's carried)
@@ -162,6 +183,29 @@ export function Disc({ p, art, disc = 0 }: { p: Pressing; art: Art; disc?: numbe
       <mesh ref={track(mats[0])} geometry={g.top} material={mats[0]} position={[0, BASE + S.t, 0]} castShadow receiveShadow />
       <mesh ref={track(mats[1])} geometry={g.under} material={mats[1]} position={[0, BASE, 0]} />
       <mesh geometry={g.rim} material={rim} position={[0, BASE + S.t / 2, 0]} scale={[1, S.t + 0.24, 1]} />
+    </group>
+  )
+}
+
+/**
+ * (Hidden: the vinyl's shaders compiled and the 12" record's shape made while the page loads (its warm-up draws
+ * what's hidden too), not the moment the first record comes out of its jacket.)
+ */
+export function VinylWarm() {
+  const w = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 4
+    const label = new CanvasTexture(c)
+    label.colorSpace = SRGBColorSpace
+    const prof = new DataTexture(new Uint8Array(8), 4, 1, RGFormat)
+    prof.needsUpdate = true
+    return { g: discGeo(LP), m: vinyl({ label, prof, base: new Color('#1a1a1b'), reach: LP.label + 10 }, LP.r, LP.label + 4, LP.r - 3), rim: bruno({ color: '#2a2a30', shade: '#4a4060' }) }
+  }, [])
+  return (
+    <group visible={false}>
+      <mesh geometry={w.g.top} material={w.m} castShadow receiveShadow />
+      <mesh geometry={w.g.under} material={w.m} />
+      <mesh geometry={w.g.rim} material={w.rim} />
     </group>
   )
 }

@@ -35,6 +35,19 @@ export const lookAt = (l: Look | null) => {
 }
 export const getLook = () => look
 export const useLook = () => useSyncExternalStore((f) => (subs.add(f), () => void subs.delete(f)), getLook)
+/** the key of the spot looked at ('' for none): a component that only cares which spot it is redraws only when that
+ *  changes, not each time the look does (the camera going from a crate to a record in it) */
+export const useLookKey = () => useSyncExternalStore((f) => (subs.add(f), () => void subs.delete(f)), () => getLook()?.spot.key ?? '')
+/** the key of the spot looked at if it's one `mine` says is its own, else '': a component redraws only when the look
+ *  comes to or leaves one of its own spots (the picnic doesn't redraw as the camera goes from a crate to a record) */
+export const useLookMine = (mine: (key: string) => boolean) =>
+  useSyncExternalStore(
+    (f) => (subs.add(f), () => void subs.delete(f)),
+    () => {
+      const k = getLook()?.spot.key ?? ''
+      return mine(k) ? k : ''
+    },
+  )
 /** a click on a spot's photo `k` (or on the spot itself): in to the spot first, then to the photo */
 export const clickSpot = (spot: Spot, k: number | null = null) => lookAt(look?.spot.key === spot.key && k !== null ? { spot, i: k } : { spot, i: look?.spot.key === spot.key ? look.i : null })
 /** back a step: from a photo to its spot, from the spot to the car */

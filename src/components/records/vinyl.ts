@@ -62,11 +62,13 @@ export type Pressing = {
   /** (its first artist on Spotify: more by them, from the Dig crate) */
   artistId?: string
   year: string
+  /** its cover's picture (640), and a smaller one (300: the crate's) */
   cover: string
+  thumb?: string
   /** two sides per disc (none yet: a jacket only, its record pressed when it's taken out: `stub`) */
   sides: Side[]
   /** what to ask Spotify for to press it (its songs not asked for yet) */
-  stub?: { kind: 'album' | 'playlist'; id: string }
+  stub?: { kind: 'album'; id: string }
 }
 
 /** tracks split into n runs, in order, the longest run as short as it can be (the linear partition, by DP) */
@@ -116,7 +118,7 @@ export function cutSide(size: Size, letter: string, tracks: { i: number; t: In }
 }
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-export function press(a: { uri: string; title: string; artist: string; artistId?: string; year: string; cover: string; tracks: In[]; stub?: Pressing['stub'] }): Pressing {
+export function press(a: { uri: string; title: string; artist: string; artistId?: string; year: string; cover: string; thumb?: string; tracks: In[]; stub?: Pressing['stub'] }): Pressing {
   if (!a.tracks.length) return { ...a, size: 'lp', sides: [] }
   if (a.tracks.length === 1 && a.uri.startsWith('spotify:track:')) {
     // a single: the song on A; B is left smooth (no B-side to put there)

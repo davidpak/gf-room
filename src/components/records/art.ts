@@ -1,4 +1,4 @@
-import { CanvasTexture, SRGBColorSpace, type Texture } from 'three'
+import { CanvasTexture, Color, DataTexture, LinearFilter, LinearMipmapLinearFilter, RGFormat, SRGBColorSpace, type Texture } from 'three'
 import { LEAD_IN, sizeOf, type Pressing, type Side } from './vinyl'
 
 /**
@@ -9,21 +9,10 @@ import { LEAD_IN, sizeOf, type Pressing, type Side } from './vinyl'
 const FONT = "'Gaegu', 'Nunito', cursive"
 const SERIF = "Georgia, 'Times New Roman', serif"
 
-export function loadCover(url: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    if (!url) return resolve(null)
-    const im = new Image()
-    im.crossOrigin = 'anonymous' // (Spotify's covers say anyone may: they can be drawn and textured)
-    im.onload = () => resolve(im)
-    im.onerror = () => resolve(null)
-    im.src = url
-  })
-}
-
 export type RGB = [number, number, number]
 export type Inks = { label: string; ink: string; spine: string; spineInk: string; rim: string; palette: RGB[] }
 /** the label's colour: the cover's most colourful common colour; its ink black or cream, whichever reads */
-export function inksOf(im: HTMLImageElement | HTMLCanvasElement | null): Inks {
+export function inksOf(im: CanvasImageSource | null): Inks {
   if (!im) return { label: '#f2d7c9', ink: '#2b2538', spine: '#2b2538', spineInk: '#fbf3e6', rim: '#2a2a30', palette: [[230, 150, 170], [150, 120, 200], [245, 230, 210]] }
   const c = document.createElement('canvas')
   c.width = c.height = 16
@@ -72,14 +61,9 @@ export function pressedAs(uri: string): Pressed {
 }
 
 /** the vinyl itself before the grooves are cut in it: one solid colour */
-function vinylBase(kind: Pressed, pal: RGB[], size: number) {
-  const c = document.createElement('canvas')
-  c.width = c.height = size
-  const g = c.getContext('2d')!
+function vinylBase(kind: Pressed, pal: RGB[]) {
   const q = pal[0]
-  g.fillStyle = kind === 'black' ? 'rgb(26, 26, 27)' : `rgb(${q[0] * 0.85}, ${q[1] * 0.85}, ${q[2] * 0.85})`
-  g.fillRect(0, 0, size, size)
-  return c
+  return new Color(kind === 'black' ? 'rgb(26, 26, 27)' : `rgb(${Math.round(q[0] * 0.85)}, ${Math.round(q[1] * 0.85)}, ${Math.round(q[2] * 0.85)})`)
 }
 
 const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`
@@ -111,68 +95,53 @@ function lines(g: CanvasRenderingContext2D, text: string, w: number, max: number
   return out
 }
 
-/** each pixel's step in the radius profile, for a face this size (worked out once, shared by every side drawn) */
-const indices = new Map<string, Uint16Array>()
-function profileIndex(size: number, px: number, step: number, n: number) {
-  const key = `${size}/${px}/${step}`
-  let a = indices.get(key)
-  if (!a) {
-    a = new Uint16Array(size * size)
-    const h = size / 2
-    for (let y = 0; y < size; y++)
-      for (let x = 0; x < size; x++) a[y * size + x] = Math.min(n - 1, Math.round(Math.hypot(x + 0.5 - h, y + 0.5 - h) / px / step))
-    indices.set(key, a)
-  }
-  return a
-}
-
 /**
- * One face of a disc (its alpha: 255 where it's grooved, less where it's smooth), square, the disc filling it (uv 0..1 across its diameter). The grooves are worked out a pixel
- * at a time from a profile in radius (0.05 mm a step): fine rings of slightly different black where there's music,
- * louder and quieter stretches, smooth wide bands for the gaps, the smooth run-out, a lighter raised edge.
+ * One face of a disc, in two parts the vinyl's shader (./Record) puts together:
+ *   the grooves   a profile in radius (0.05 mm a step), a strip of numbers: how light the vinyl is there (fine rings
+ *                 of slightly different black where there's music, louder and quieter stretches, smooth wide bands
+ *                 for the gaps, the smooth run-out, a lighter raised edge), and whether it's grooved (the sheen's
+ *                 only on grooves). Worked out by the shader from each point's radius: nothing drawn a pixel at a time
+ *   the label     drawn on a canvas covering the middle out past the run-out's lock groove and matrix number
+ *                 (transparent round it): the label in a colour from the cover, the album and that side's songs
  */
-export function drawSide(p: Pressing, side: Side, inks: Inks, size = 2048): Texture {
+export type SideArt = { label: Texture; prof: DataTexture; base: Color; reach: number }
+export function drawSide(p: Pressing, side: Side, inks: Inks): SideArt {
   const S = sizeOf(p)
-  const c = document.createElement('canvas')
-  c.width = c.height = size
-  const g = c.getContext('2d')!
-  const px = size / (2 * S.r) // px per mm
-  // the profile: lightness by radius
   const STEP = 0.05
   const N = Math.ceil(S.r / STEP) + 1
-  const prof = new Float32Array(N)
-  const cut = new Uint8Array(N) // (grooved here: the sheen (./Record) is only on grooves; carried in the alpha)
+  const prof = new Uint8Array(N * 2)
   const grooved = (r: number) => side.bands.some((b) => r <= b.r0 && r >= b.r1)
   for (let i = 0; i < N; i++) {
     const r = i * STEP
     let v: number
+    let cut = 0
     if (r > S.r - 1.2) v = 0.16 + 0.05 * Math.sin(((r - (S.r - 1.2)) / 1.2) * Math.PI) // (the edge's bead)
     else if (r > side.bands[0]?.r0 + LEAD_IN || !side.bands.length) v = 0.1 // (smooth: outside the lead-in, or a blank side)
     else if (grooved(r)) {
       const ring = hash(Math.floor(r / 0.15)) // (each fine ring a touch different)
       const loud = hash(Math.floor(r / 1.7) + 999) // (stretches of louder, wider-swinging groove)
       v = 0.05 + ring * 0.03 + loud * 0.025
-      cut[i] = 1
+      cut = 1
     } else if (r > side.end) v = 0.135 // (between songs, or the lead-in: wide, smooth, it catches the light)
     else v = 0.095 // (the run-out)
-    prof[i] = v
+    // (lightness against the plain vinyl's: 0.1 → 1, kept in a byte as a quarter of it)
+    prof[2 * i] = Math.min(255, Math.round((v / 0.1) * 64))
+    prof[2 * i + 1] = cut ? 255 : 0
   }
-  // the vinyl, then the grooves pressed into it (darker where they're cut, lighter on the smooth gaps)
-  const kind = pressedAs(p.uri)
-  g.drawImage(vinylBase(kind, inks.palette, 16), 0, 0, size, size)
-  const img = g.getImageData(0, 0, size, size)
-  const d = img.data
+  const pt = new DataTexture(prof, N, 1, RGFormat)
+  pt.generateMipmaps = true
+  pt.minFilter = LinearMipmapLinearFilter
+  pt.magFilter = LinearFilter
+  pt.unpackAlignment = 1
+  pt.needsUpdate = true
+  // the label's canvas: out to just past the matrix number
+  const reach = S.label + 10
+  const size = p.size === 'lp' ? 1024 : 512
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const g = c.getContext('2d')!
+  const px = size / (2 * reach) // px per mm
   const h = size / 2
-  const at = profileIndex(size, px, STEP, N)
-  for (let i = 0, o = 0; i < at.length; i++, o += 4) {
-    const k = at[i]
-    const m = prof[k] / 0.1
-    d[o] = Math.min(255, d[o] * m)
-    d[o + 1] = Math.min(255, d[o + 1] * m)
-    d[o + 2] = Math.min(255, d[o + 2] * m * 1.04)
-    d[o + 3] = cut[k] ? 255 : 150
-  }
-  g.putImageData(img, 0, 0)
   // the run-out's lock groove and the matrix number scratched in it
   g.strokeStyle = 'rgba(255,255,255,0.12)'
   g.lineWidth = Math.max(1, 0.15 * px)
@@ -253,7 +222,7 @@ export function drawSide(p: Pressing, side: Side, inks: Inks, size = 2048): Text
   const t = new CanvasTexture(c)
   t.colorSpace = SRGBColorSpace
   t.anisotropy = 8
-  return t
+  return { label: t, prof: pt, base: vinylBase(pressedAs(p.uri), inks.palette), reach }
 }
 
 /** the jacket's back: the album, its songs by side with their times, on the label's colour */

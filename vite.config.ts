@@ -33,6 +33,8 @@ function bakeUpload(): Plugin {
 export default defineConfig({
   plugins: [react(), bakeUpload()],
   // (127.0.0.1, not localhost: Spotify's login only sends her back to that address while we're developing)
-  server: { host: '127.0.0.1', port: 5173, open: false },
-  preview: { host: '127.0.0.1' },
+  // (Document-Policy: the page may sample its own JavaScript (new Profiler(), the JS Self-Profiling API), to find
+  // what a hitch is spending its time on from the console)
+  server: { host: '127.0.0.1', port: 5173, open: false, headers: { 'Document-Policy': 'js-profiling' } },
+  preview: { host: '127.0.0.1', headers: { 'Document-Policy': 'js-profiling' } },
 })

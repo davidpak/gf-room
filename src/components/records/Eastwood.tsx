@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { BoxGeometry, CanvasTexture, CircleGeometry, Color, CylinderGeometry, DoubleSide, Group, LatheGeometry, Mesh, SRGBColorSpace, Vector2, type Texture } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { bruno } from '../quad/bruno'
 import { Static } from '../../lib/render/Static'
 import { EW, deckY } from './victrola'
@@ -287,6 +288,19 @@ export function Eastwood({ on = {}, children }: { on?: Partial<Record<Parts, (e:
       lidHinge: box(26, 14, 10),
     }
   }, [])
+  // (the lid's four clear panes one piece, its two hinges another: see-through things are drawn one by one, sorted)
+  const lidShell = useMemo(() => {
+    const zMid = (EW.deck.z1 + BACK + 6) / 2
+    return {
+      panes: mergeGeometries([
+        g.lidTop.clone().translate(0, EW.h - T - EW.lid.t / 2, zMid),
+        g.lidFront.clone().translate(0, (EW.h - T) / 2, EW.deck.z1 - EW.lid.t / 2),
+        g.lidFront.clone().translate(0, (EW.h - T) / 2, BACK + 6 + EW.lid.t / 2),
+        g.lidSide.clone().translate(EW.w / 2 - 1 - EW.lid.t / 2, (EW.h - T) / 2, zMid),
+      ].map((x) => (x.clearGroups(), x)))!,
+      hinges: mergeGeometries(EW.lid.hinge.xs.map((x) => g.lidHinge.clone().translate(x, 2, -3)).map((x) => (x.clearGroups(), x)))!,
+    }
+  }, [g])
   // what the display says follows the deck
   const said = useRef('?')
   const platter = useRef<Group>(null)
@@ -410,15 +424,10 @@ export function Eastwood({ on = {}, children }: { on?: Partial<Record<Parts, (e:
       <group position={[0, deckY + EW.lid.hinge.y, EW.lid.hinge.z]}>
         <group ref={lid} {...hand('lid')} userData={{ live: true }}>
           <group position={[0, -EW.lid.hinge.y, -EW.lid.hinge.z]}>
-            <mesh geometry={g.lidTop} material={m.lid} position={[0, EW.h - T - EW.lid.t / 2, (EW.deck.z1 + BACK + 6) / 2]} />
-            <mesh geometry={g.lidFront} material={m.lid} position={[0, (EW.h - T) / 2, EW.deck.z1 - EW.lid.t / 2]} />
-            <mesh geometry={g.lidFront} material={m.lid} position={[0, (EW.h - T) / 2, BACK + 6 + EW.lid.t / 2]} />
-            <mesh geometry={g.lidSide} material={m.lid} position={[EW.w / 2 - 1 - EW.lid.t / 2, (EW.h - T) / 2, (EW.deck.z1 + BACK + 6) / 2]} />
+            <mesh geometry={lidShell.panes} material={m.lid} />
           </group>
         </group>
-        {EW.lid.hinge.xs.map((x) => (
-          <mesh key={x} geometry={g.lidHinge} material={m.hinge} position={[x, 2, -3]} />
-        ))}
+        <mesh geometry={lidShell.hinges} material={m.hinge} />
       </group>
     </group>
     </Static>

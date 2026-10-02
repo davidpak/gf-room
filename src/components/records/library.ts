@@ -1,98 +1,90 @@
-import { album, artistAlbums, cover, playlistTracks, playlists, recentAlbums, savedAlbums, search, topAlbums, type Album, type Playlist } from '../../lib/spotify/api'
-import { press, type Pressing } from './vinyl'
+import { album, artistAlbums, cover, coverAt, savedAlbums, search, type Album } from '../../lib/spotify/api'
+import { press, type In, type Pressing } from './vinyl'
 
 /**
- * The records there are to play, crate by crate: what Spotify lets the site see of her listening, pressed (./vinyl).
+ * The records there are to play: her saved albums, pressed (./vinyl), in the one crate; and, for a while, what she
+ * dug for instead (a search, or more by an artist) in their place.
  *
- *   On Repeat        her most played songs of the last 4 weeks, as their albums
- *   This Year        … of about the last 6 months
- *   All-Time         … of about a year (Spotify's longest reach)
- *   Played Lately    the last 50 songs she played, as their albums
- *   Saved            the albums she's saved
- *   Playlists        her playlists, each pressed as a record of its own (the first 40 songs: a mixtape)
- *   Dig              anything at all: what she writes on its card (a search), or more by an artist she's looking at
+ * Asking Spotify as little as can be:
+ *   saved       one ask for her 50 latest saved albums, each with its songs: they come pressed, nothing more to ask
+ *               when one's taken out. What's made of them is kept in this browser: the crate's full at once next
+ *               time, and asked again (quietly, behind it) only when that's over half an hour old
+ *   dug         one ask (a search, an artist's albums): jackets only (their songs aren't in what comes back); a
+ *               record's songs asked for when it's taken out (one ask, remembered a week: ../../lib/spotify/api)
  *
- * Logged out, a crate holds made-up records (their songs silent: the record turns and the arm tracks, nothing plays).
- *
- * A crate's records come as jackets: their album, artist and cover are in what Spotify answers about her listening;
- * their songs aren't, and asking for every album's would use up the app's small allowance of asks. So a record's
- * songs are asked for (and it's pressed: `pressFor`) only when it's taken out of its crate.
+ * Logged out, the crate holds made-up records (silent: the record turns and the arm tracks, nothing plays).
  */
-export type CrateId = 'repeat' | 'year' | 'alltime' | 'lately' | 'saved' | 'playlists' | 'dig'
-export const CRATES: { id: CrateId; label: string; load: () => Promise<Pressing[]> }[] = [
-  { id: 'repeat', label: 'On Repeat', load: () => topAlbums('short_term').then((a) => a.map(jacket)) },
-  { id: 'year', label: 'This Year', load: () => topAlbums('medium_term').then((a) => a.map(jacket)) },
-  { id: 'alltime', label: 'All-Time', load: () => topAlbums('long_term').then((a) => a.map(jacket)) },
-  { id: 'lately', label: 'Played Lately', load: () => recentAlbums().then((a) => a.map(jacket)) },
-  { id: 'saved', label: 'Saved', load: () => pressSaved(12) },
-  { id: 'playlists', label: 'Playlists', load: () => playlistJackets(12) },
-  { id: 'dig', label: 'Dig', load: async () => [] },
-]
+export type CrateId = 'saved' | 'dig'
+export const LABEL: Record<CrateId, string> = { saved: 'Saved', dig: 'Dig' }
 
 /** made-up albums, for when she's not logged in */
+const made = (uri: string, title: string, artist: string, n: number, k: number) =>
+  press({ uri, title, artist, year: '2026', cover: '', tracks: Array.from({ length: n }, (_, j) => ({ name: `${title.split(' ')[0]} ${j + 1}`, ms: 160_000 + ((j * 53_000 + k * 7000) % 140_000) })) })
 export const DEMO: Pressing[] = [
   press({ uri: 'demo:sunday', title: 'Sunday Morning Pancakes', artist: 'The Picnic Ducks', year: '2026', cover: '', tracks: ['Syrup', 'Blueberries', 'Second Helping', 'Orange Juice', 'Nap', 'Dishes (Later)', 'Crumbs', 'Back to Bed', 'Brunch Again'].map((name, i) => ({ name, ms: 150_000 + ((i * 47_000) % 130_000) })) }),
   press({ uri: 'demo:quad', title: 'Cherry Blossom Quad', artist: 'Rina & David', year: '2026', cover: '', tracks: ['Petals', 'The Long Walk', 'Under the Trees', 'Paper Planes', 'Lime Scooter', 'Melee at Midnight', 'Cookies', 'Lamp Posts', 'Goodnight', 'Again Tomorrow', 'Ducks', 'Fin'].map((name, i) => ({ name, ms: 200_000 + ((i * 61_000) % 160_000) })) }),
+  made('demo:ramen', 'Rainy Day Ramen', 'The Picnic Ducks', 9, 1),
+  made('demo:window', 'Window Seat', 'Rina & David', 11, 2),
+  made('demo:bus', 'Late Bus Home', 'The Picnic Ducks', 8, 3),
+  made('demo:polaroids', 'Polaroids', 'Rina & David', 10, 4),
+  made('demo:summer', 'The Long Summer', 'The Picnic Ducks', 12, 5),
+  made('demo:kitchen', 'Kitchen Dancing', 'Rina & David', 9, 6),
   press({ uri: 'spotify:track:demo', title: 'Our Song', artist: 'Two of Us', year: '2026', cover: '', tracks: [{ name: 'Our Song', ms: 214_000 }] }),
 ]
-/** a crate's made-up records (a different few in each, so they don't all look alike) */
-export const demoFor = (id: CrateId): Pressing[] => {
-  if (id === 'dig') return []
-  const k = CRATES.findIndex((c) => c.id === id)
-  const names = [
-    ['Rainy Day Ramen', 'Window Seat'],
-    ['Late Bus Home', 'Headphones On'],
-    ['Polaroids', 'The Long Summer'],
-    ['Last Night', 'Encore'],
-    ['Keepers', 'Shelf Life'],
-    ['Road Trip Mix', 'Kitchen Dancing'],
-  ][k % 6]
-  return [
-    ...names.map((t, i) =>
-      press({ uri: `demo:${id}:${i}`, title: t, artist: ['The Picnic Ducks', 'Rina & David'][i], year: '2026', cover: '', tracks: Array.from({ length: 8 + ((k + i) % 5) }, (_, j) => ({ name: `${t.split(' ')[0]} ${j + 1}`, ms: 170_000 + ((j * 53_000 + k * 7000) % 140_000) })) }),
-    ),
-    DEMO[(k + 1) % 3],
-  ]
-}
 
+/** what a record's pressed from: an album's own words and its songs (what's kept in the browser) */
+type Kept = { uri: string; title: string; artist: string; artistId?: string; year: string; cover: string; thumb?: string; tracks: In[]; id: string; more: boolean }
+const keep = (a: Album): Kept => ({
+  uri: a.uri,
+  id: a.id,
+  title: a.name,
+  artist: a.artists.map((x) => x.name).join(', '),
+  artistId: a.artists[0]?.id,
+  year: a.release_date,
+  cover: cover(a) ?? '',
+  thumb: coverAt(a, 300),
+  tracks: (a.tracks?.items ?? []).map((t) => ({ name: t.name, ms: t.duration_ms, uri: t.uri })),
+  more: !!a.tracks?.next,
+})
+// (an album with more songs than came with it (over 50): a jacket till it's taken out, its songs asked for then)
+const pressKept = (k: Kept): Pressing => (k.tracks.length && !k.more ? press(k) : { ...press({ ...k, tracks: [] }), stub: { kind: 'album', id: k.id } })
 /** an album from Spotify, pressed (its songs: it has them) */
-export const pressAlbum = (a: Album) =>
-  press({
-    uri: a.uri,
-    title: a.name,
-    artist: a.artists.map((x) => x.name).join(', '),
-    artistId: a.artists[0]?.id,
-    year: a.release_date,
-    cover: cover(a) ?? '',
-    tracks: (a.tracks?.items ?? []).map((t) => ({ name: t.name, ms: t.duration_ms, uri: t.uri })),
-  })
+export const pressAlbum = (a: Album) => pressKept(keep(a))
 /** an album as a jacket only: pressed when it's taken out */
-export const jacket = (a: Album) => ({ ...pressAlbum({ ...a, tracks: undefined }), stub: { kind: 'album' as const, id: a.id } })
+export const jacket = (a: Album): Pressing => pressKept({ ...keep(a), tracks: [] })
 
-/** her saved albums (the most recent n): Spotify gives their songs with them, so they come pressed */
-export async function pressSaved(n = 12): Promise<Pressing[]> {
-  const saved = await savedAlbums(n)
-  return saved.map((a) => (a.tracks?.items.length ? pressAlbum(a) : jacket(a)))
+const SAVED = 'records.saved'
+const FRESH = 30 * 60_000
+/** her saved albums as kept in this browser (and how old that is), if they are */
+export function keptSaved(): { at: number; records: Pressing[] } | null {
+  try {
+    const s = localStorage.getItem(SAVED)
+    if (!s) return null
+    const v = JSON.parse(s) as { at: number; kept: Kept[] }
+    return { at: v.at, records: v.kept.map(pressKept) }
+  } catch {
+    return null
+  }
 }
-
-/** her playlists, each a record (a jacket till it's taken out: its picture the cover) */
-async function playlistJackets(n: number): Promise<Pressing[]> {
-  const lists = (await playlists(n)).filter((p: Playlist) => p.tracks?.total !== 0)
-  return lists.map((p) => press({ uri: p.uri, title: p.name, artist: p.owner.display_name, year: '', cover: p.images?.[0]?.url ?? '', tracks: [], stub: { kind: 'playlist', id: p.id } }))
+export const isFresh = (at: number) => Date.now() - at < FRESH
+/** her 50 latest saved albums, asked for, pressed, and kept in this browser */
+export async function askSaved(): Promise<Pressing[]> {
+  const kept = (await savedAlbums(50)).map(keep)
+  try {
+    localStorage.setItem(SAVED, JSON.stringify({ at: Date.now(), kept }))
+  } catch {
+    /* (no room: asked for again next time) */
+  }
+  return kept.map(pressKept)
 }
 
 /** a jacket pressed into a record: its songs asked for (once: they're remembered) */
 export async function pressFor(p: Pressing): Promise<Pressing> {
   if (!p.stub) return p
-  if (p.stub.kind === 'album') {
-    const a = await album(p.stub.id)
-    return pressAlbum(a)
-  }
-  const tracks = await playlistTracks(p.stub.id, 40)
-  return press({ uri: p.uri, title: p.title, artist: p.artist, year: '', cover: p.cover, tracks: tracks.map((t) => ({ name: t.name, ms: t.duration_ms, uri: t.uri })) })
+  return pressAlbum(await album(p.stub.id))
 }
 
-/** what she writes on the Dig crate's card: the albums that match (and the albums of the songs that do), as jackets */
+/** what she writes on the Dig card: the albums that match (and the albums of the songs that do), as jackets */
 export async function dig(q: string): Promise<Pressing[]> {
   const r = await search(q)
   const seen = new Set<string>()
