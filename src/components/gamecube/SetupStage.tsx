@@ -12,6 +12,7 @@ import { Bench, Cushion, Rug } from './Furniture'
 import { GameCube } from './GameCube'
 import { CABLES, LAYOUT } from './Setup'
 import { BENCH, RUG } from './spec'
+import { DolphinButton } from './DolphinButton'
 import { padButton } from './state'
 
 /**
@@ -101,9 +102,12 @@ export function SetupStage() {
     return () => window.removeEventListener('keydown', key)
   }, [])
   return (
-    <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 10, far: 30000, position: CAM ?? [900, 1300, 2300] }}>
+    <>
+      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={{ fov: 30, near: 10, far: 30000, position: CAM ?? [900, 1300, 2300] }}>
       <Scene />
       <OrbitControls makeDefault target={AT ?? [0, 250, -100]} enableDamping minDistance={150} maxDistance={8000} maxPolarAngle={Math.PI / 2 - 0.05} />
     </Canvas>
+      <DolphinButton bottom={120} />
+    </>
   )
 }

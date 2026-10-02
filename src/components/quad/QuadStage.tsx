@@ -18,6 +18,7 @@ import { QuadLime, RideHint } from './QuadLime'
 import { QuadArt } from './QuadArt'
 import { QuadGame } from './QuadGame'
 import { PaintBox } from '../art/PaintBox'
+import { DolphinButton } from '../gamecube/DolphinButton'
 import '../art/art.css'
 import { lookBack, useLook } from './look'
 import './quad.css'
@@ -139,6 +140,7 @@ export function QuadStage() {
       <LookControls />
       <RideHint />
       <PaintBox on={look?.spot.key === 'easel'} bottom={124} />
+      <DolphinButton show={look?.spot.key === 'gametv'} bottom={124} />
     </>
   )
 }

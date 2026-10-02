@@ -1,4 +1,5 @@
 import { CanvasTexture, SRGBColorSpace } from 'three'
+import { dolphinVideo } from './dolphin'
 import { screenOf, type CubeState, type Screen } from './state'
 
 /**
@@ -13,6 +14,7 @@ import { screenOf, type CubeState, type Screen } from './state'
  *   win      RINA WINS!, confetti
  *   cover    the console's own: the Disc Cover is open
  *   nodisc   the console's menu, no disc in it
+ *   live     Dolphin's window, captured (./dolphin): real Melee, whenever the TV and the console are on
  *
  * Over it all the tube's scanlines and its darker corners; the TV coming on (the picture opening out from a line)
  * and going off (down to a line, then a dot).
@@ -321,6 +323,27 @@ function draw(g: CanvasRenderingContext2D, sc: Screen, t: number, c: CubeState) 
   }
 }
 
+/** a frame of Dolphin's window, fitted into the 4:3 glass (a window taller than 4:3 has its title bar trimmed off the
+ *  top first, up to a tenth of it; anything else letterboxed) */
+function frame(g: CanvasRenderingContext2D, v: HTMLVideoElement) {
+  const vw = v.videoWidth
+  const vh = v.videoHeight
+  if (!vw || !vh) return
+  let sy = 0
+  let sh = vh
+  const want = (vw * 3) / 4
+  if (vh > want) {
+    sy = Math.min(vh - want, vh * 0.1)
+    sh = vh - sy
+  }
+  const k = Math.min(W / vw, H / sh)
+  const dw = vw * k
+  const dh = sh * k
+  g.fillStyle = '#000'
+  g.fillRect(0, 0, W, H)
+  g.drawImage(v, 0, sy, vw, sh, (W - dw) / 2, (H - dh) / 2, dw, dh)
+}
+
 /** the screen: its canvas, its texture, and \`update\` (each frame: true when it's been drawn again) */
 export function makeScreen() {
   askFont()
@@ -340,8 +363,10 @@ export function makeScreen() {
     const sc = screenOf(st, t)
     const sinceTv = t - st.tvAt
     const warming = (st.tv && sinceTv < 0.4) || (!st.tv && sinceTv < 0.35)
-    const key = `${sc}|${st.scene}|${st.at}|${st.tv}|${st.tvAt}|${warming}`
-    const rate = warming ? 30 : RATE[sc]
+    const v = dolphinVideo()
+    const live = !!v && st.tv && st.power
+    const key = `${sc}|${st.scene}|${st.at}|${st.tv}|${st.tvAt}|${warming}|${live}`
+    const rate = live ? 60 : warming ? 30 : RATE[sc]
     if (key === last && (rate === 0 || t - lastAt < 1 / rate)) return false
     last = key
     lastAt = t
@@ -356,7 +381,8 @@ export function makeScreen() {
       g.fillStyle = sheen
       g.fillRect(0, 0, W, H)
     } else if (st.tv) {
-      draw(g, sc, t, st)
+      if (live && v) frame(g, v)
+      else draw(g, sc, t, st)
       g.drawImage(scan, 0, 0)
       if (sinceTv < 0.4) {
         // coming on: the picture opening out from a bright line

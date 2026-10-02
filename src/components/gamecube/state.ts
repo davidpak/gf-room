@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { dolphinOn } from './dolphin'
 import { blipSound, bootSound, cheerSound, clickSound, confirmSound, lidSound, spinSound, tvOffSound, tvOnSound } from '../../lib/sound/gamecube'
 
 /**
@@ -64,7 +65,7 @@ export function pressPower() {
     return
   }
   set({ power: true, scene: 'boot', at: now(), pressed: press('power') })
-  if (s.tv) bootSound()
+  if (s.tv && !dolphinOn()) bootSound() // (with Dolphin on the TV, its own sound's playing)
   if (!s.lid && s.disc === 'console') setTimeout(() => spinSound(true), 400)
 }
 export function pressReset() {
@@ -72,7 +73,7 @@ export function pressReset() {
   set({ pressed: press('reset') })
   if (!s.power) return
   set({ scene: 'boot', at: now() })
-  if (s.tv) bootSound()
+  if (s.tv && !dolphinOn()) bootSound() // (with Dolphin on the TV, its own sound's playing)
 }
 export function pressOpen() {
   clickSound()
