@@ -50,7 +50,13 @@ function About({ bottom, hints }: { bottom: number; hints: boolean }) {
       </div>
       {b.mode === 'out' && (
         <div style={{ ...T, fontWeight: 400, opacity: 0.85 }}>
-          {pressed} · {songs} songs · {min} min
+          {p.sides.length
+            ? `${pressed} · ${songs} songs · ${min} min`
+            : shelf.pressing === p.uri
+              ? 'pressing its record…'
+              : shelf.pressFailed
+                ? `couldn't press it: ${/resting/.test(shelf.pressFailed) ? 'Spotify needs a rest, try again in a few minutes' : 'Spotify didn\'t answer'}`
+                : ''}
         </div>
       )}
       {hints && (

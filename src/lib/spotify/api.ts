@@ -19,17 +19,101 @@ export type Album = {
 }
 export type Me = { id: string; display_name: string; product: string; country: string }
 
+/**
+ * Asking Spotify, gently. An app in development mode has a small allowance of asks (past it: 429, "Too many
+ * requests", every ask refused for a while), so:
+ *   remembered  what's asked is kept (in memory, and in this browser for next time): an album for a week, her
+ *               listening for an hour, a search for a day; asked again inside that, it isn't asked
+ *   one at a time   a little apart; the same ask while it's out waits for that one's answer
+ *   told to wait    a 429 holds every ask for as long as Spotify says (Retry-After), then that ask once more; a long
+ *               wait isn't waited out: the ask fails, saying so (`SpotifyResting`)
+ */
+const DAY = 24 * 3600_000
+const ttlFor = (path: string) =>
+  path.startsWith('/albums/') ? 7 * DAY
+  : path.startsWith('/me/top/') || path.startsWith('/me/albums') || path.startsWith('/me/playlists') ? 3600_000
+  : path.startsWith('/me/player/recently') ? 600_000
+  : path.startsWith('/search') || path.startsWith('/playlists/') || path.startsWith('/artists/') ? DAY
+  : 0
+const STORE = 'spotify.ask.'
+const mem = new Map<string, { at: number; v: unknown }>()
+function recall(path: string): unknown {
+  const ttl = ttlFor(path)
+  if (!ttl) return undefined
+  let e = mem.get(path)
+  if (!e) {
+    try {
+      const s = localStorage.getItem(STORE + path)
+      if (s) mem.set(path, (e = JSON.parse(s)))
+    } catch {
+      /* (no storage: memory only) */
+    }
+  }
+  return e && Date.now() - e.at < ttl ? e.v : undefined
+}
+function remember(path: string, v: unknown) {
+  if (!ttlFor(path)) return
+  const e = { at: Date.now(), v }
+  mem.set(path, e)
+  try {
+    localStorage.setItem(STORE + path, JSON.stringify(e))
+  } catch {
+    // (full: the oldest remembered asks go, then try once more)
+    try {
+      const keys = Object.keys(localStorage).filter((k) => k.startsWith(STORE))
+      keys.sort((a, b) => (JSON.parse(localStorage.getItem(a)!).at ?? 0) - (JSON.parse(localStorage.getItem(b)!).at ?? 0))
+      keys.slice(0, Math.ceil(keys.length / 2)).forEach((k) => localStorage.removeItem(k))
+      localStorage.setItem(STORE + path, JSON.stringify(e))
+    } catch {
+      /* (memory only) */
+    }
+  }
+}
+export class SpotifyResting extends Error {}
+let line: Promise<unknown> = Promise.resolve()
+let restUntil = 0
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const out = new Map<string, Promise<unknown>>()
+
 export async function sp<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const t = await accessToken()
-  if (!t) throw new Error('not logged in to Spotify')
-  const r = await fetch(path.startsWith('http') ? path : `https://api.spotify.com/v1${path}`, {
-    ...init,
-    headers: { authorization: `Bearer ${t}`, ...(init.body ? { 'content-type': 'application/json' } : {}), ...init.headers },
-  })
-  if (r.status === 204) return undefined as T
-  if (!r.ok) throw new Error(`Spotify ${path.split('?')[0]}: ${r.status} ${await r.text()}`)
-  const text = await r.text()
-  return (text ? JSON.parse(text) : undefined) as T
+  const get = !init.method || init.method === 'GET'
+  if (get) {
+    const v = recall(path)
+    if (v !== undefined) return v as T
+    const pending = out.get(path)
+    if (pending) return pending as Promise<T>
+  }
+  const ask = async (): Promise<T> => {
+    if (Date.now() < restUntil) throw new SpotifyResting(`Spotify's resting: ${Math.ceil((restUntil - Date.now()) / 60000)} min`)
+    for (let tries = 0; ; tries++) {
+      const t = await accessToken()
+      if (!t) throw new Error('not logged in to Spotify')
+      const r = await fetch(path.startsWith('http') ? path : `https://api.spotify.com/v1${path}`, {
+        ...init,
+        headers: { authorization: `Bearer ${t}`, ...(init.body ? { 'content-type': 'application/json' } : {}), ...init.headers },
+      })
+      if (r.status === 429) {
+        const wait = Math.max(1, Number(r.headers.get('retry-after')) || 30) * 1000
+        restUntil = Date.now() + wait
+        if (wait > 20_000 || tries) throw new SpotifyResting(`Spotify's resting: ${Math.ceil(wait / 60000)} min`)
+        await pause(wait)
+        continue
+      }
+      if (r.status === 204) return undefined as T
+      if (!r.ok) throw new Error(`Spotify ${path.split('?')[0]}: ${r.status} ${await r.text()}`)
+      const text = await r.text()
+      const v = (text ? JSON.parse(text) : undefined) as T
+      if (get) remember(path, v)
+      return v
+    }
+  }
+  // (in line behind the others, a little apart; a play or a pause doesn't wait behind the crates' asks)
+  const p = get ? (line = line.then(() => pause(120)).then(ask, ask)) : ask()
+  if (get) {
+    out.set(path, p)
+    p.finally(() => out.delete(path)).catch(() => {})
+  }
+  return p as Promise<T>
 }
 
 export const me = () => sp<Me>('/me')
@@ -83,25 +167,31 @@ export async function albums(ids: string[]) {
   )
   return out.filter((a): a is Album => !!a)
 }
-const uniqueAlbums = (tracks: { album: { id: string } }[], n: number) => [...new Set(tracks.map((t) => t.album.id))].slice(0, n)
+/** the albums of some songs, each once, in order */
+const uniqueAlbums = (tracks: { album: Album }[], n: number) => {
+  const seen = new Set<string>()
+  return tracks.map((t) => t.album).filter((a) => a && !seen.has(a.id) && seen.add(a.id)).slice(0, n)
+}
 
-/** her most played (short_term: about the last 4 weeks; medium_term: 6 months; long_term: about a year), as albums */
+/** her most played (short_term: about the last 4 weeks; medium_term: 6 months; long_term: about a year), as their
+ *  albums (as Spotify gives them with the songs: no track lists: those are asked for when a record's taken out) */
 export async function topAlbums(range: 'short_term' | 'medium_term' | 'long_term', n = 12) {
   const r = await sp<{ items: (Track & { album: Album })[] }>(`/me/top/tracks?time_range=${range}&limit=50`)
-  return albums(uniqueAlbums(r.items, n))
+  return uniqueAlbums(r.items, n)
 }
-/** what she's played lately (the last 50 songs), as albums, the latest first */
+/** what she's played lately (the last 50 songs), as their albums, the latest first */
 export async function recentAlbums(n = 12) {
   const r = await sp<{ items: { track: Track & { album: Album } }[] }>('/me/player/recently-played?limit=50')
-  return albums(uniqueAlbums(r.items.map((i) => i.track), n))
+  return uniqueAlbums(
+    r.items.map((i) => i.track),
+    n,
+  )
 }
-/** an artist's albums (and singles), the newest first */
+/** an artist's albums (and singles), the newest first, each name once */
 export async function artistAlbums(id: string, n = 12) {
   const r = await sp<{ items: Album[] }>(`/artists/${id}/albums?include_groups=album,single&limit=${Math.min(50, n * 2)}`)
-  // (the same album in several editions: the first of each name)
   const seen = new Set<string>()
-  const ids = r.items.filter((a) => !seen.has(a.name.toLowerCase()) && seen.add(a.name.toLowerCase())).map((a) => a.id)
-  return albums(ids.slice(0, n))
+  return r.items.filter((a) => !seen.has(a.name.toLowerCase()) && seen.add(a.name.toLowerCase())).slice(0, n)
 }
 
 export type Playlist = { id: string; uri: string; name: string; images: Image[] | null; owner: { display_name: string }; tracks: { total: number } }

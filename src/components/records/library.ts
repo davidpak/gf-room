@@ -1,4 +1,4 @@
-import { album, albums, artistAlbums, cover, playlistTracks, playlists, recentAlbums, savedAlbums, search, topAlbums, type Album, type Playlist } from '../../lib/spotify/api'
+import { album, artistAlbums, cover, playlistTracks, playlists, recentAlbums, savedAlbums, search, topAlbums, type Album, type Playlist } from '../../lib/spotify/api'
 import { press, type Pressing } from './vinyl'
 
 /**
@@ -13,15 +13,19 @@ import { press, type Pressing } from './vinyl'
  *   Dig              anything at all: what she writes on its card (a search), or more by an artist she's looking at
  *
  * Logged out, a crate holds made-up records (their songs silent: the record turns and the arm tracks, nothing plays).
+ *
+ * A crate's records come as jackets: their album, artist and cover are in what Spotify answers about her listening;
+ * their songs aren't, and asking for every album's would use up the app's small allowance of asks. So a record's
+ * songs are asked for (and it's pressed: `pressFor`) only when it's taken out of its crate.
  */
 export type CrateId = 'repeat' | 'year' | 'alltime' | 'lately' | 'saved' | 'playlists' | 'dig'
 export const CRATES: { id: CrateId; label: string; load: () => Promise<Pressing[]> }[] = [
-  { id: 'repeat', label: 'On Repeat', load: () => topAlbums('short_term').then((a) => a.map(pressAlbum)) },
-  { id: 'year', label: 'This Year', load: () => topAlbums('medium_term').then((a) => a.map(pressAlbum)) },
-  { id: 'alltime', label: 'All-Time', load: () => topAlbums('long_term').then((a) => a.map(pressAlbum)) },
-  { id: 'lately', label: 'Played Lately', load: () => recentAlbums().then((a) => a.map(pressAlbum)) },
+  { id: 'repeat', label: 'On Repeat', load: () => topAlbums('short_term').then((a) => a.map(jacket)) },
+  { id: 'year', label: 'This Year', load: () => topAlbums('medium_term').then((a) => a.map(jacket)) },
+  { id: 'alltime', label: 'All-Time', load: () => topAlbums('long_term').then((a) => a.map(jacket)) },
+  { id: 'lately', label: 'Played Lately', load: () => recentAlbums().then((a) => a.map(jacket)) },
   { id: 'saved', label: 'Saved', load: () => pressSaved(12) },
-  { id: 'playlists', label: 'Playlists', load: () => pressPlaylists(12) },
+  { id: 'playlists', label: 'Playlists', load: () => playlistJackets(12) },
   { id: 'dig', label: 'Dig', load: async () => [] },
 ]
 
@@ -51,7 +55,7 @@ export const demoFor = (id: CrateId): Pressing[] => {
   ]
 }
 
-/** an album from Spotify, pressed */
+/** an album from Spotify, pressed (its songs: it has them) */
 export const pressAlbum = (a: Album) =>
   press({
     uri: a.uri,
@@ -60,41 +64,39 @@ export const pressAlbum = (a: Album) =>
     artistId: a.artists[0]?.id,
     year: a.release_date,
     cover: cover(a) ?? '',
-    tracks: a.tracks!.items.map((t) => ({ name: t.name, ms: t.duration_ms, uri: t.uri })),
+    tracks: (a.tracks?.items ?? []).map((t) => ({ name: t.name, ms: t.duration_ms, uri: t.uri })),
   })
+/** an album as a jacket only: pressed when it's taken out */
+export const jacket = (a: Album) => ({ ...pressAlbum({ ...a, tracks: undefined }), stub: { kind: 'album' as const, id: a.id } })
 
-/** her saved albums (the most recent n), pressed */
-export async function pressSaved(n = 6): Promise<Pressing[]> {
+/** her saved albums (the most recent n): Spotify gives their songs with them, so they come pressed */
+export async function pressSaved(n = 12): Promise<Pressing[]> {
   const saved = await savedAlbums(n)
-  const full = await Promise.all(saved.map((a) => album(a.id)))
-  return full.map(pressAlbum)
+  return saved.map((a) => (a.tracks?.items.length ? pressAlbum(a) : jacket(a)))
 }
 
-/** her playlists, each a record: its picture the cover, its first songs the record's (as many as four sides hold) */
-async function pressPlaylists(n: number): Promise<Pressing[]> {
-  const lists = (await playlists(n)).filter((p: Playlist) => p.tracks.total > 0)
-  const out = await Promise.all(
-    lists.map(async (p) => {
-      const tracks = await playlistTracks(p.id, 40).catch(() => [])
-      if (!tracks.length) return null
-      return press({
-        uri: p.uri,
-        title: p.name,
-        artist: p.owner.display_name,
-        year: '',
-        cover: p.images?.[0]?.url ?? '',
-        tracks: tracks.map((t) => ({ name: t.name, ms: t.duration_ms, uri: t.uri })),
-      })
-    }),
-  )
-  return out.filter((p): p is Pressing => !!p)
+/** her playlists, each a record (a jacket till it's taken out: its picture the cover) */
+async function playlistJackets(n: number): Promise<Pressing[]> {
+  const lists = (await playlists(n)).filter((p: Playlist) => p.tracks?.total !== 0)
+  return lists.map((p) => press({ uri: p.uri, title: p.name, artist: p.owner.display_name, year: '', cover: p.images?.[0]?.url ?? '', tracks: [], stub: { kind: 'playlist', id: p.id } }))
 }
 
-/** what she writes on the Dig crate's card: the albums that match (and the albums of the songs that do) */
+/** a jacket pressed into a record: its songs asked for (once: they're remembered) */
+export async function pressFor(p: Pressing): Promise<Pressing> {
+  if (!p.stub) return p
+  if (p.stub.kind === 'album') {
+    const a = await album(p.stub.id)
+    return pressAlbum(a)
+  }
+  const tracks = await playlistTracks(p.stub.id, 40)
+  return press({ uri: p.uri, title: p.title, artist: p.artist, year: '', cover: p.cover, tracks: tracks.map((t) => ({ name: t.name, ms: t.duration_ms, uri: t.uri })) })
+}
+
+/** what she writes on the Dig crate's card: the albums that match (and the albums of the songs that do), as jackets */
 export async function dig(q: string): Promise<Pressing[]> {
   const r = await search(q)
-  const ids = [...new Set([...r.albums.map((a) => a.id), ...r.tracks.map((t) => t.album.id)])].slice(0, 12)
-  return (await albums(ids)).map(pressAlbum)
+  const seen = new Set<string>()
+  return [...r.albums, ...r.tracks.map((t) => t.album)].filter((x) => x && !seen.has(x.id) && seen.add(x.id)).slice(0, 12).map(jacket)
 }
-/** more by an artist: their albums and singles */
-export const digArtist = (id: string) => artistAlbums(id).then((a) => a.map(pressAlbum))
+/** more by an artist: their albums and singles, as jackets */
+export const digArtist = (id: string) => artistAlbums(id).then((a) => a.map(jacket))

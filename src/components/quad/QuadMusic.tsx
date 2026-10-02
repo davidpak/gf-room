@@ -72,9 +72,10 @@ function SpinningSign() {
   const face = useSpinningFace()
   return <AFrame w={SIGN.w} len={SIGN.len} lean={SIGN.lean} face={face} />
 }
-const SIGN = { w: 760, len: 1100, lean: 0.22, x: -1500, z: 980, rot: 0.32 }
-const EASEL_AT = { x: 1000, z: 430, rot: -0.35 }
-const PICKS_AT = { x: -1010, z: 470, rot: 0.55 }
+// (spread round the stand: the picks rack off its left end, the easel off its right, the sign out front on the lawn)
+const SIGN = { w: 760, len: 1100, lean: 0.22, x: -2450, z: 900, rot: 0.35 }
+const EASEL_AT = { x: 1480, z: 380, rot: -0.4 }
+const PICKS_AT = { x: -1660, z: 330, rot: 0.4 }
 
 /** the picks rack: her all-time favourites (or, till those come, what's on repeat, what's saved) */
 function Picks() {
@@ -97,9 +98,9 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
         const r = b.rotation()
         _q.set(r.x, r.y, r.z, r.w)
         // (the canopy and its plank, the sign out front, the easel, all in; a little from the left, a little above)
-        _c.set(-250, 1150, 350).multiplyScalar(K).applyQuaternion(_q).add(t as Vector3)
-        _n.set(-0.18, 0.3, 1).normalize().applyQuaternion(_q)
-        frameAround(pos, look, aspect, _c, 3600 * K, 3000 * K, _n)
+        _c.set(-380, 1100, 420).multiplyScalar(K).applyQuaternion(_q).add(t as Vector3)
+        _n.set(-0.08, 0.32, 1).normalize().applyQuaternion(_q)
+        frameAround(pos, look, aspect, _c, 4900 * K, 3200 * K, _n)
       },
       hint: 'click the record player, or a crate to go through it',
     }),

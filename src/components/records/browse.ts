@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { Vector3, type Object3D } from 'three'
 import { frameAround, getLook, lookAt, type Spot } from '../quad/look'
-import { getShelf } from './shelf'
+import { getShelf, pressIn } from './shelf'
 import type { CrateId } from './library'
 import type { Pressing } from './vinyl'
 
@@ -113,7 +113,10 @@ export function openCrate(crate: CrateId, i = crate === s.crate ? s.i : 0) {
   lookAt({ spot: crateSpot, i: null })
 }
 export function takeOut(i: number) {
-  if (!records()[i]) return
+  const p = records()[i]
+  if (!p) return
+  // (a jacket only: its record pressed now, its songs asked for)
+  if (p.stub && s.crate) void pressIn(s.crate, p.uri)
   set({ mode: 'out', i })
   lookAt({ spot: recordSpot, i: null })
 }

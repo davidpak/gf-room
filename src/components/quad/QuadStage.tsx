@@ -22,7 +22,8 @@ import { RecordsOverlay } from '../records/Overlay'
 import { PaintBox } from '../art/PaintBox'
 import { DolphinButton } from '../gamecube/DolphinButton'
 import '../art/art.css'
-import { lookBack, useLook } from './look'
+import { getLook, lookBack, useLook } from './look'
+import { grabRules } from '../../lib/physics/Hand'
 import './quad.css'
 import { SET } from './set'
 
@@ -132,6 +133,8 @@ setCarWell(CAR_SHAPE.well)
 
 export function QuadStage() {
   const car = useRef<CarState>({ x: SET.start.x, z: SET.start.z, heading: SET.start.heading, v: 0 })
+  // (in close on something, the hand leaves things be: clicks there are for what's looked at; a record taken out still carries)
+  grabRules.allow = (spec) => !getLook() || !!spec.whileLooking
   if (import.meta.env.DEV) Object.assign(window, { __quadCar: car }) // (for trying it from the console)
   const look = useLook()
   const looking = !!look

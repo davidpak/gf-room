@@ -86,6 +86,7 @@ function Record({ l, scale }: { l: Loose; scale: number }) {
   if (!art) return null
   const hold = {
     lift: 40 * scale,
+    whileLooking: true,
     keep: () => !st.current.going,
     onGrab: () => {
       const b = body.current

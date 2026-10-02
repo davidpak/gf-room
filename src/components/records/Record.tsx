@@ -19,7 +19,9 @@ const cache = new Map<string, Promise<Art>>()
 
 /** the pressing's pictures (cached by album: drawn once however many times it's shown) */
 export function artOf(p: Pressing): Promise<Art> {
-  let a = cache.get(p.uri)
+  // (by album, and whether it's pressed yet: a jacket's back has no songs on it, its record's does)
+  const key = `${p.uri}#${p.sides.length}`
+  let a = cache.get(key)
   if (!a) {
     a = loadCover(p.cover).then((im) => {
       const src = im ?? drawCover(p.title, p.artist)
@@ -35,7 +37,7 @@ export function artOf(p: Pressing): Promise<Art> {
       const side = (k: number) => (sides[k] ??= drawSide(p, p.sides[k], inks, p.size === 'lp' ? 2048 : 1024))
       return { cover, back: drawBack(p, inks), side, inks }
     })
-    cache.set(p.uri, a)
+    cache.set(key, a)
   }
   return a
 }

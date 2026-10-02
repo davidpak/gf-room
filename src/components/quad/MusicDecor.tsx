@@ -17,7 +17,7 @@ import { bruno } from './bruno'
  * at the back, pennants along the sides, a tiered rack out front with her all-time favourites face out.
  */
 export const CANOPY = { hx: 1150, hz: 720, over: 60, eave: 2050, peak: 2650 }
-export const RUG = { w: 2600, d: 1700, t: 6 }
+export const RUG = { w: 4000, d: 2200, t: 6 } // (under the stand, the canopy, the rack and the easel)
 const LILAC = '#c9b6ec'
 const CREAM = '#fdf2e4'
 

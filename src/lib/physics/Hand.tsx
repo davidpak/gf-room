@@ -49,6 +49,8 @@ export type GrabSpec = {
   pull?: number
   /** checked every frame while held: false makes the hand let go (a plug that has found its port) */
   keep?: () => boolean
+  /** picked up even while the page says things aren't (a record taken out, to carry to the player in a close look) */
+  whileLooking?: boolean
   /** false: it can't be turned; right-drag over it pans the camera instead */
   turn?: boolean
   /** carried loose, not held at its angle: it hangs and swings from where you grabbed it (a cable) */
@@ -76,6 +78,9 @@ export type GrabSpec = {
 
 /** the hand's press handler (set while a <Hand> is mounted) */
 let press: ((e: ThreeEvent<PointerEvent>, spec: GrabSpec) => void) | null = null
+/** whether a thing may be picked up now (a page sets it: the Quad lets nothing be, while the camera's in close on
+ *  something, but what says `whileLooking`) */
+export const grabRules = { allow: (spec: GrabSpec): boolean => (void spec, true) }
 
 /**
  * Makes something grabbable: spread it onto its group, `<group {...grabbable({ body: ... })}>`. The
@@ -675,6 +680,7 @@ export function Hand({ children }: { children: ReactNode }) {
   useEffect(() => {
     press = (e, spec) => {
       if (worldInput.locked) return // (the laptop's screen has the pointer)
+      if (!grabRules.allow(spec)) return // (the page says not now: on the Quad, while the camera's in close)
       // left carries, right turns; the middle button is the camera's
       const button = e.nativeEvent.button
       if (button !== 0 && button !== 2) return
