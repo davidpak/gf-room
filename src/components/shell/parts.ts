@@ -34,6 +34,7 @@ export const PARTS = {
   scooter: { title: 'Lime Gen4 scooter', hint: 'drag to look round · scroll to zoom · &steer=0.4 turns its bars · &battery=0.3 (or 0.1) for a yellow (or red) lime', stage: page(() => import('../lime/GliderStage'), 'ScooterStage') },
   easel: { title: 'The art corner', hint: 'pick a paint and a brush below · press and drag on the canvas to paint · click the sketchbook’s pages to turn them · drag elsewhere to look round · scroll to zoom', stage: page(() => import('../art/ArtStage'), 'ArtStage') },
   plane: { title: 'Paper airplanes', hint: 'four sheets of paper: hover one for its folds, click a fold (in the right order, or it crumples) · left-drag to carry, right-drag to turn, let go moving to throw · drag elsewhere to look round · scroll to zoom', stage: page(() => import('../art/plane/PlaneStage'), 'PlaneStage') },
+  spotify: { title: 'Spotify, the plumbing', hint: 'log in · search or pick a saved album · click a track to play it here (Premium) · open at 127.0.0.1:5173', stage: page(() => import('../records/SpotifyStage'), 'SpotifyStage') },
   prompt: { title: 'Fix-it prompts', hint: 'click a prompt · carry a block away and its prompt comes back when it settles · press the wheel and drag to look', stage: page(() => import('../prompt/PromptStage'), 'PromptStage') },
 } satisfies Record<string, Part>
 export type PartKey = keyof typeof PARTS
@@ -44,5 +45,5 @@ export const GROUPS: { name: string; parts: PartKey[] }[] = [
   { name: 'The room', parts: ['bed', 'closet', 'lamp', 'desk', 'doll'] },
   { name: 'On the desk', parts: ['laptop', 'rinaos', 'charger', 'keypad', 'wumpus', 'mints', 'tissues'] },
   { name: 'On the Quad', parts: ['civic', 'guitar', 'picnic', 'glider', 'scooter', 'easel', 'plane'] },
-  { name: 'Tools', parts: ['prompt'] },
+  { name: 'Tools', parts: ['prompt', 'spotify'] },
 ]

@@ -32,5 +32,7 @@ function bakeUpload(): Plugin {
 
 export default defineConfig({
   plugins: [react(), bakeUpload()],
-  server: { port: 5173, open: false },
+  // (127.0.0.1, not localhost: Spotify's login only sends her back to that address while we're developing)
+  server: { host: '127.0.0.1', port: 5173, open: false },
+  preview: { host: '127.0.0.1' },
 })
