@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { MeshLambertMaterial, ShaderChunk, type Material, type Mesh, type MeshStandardMaterial, type WebGLProgramParametersWithUniforms, type WebGLRenderer } from 'three'
 
@@ -15,7 +15,9 @@ import { MeshLambertMaterial, ShaderChunk, type Material, type Mesh, type MeshSt
  * Lights add up like real light; the Effects' tone mapping rolls bright pools off softly
  * instead of clipping them. The ambient (hemisphere) is the colour of the room in shade.
  *
- * <Stylize /> converts whatever is in the scene (and whatever loads later).
+ * <Stylize /> converts whatever is in the scene (and whatever loads later). It also leaves the conversion on the
+ * scene (scene.userData.prepare), so the loading screen's shader warm-up (../lib/render/Canvas) converts first and
+ * compiles the Lambert versions: otherwise every shader is compiled twice, the second time in the first frames.
  */
 ShaderChunk.lights_lambert_pars_fragment = ShaderChunk.lights_lambert_pars_fragment.replace(
   'float dotNL = saturate( dot( geometryNormal, directLight.direction ) );',
@@ -76,19 +78,27 @@ export function stylizeMaterial(m: Material): Material {
 export function Stylize() {
   const scene = useThree((s) => s.scene)
   const frame = useRef(0)
+  const convert = useCallback(
+    () =>
+      scene.traverse((o) => {
+        const mesh = o as Mesh
+        if (!mesh.isMesh || !mesh.material) return
+        if (Array.isArray(mesh.material)) {
+          const next = mesh.material.map(stylizeMaterial)
+          if (next.some((x, i) => x !== (mesh.material as Material[])[i])) mesh.material = next
+        } else {
+          const next = stylizeMaterial(mesh.material)
+          if (next !== mesh.material) mesh.material = next
+        }
+    }),
+    [scene],
+  )
+  useLayoutEffect(() => {
+    scene.userData.prepare = convert
+    return () => void delete scene.userData.prepare
+  }, [scene, convert])
   useFrame(() => {
-    if (frame.current++ % 20 !== 0) return
-    scene.traverse((o) => {
-      const mesh = o as Mesh
-      if (!mesh.isMesh || !mesh.material) return
-      if (Array.isArray(mesh.material)) {
-        const next = mesh.material.map(stylizeMaterial)
-        if (next.some((x, i) => x !== (mesh.material as Material[])[i])) mesh.material = next
-      } else {
-        const next = stylizeMaterial(mesh.material)
-        if (next !== mesh.material) mesh.material = next
-      }
-    })
+    if (frame.current++ % 20 === 0) convert()
   })
   return null
 }

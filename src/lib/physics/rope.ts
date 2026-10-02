@@ -205,6 +205,8 @@ export function createRope(
  * framed by parallel transport so it never twists, rebuilt in place each frame (no allocation).
  * uv.x runs along the cable (0..1), uv.y round it.
  */
+/** mm a cable's points may wander (its links never quite rest) and it's still the same: not drawn again, nor its shadow */
+const STILL = 0.1
 export class Tube {
   geometry = new BufferGeometry()
   private rings: number
@@ -250,7 +252,7 @@ export class Tube {
     if (!this.last || this.last.length !== n0 * 3 + 1) this.last = new Float32Array(n0 * 3 + 1).fill(NaN)
     let moved = !(Math.abs(this.last[n0 * 3] - r) <= 1e-4) // (NaN at first: always drawn the first time)
     for (let i = 0; i < n0 && !moved; i++)
-      if (!(Math.abs(this.last[i * 3] - p[i].x) <= 0.01 && Math.abs(this.last[i * 3 + 1] - p[i].y) <= 0.01 && Math.abs(this.last[i * 3 + 2] - p[i].z) <= 0.01)) moved = true
+      if (!(Math.abs(this.last[i * 3] - p[i].x) <= STILL && Math.abs(this.last[i * 3 + 1] - p[i].y) <= STILL && Math.abs(this.last[i * 3 + 2] - p[i].z) <= STILL)) moved = true
     if (!moved) return
     for (let i = 0; i < n0; i++) {
       this.last[i * 3] = p[i].x

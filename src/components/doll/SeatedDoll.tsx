@@ -187,8 +187,9 @@ function pose(r: DollRig, s: Seat, breath: number, roll: number) {
   r.armR.rotation.set(s.armX, 0, ARM_IN)
 }
 
-/** `limbs`: called after the pose each frame, to turn the arms and legs some other way (physics) */
-export function SeatedDoll({ lean = LEAN, limbs }: { lean?: number; limbs?: (r: DollRig) => void }) {
+/** `limbs`: called after the pose each frame, to turn the arms and legs some other way (physics). `breathe` off:
+ *  still but for the odd tilt of the head (breathing moves him a hair every frame: his shadow redrawn every frame) */
+export function SeatedDoll({ lean = LEAN, limbs, breathe = true }: { lean?: number; limbs?: (r: DollRig) => void; breathe?: boolean }) {
   const rig = useRef<DollRig | null>(null)
   const s = useMemo(() => seat(lean), [lean])
   const life = useRef({ t: 0, next: 5, back: 0, target: HEAD_ROLL, tilt: { x: HEAD_ROLL, v: 0 } as Spring })
@@ -216,7 +217,7 @@ export function SeatedDoll({ lean = LEAN, limbs }: { lean?: number; limbs?: (r: 
       L.back = 0
     }
     stepSpring(L.tilt, L.target, h, TILT.k, TILT.c)
-    const breath = (1 - Math.cos((2 * Math.PI * L.t) / BREATH.period)) / 2
+    const breath = breathe ? (1 - Math.cos((2 * Math.PI * L.t) / BREATH.period)) / 2 : 0
     pose(r, s, breath, L.tilt.x)
     limbs?.(r)
   })

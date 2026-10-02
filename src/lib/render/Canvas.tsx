@@ -33,6 +33,7 @@ function Progress() {
  * driving round the Quad hitches (a shader compiling is a frame or two lost).
  */
 function warmUp(gl: WebGLRenderer, scene: Scene, camera: Camera) {
+  prepare(scene)
   const was: [Object3D, boolean, boolean][] = []
   scene.traverse((o) => {
     was.push([o, o.visible, o.frustumCulled])
@@ -63,6 +64,10 @@ function warmUp(gl: WebGLRenderer, scene: Scene, camera: Camera) {
   }
 }
 
+/** whatever the scene does to its materials before they're drawn (../stylize): done before compiling, so it's
+ *  the materials actually drawn that get compiled, once */
+const prepare = (scene: Scene) => (scene.userData.prepare as (() => void) | undefined)?.()
+
 /** mounted once the scene's built (its Suspense resolved): compile, wait for any stragglers, draw, check out */
 function Ready({ done }: { done: () => void }) {
   const { gl, scene, camera, get } = useThree()
@@ -79,24 +84,30 @@ function Ready({ done }: { done: () => void }) {
     ;(async () => {
       ready.shaders()
       try {
+        prepare(scene)
         await Promise.race([gl.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 6000))])
       } catch {
         /* (not every renderer can: it'll compile as it draws) */
       }
       // (anything still loading outside the suspense: wait for it, a while)
+      performance.mark('ready:compiled')
       const until = performance.now() + 5000
       while (useProgress.getState().active && performance.now() < until) await frames(1)
       // what's still loading behind its own Suspense (the physics engine, the car): wait for it, a while; then a
       // couple of frames for what mounts once it's drawn, its shaders compiled too, everything drawn once, a few
       // frames to settle
+      performance.mark('ready:assets')
       const longest = performance.now() + 15000
       while (stillWaiting() > 0 && performance.now() < longest) await frames(1)
+      performance.mark('ready:waited')
       await frames(2)
       try {
+        prepare(scene)
         await Promise.race([gl.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 6000))])
       } catch {
         /* (as above) */
       }
+      performance.mark('ready:compiled-2')
       if (!live) return
       try {
         warmUp(gl, scene, camera)

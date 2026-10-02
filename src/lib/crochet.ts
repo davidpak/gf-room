@@ -261,7 +261,7 @@ export type Stitcher = {
  * An embroidery decal: `draw` stitches threads onto a `wMM × hMM` canvas. Returns a material
  * (alpha-tested so only the threads show) with relief from a normal map.
  */
-export function embroidery(wMM: number, hMM: number, draw: (s: Stitcher) => void, pxPerMM = 12) {
+export function embroidery(wMM: number, hMM: number, draw: (s: Stitcher) => void, pxPerMM = 6) {
   const W = Math.ceil(wMM * pxPerMM)
   const H = Math.ceil(hMM * pxPerMM)
   const color = document.createElement('canvas')
@@ -269,7 +269,9 @@ export function embroidery(wMM: number, hMM: number, draw: (s: Stitcher) => void
   color.width = height.width = W
   color.height = height.height = H
   const cc = color.getContext('2d')!
-  const hc = height.getContext('2d')!
+  // (the height canvas and its scratch ones are read back for the normal map: kept on the CPU, as the browser is
+  // told here, or every read waits on the GPU to finish all their blurs and strokes: 13 s for David's face)
+  const hc = height.getContext('2d', { willReadFrequently: true })!
   hc.fillStyle = '#000'
   hc.fillRect(0, 0, W, H)
   const px = pxPerMM
@@ -298,11 +300,11 @@ export function embroidery(wMM: number, hMM: number, draw: (s: Stitcher) => void
     },
     satin(path, col, angle = 0.7) {
       // paint the shape (paths are filled; text drawn with fillText paints itself) on a scratch canvas
-      const paint = (fill: string) => {
+      const paint = (fill: string, cpu = false) => {
         const t = document.createElement('canvas')
         t.width = W
         t.height = H
-        const tc = t.getContext('2d')!
+        const tc = t.getContext('2d', { willReadFrequently: cpu })!
         setup(tc)
         tc.fillStyle = fill
         tc.strokeStyle = fill
@@ -325,7 +327,7 @@ export function embroidery(wMM: number, hMM: number, draw: (s: Stitcher) => void
       }
       cc.drawImage(t, 0, 0)
       // height: puffy (a blurred copy of the shape)
-      const hgt = paint('#fff')
+      const hgt = paint('#fff', true)
       hc.save()
       hc.filter = `blur(${0.5 * px}px)`
       hc.drawImage(hgt.t, 0, 0)

@@ -32,7 +32,9 @@ const BODY = { half: [44, 93, 40] as const, at: [0, 131, -8] as const, mass: 0.0
 const SEATBOX = { half: [40, 19, 23.5] as const, at: [0, 19.5, -24.5] as const, mass: 0.01 } // (behind the legs' ends)
 const LEG = { r: 18, len: R.hipY - 14, mass: 0.02 }
 const ARM = { r: 10, len: -A.sleeve[0][1] + A.hand.len + 2, mass: 0.01 }
-const SPRING = { k: 900, damp: 16 } // 1/s² and 1/s: firm enough to hold the pose, still swings when he's moved
+// 1/s², 1/s: firm enough to hold the pose, still swings when he's moved; `dead` (rad): this close, it's let be (seated,
+// the desk holds the legs ~3° off their pose: pushed on, they'd buzz for ever and never sleep)
+const SPRING = { k: 900, damp: 16, dead: 0.055 }
 const ITEM = groups(GROUP.item, 0xffff)
 
 const X = new Vector3(1, 0, 0)
@@ -143,7 +145,7 @@ export function LiveDoll({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spaw
       if (err.w < 0) err.set(-err.x, -err.y, -err.z, -err.w)
       const s = Math.sqrt(1 - Math.min(1, err.w * err.w))
       const angle = 2 * Math.acos(Math.min(1, err.w))
-      if (s > 1e-6) _e.set(err.x / s, err.y / s, err.z / s).multiplyScalar(angle)
+      if (s > 1e-6 && angle > SPRING.dead) _e.set(err.x / s, err.y / s, err.z / s).multiplyScalar(angle - SPRING.dead)
       else _e.set(0, 0, 0)
       q.set(tq.x, tq.y, tq.z, tq.w) // (q was the scratch for the limb's turn)
       const lw = b.angvel()
@@ -152,7 +154,8 @@ export function LiveDoll({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spaw
         y: tw.y + (lw.y - tw.y) * fade + _e.y * SPRING.k * dt,
         z: tw.z + (lw.z - tw.z) * fade + _e.z * SPRING.k * dt,
       }
-      b.setAngvel(w, angle > 0.002 || Math.hypot(lw.x - tw.x, lw.y - tw.y, lw.z - tw.z) > 0.01)
+      // (at rest, it's left alone to sleep)
+      if (angle > SPRING.dead || Math.hypot(lw.x - tw.x, lw.y - tw.y, lw.z - tw.z) > 0.02) b.setAngvel(w, true)
     }
   })
 
@@ -176,7 +179,7 @@ export function LiveDoll({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spaw
     <>
       <Holdable bodyRef={perch.body} position={spawn} colliders={false} restitution={0.05} linearDamping={0.8} angularDamping={1.5} hold={perch.hold}>
         <group ref={torsoDraw} {...perch.hover.bind}>
-          <SeatedDoll limbs={drive} />
+          <SeatedDoll limbs={drive} breathe={false} />
         </group>
         <CuboidCollider args={[...BODY.half]} position={[...BODY.at]} mass={BODY.mass} friction={1} collisionGroups={ITEM} />
         <CuboidCollider args={[...SEATBOX.half]} position={[...SEATBOX.at]} mass={SEATBOX.mass} friction={1} collisionGroups={ITEM} />

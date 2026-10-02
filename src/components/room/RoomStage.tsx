@@ -1,7 +1,6 @@
 import { Waiting } from '../../lib/ready'
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Canvas } from '../../lib/render/Canvas'
-import { useThree } from '@react-three/fiber'
 import { MeshStandardMaterial, PCFShadowMap, Vector3 } from 'three'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { World } from '../../lib/physics/World'
@@ -110,8 +109,6 @@ function Ready({ onReady }: { onReady?: () => void }) {
 
 /** `play`: the main view, with the free camera. */
 function Scene({ play = false, onReady }: { play?: boolean; onReady?: () => void }) {
-  const get = useThree((st) => st.get)
-  if (import.meta.env.DEV) Object.assign(window, { __r3f: get }) // (for screenshots from the console)
   return (
     <>
       {/* thin cables (4 mm) on the desk keep their shadows: a big map, small biases (as the desk's page) */}
@@ -140,7 +137,7 @@ export function RoomStage() {
   const onReady = useCallback(() => setReady(true), [])
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <Canvas shadows={{ type: PCFShadowMap }} dpr={1.5} camera={{ position: [...START.position], fov: START.fov, near: 10, far: 15000 }} gl={{ antialias: false }}>
+      <Canvas shadows={{ type: PCFShadowMap }} dpr={[1, 1.25]} camera={{ position: [...START.position], fov: START.fov, near: 10, far: 15000 }} gl={{ antialias: false }}>
         <Scene play onReady={onReady} />
         <Effects aoRadius={40} />
       </Canvas>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { invalidate, useFrame, type ThreeEvent } from '@react-three/fiber'
 import { ConvexHullCollider, CuboidCollider, CylinderCollider, useBeforePhysicsStep, type RapierCollider, type RapierRigidBody } from '@react-three/rapier'
-import { Box3, CatmullRomCurve3, ExtrudeGeometry, InstancedMesh, LatheGeometry, Matrix4, MeshStandardMaterial, Path, Quaternion, SRGBColorSpace, Shape, ShapeGeometry, TextureLoader, Vector2, Vector3, type BufferGeometry, type Group } from 'three'
+import { Box3, CatmullRomCurve3, ExtrudeGeometry, InstancedMesh, LatheGeometry, LoadingManager, Matrix4, MeshStandardMaterial, Path, Quaternion, SRGBColorSpace, Shape, ShapeGeometry, TextureLoader, Vector2, Vector3, type BufferGeometry, type Texture, type Group } from 'three'
 import { Holdable } from '../../lib/physics/Holdable'
 import { grabbable } from '../../lib/physics/Hand'
 import { GROUP, groups } from '../../lib/physics/rope'
@@ -151,9 +151,19 @@ function printedTop(g: BufferGeometry) {
   return g
 }
 /** a product shot laid flat over shape coordinates, seen from above ("top": x runs right to left) or below */
+/**
+ * The printed photos: loaded once, on a loader of their own. (On three's shared one, starting a load while the puck
+ * renders tells the loading screen's progress mid-render; React threw that render away and tried again and again,
+ * and the physics world it sits in didn't show until the loading screen gave up waiting: 15 s on every load.)
+ */
+const PHOTOS = new TextureLoader(new LoadingManager())
+const photos = new Map<string, Texture>()
 function photo(which: 'top' | 'bottom') {
   const ph = MINTS.photo[which]
-  const t = new TextureLoader().load(ph.src, () => invalidate()) // (pages drawn on demand redraw once it's in)
+  const had = photos.get(which)
+  if (had) return had
+  const t = PHOTOS.load(ph.src, () => invalidate()) // (pages drawn on demand redraw once it's in)
+  photos.set(which, t)
   t.colorSpace = SRGBColorSpace
   t.anisotropy = 8
   const s = ph.k / ph.size
@@ -643,11 +653,23 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
     const list = mints.current
     const g = drawn.current
     g?.updateWorldMatrix(true, false)
+    // (sent to the graphics card only when one's moved: at rest they're left be, and so is every shadow)
+    let moved = inst.count !== list.length
     inst.count = list.length
+    const a = inst.instanceMatrix.array as Float32Array
+    const put = (i: number, m: Matrix4) => {
+      const e = m.elements
+      for (let k = 0; k < 16; k++)
+        if (Math.abs(a[i * 16 + k] - e[k]) > (k >= 12 && k <= 14 ? 0.01 : 1e-5)) {
+          inst.setMatrixAt(i, m)
+          moved = true
+          return
+        }
+    }
     const alpha = Math.min(1, Math.max(0, stepAlpha()))
     list.forEach((m, i) => {
       if (m.packed && g) {
-        inst.setMatrixAt(i, _m.multiplyMatrices(g.matrixWorld, _m2.compose(m.packed.p, m.packed.q, ONE)))
+        put(i, _m.multiplyMatrices(g.matrixWorld, _m2.compose(m.packed.p, m.packed.q, ONE)))
         return
       }
       // blended between its pose before the last step and now, as the puck is drawn
@@ -657,9 +679,9 @@ export function LiveMints({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spa
       _q.set(r.x, r.y, r.z, r.w)
       _v.lerpVectors(m.prev.p, _v, alpha)
       _q2.copy(m.prev.q).slerp(_q, alpha)
-      inst.setMatrixAt(i, _m.compose(_v, _q2, ONE))
+      put(i, _m.compose(_v, _q2, ONE))
     })
-    inst.instanceMatrix.needsUpdate = true
+    if (moved) inst.instanceMatrix.needsUpdate = true
   })
   const mintBox = useMemo(() => new Box3(new Vector3(-M.d / 2, -M.t / 2, -M.d / 2), new Vector3(M.d / 2, M.t / 2, M.d / 2)), [])
   const mintGrab = useMemo(

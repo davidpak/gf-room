@@ -59,6 +59,16 @@ export function StageLights({ extent = 180, mapSize = 2048 }: { extent?: number;
 }
 
 /**
+ * The AO pass, told not to look for see-through things: finding any (a lampshade's glow, a shadow card) it draws the
+ * whole scene twice more every frame to treat them apart (1–2 ms in the room); the toy look doesn't need it.
+ */
+const opaqueOnly = (p: { autoDetectTransparency: boolean; configuration: { transparencyAware: boolean } } | null) => {
+  if (!p) return
+  p.autoDetectTransparency = false
+  p.configuration.transparencyAware = false
+}
+
+/**
  * Post effects + the performance helpers (lib/render/Quality: adaptive resolution, shadows on
  * demand, ?perf overlay). AO radius is in world mm: ~8 for keypad-scale creases, ~40 for furniture.
  * Cheap on purpose: AO at half resolution (depth-aware upsampling keeps edges clean) and SMAA
@@ -83,7 +93,7 @@ export function Effects({
     <>
       <Quality />
       <EffectComposer multisampling={0}>
-        {ao && <N8AO aoRadius={aoRadius} distanceFalloff={2} intensity={2.4} quality="low" halfRes color={aoColor} />}
+        {ao && <N8AO ref={opaqueOnly} aoRadius={aoRadius} distanceFalloff={2} intensity={2.4} quality="low" halfRes color={aoColor} />}
         {/* only things pushed above white (bulbs) glow */}
         <Bloom luminanceThreshold={tone ? 1.1 : 1} luminanceSmoothing={0.3} intensity={tone ? 0.7 : 0.9} mipmapBlur levels={6} />
         {tone && <ToneMapping mode={ToneMappingMode.NEUTRAL} />}
