@@ -111,6 +111,21 @@ function lines(g: CanvasRenderingContext2D, text: string, w: number, max: number
   return out
 }
 
+/** each pixel's step in the radius profile, for a face this size (worked out once, shared by every side drawn) */
+const indices = new Map<string, Uint16Array>()
+function profileIndex(size: number, px: number, step: number, n: number) {
+  const key = `${size}/${px}/${step}`
+  let a = indices.get(key)
+  if (!a) {
+    a = new Uint16Array(size * size)
+    const h = size / 2
+    for (let y = 0; y < size; y++)
+      for (let x = 0; x < size; x++) a[y * size + x] = Math.min(n - 1, Math.round(Math.hypot(x + 0.5 - h, y + 0.5 - h) / px / step))
+    indices.set(key, a)
+  }
+  return a
+}
+
 /**
  * One face of a disc (its alpha: 255 where it's grooved, less where it's smooth), square, the disc filling it (uv 0..1 across its diameter). The grooves are worked out a pixel
  * at a time from a profile in radius (0.05 mm a step): fine rings of slightly different black where there's music,
@@ -148,17 +163,15 @@ export function drawSide(p: Pressing, side: Side, inks: Inks, size = 2048): Text
   const img = g.getImageData(0, 0, size, size)
   const d = img.data
   const h = size / 2
-  for (let y = 0; y < size; y++)
-    for (let x = 0; x < size; x++) {
-      const r = Math.hypot(x + 0.5 - h, y + 0.5 - h) / px
-      const k = Math.min(N - 1, Math.round(r / STEP))
-      const m = prof[k] / 0.1
-      const o = (y * size + x) * 4
-      d[o] = Math.min(255, d[o] * m)
-      d[o + 1] = Math.min(255, d[o + 1] * m)
-      d[o + 2] = Math.min(255, d[o + 2] * m * 1.04)
-      d[o + 3] = cut[k] ? 255 : 150
-    }
+  const at = profileIndex(size, px, STEP, N)
+  for (let i = 0, o = 0; i < at.length; i++, o += 4) {
+    const k = at[i]
+    const m = prof[k] / 0.1
+    d[o] = Math.min(255, d[o] * m)
+    d[o + 1] = Math.min(255, d[o + 1] * m)
+    d[o + 2] = Math.min(255, d[o + 2] * m * 1.04)
+    d[o + 3] = cut[k] ? 255 : 150
+  }
   g.putImageData(img, 0, 0)
   // the run-out's lock groove and the matrix number scratched in it
   g.strokeStyle = 'rgba(255,255,255,0.12)'

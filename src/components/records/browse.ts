@@ -45,9 +45,10 @@ export const crateSpot: Spot = {
     // (from the crate's own place: its records moving in it don't move the camera)
     o.updateWorldMatrix(true, false)
     o.getWorldPosition(_c)
-    _c.y += 260
-    frameAround(pos, at, aspect, _c, 560, 520, toward(o, 0.75))
-    lower(pos, at, 520)
+    // (the crate's top and the record risen out of it, whole: up to 560 over its floor)
+    _c.y += 330
+    frameAround(pos, at, aspect, _c, 600, 660, toward(o, 0.55))
+    lower(pos, at, 300)
   },
   keys: (e) => step(e) || (e.key === 'Enter' || e.key === ' ' ? (takeOut(s.i), true) : false),
 }

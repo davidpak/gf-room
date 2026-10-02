@@ -97,6 +97,8 @@ function Record({ p, i, z, pose, onPick, onPut }: { p: Pressing; i: number; z: n
   const slides = useRef<(Group | null)[]>([])
   const outT = useRef(0)
   const [over, setOver] = useState<number | null>(null)
+  // (its records only made while it's out, or going back in: a crate full of albums costs only their jackets)
+  const [discsOn, setDiscsOn] = useState(false)
   useFrame((_, dtRaw) => {
     const o = g.current
     if (!o) return
@@ -113,6 +115,7 @@ function Record({ p, i, z, pose, onPick, onPut }: { p: Pressing; i: number; z: n
     o.rotation.x += (want.r - o.rotation.x) * k
     // its records slide out once it's out (one after the other), back in before it goes back
     outT.current = out ? outT.current + dt : Math.max(0, Math.min(outT.current, 0.9) - dt * 3)
+    if (out !== discsOn && (out || outT.current === 0)) setDiscsOn(out)
     slides.current.forEach((d, j) => {
       if (!d) return
       const f = smooth((outT.current - 0.35 - j * 0.12) / 0.5)
@@ -141,7 +144,7 @@ function Record({ p, i, z, pose, onPick, onPut }: { p: Pressing; i: number; z: n
         <Jacket p={p} art={art} />
       </group>
       {/* its records, behind the jacket, sliding out of its open edge (+x) when it's out */}
-      {Array.from({ length: discs }, (_, j) => (
+      {discsOn && Array.from({ length: discs }, (_, j) => (
         <group key={j} ref={(d) => void (slides.current[j] = d)} position={[0, S.sleeve / 2, -S.sleeveT / 2 - 2 - j * (discThick(S) + 2)]} visible={false}>
           <group
             rotation={[Math.PI / 2, 0, 0]}

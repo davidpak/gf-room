@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BufferGeometry, CanvasTexture, CylinderGeometry, Float32BufferAttribute, SRGBColorSpace, Vector3, type Mesh, type Texture, type WebGLProgramParametersWithUniforms } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
+import '../../lib/render/bvh'
 import { LOOK, bruno } from '../quad/bruno'
 import { drawBack, drawCover, drawSide, inksOf, loadCover, type Inks } from './art'
 import { sizeOf, type Pressing } from './vinyl'
@@ -13,7 +14,7 @@ import { sizeOf, type Pressing } from './vinyl'
  * Disc: lying in its frame's xz plane, its middle at the origin, side A up (its label's top toward -z), its bottom
  * at y 0. Jacket: standing in its xy plane, the cover toward +z, its bottom at y 0, its open edge at +x.
  */
-export type Art = { cover: Texture; back: Texture; sides: Texture[]; inks: Inks }
+export type Art = { cover: Texture; back: Texture; side: (k: number) => Texture; inks: Inks }
 const cache = new Map<string, Promise<Art>>()
 
 /** the pressing's pictures (cached by album: drawn once however many times it's shown) */
@@ -29,8 +30,10 @@ export function artOf(p: Pressing): Promise<Art> {
       cover.colorSpace = SRGBColorSpace
       cover.anisotropy = 8
       const inks = inksOf(c)
-      // (the sides drawn as they're needed would hitch on show; they're quick enough: all at once)
-      return { cover, back: drawBack(p, inks), sides: p.sides.map((s) => drawSide(p, s, inks, p.size === 'lp' ? 2048 : 1024)), inks }
+      // (each side drawn the first time its record's shown: a crate of albums costs only their jackets)
+      const sides: Texture[] = []
+      const side = (k: number) => (sides[k] ??= drawSide(p, p.sides[k], inks, p.size === 'lp' ? 2048 : 1024))
+      return { cover, back: drawBack(p, inks), side, inks }
     })
     cache.set(p.uri, a)
   }
@@ -127,6 +130,8 @@ function face(S: { r: number; hole: number; label: number }, under: boolean) {
   // (up for the top; for the face under, turned over the other way: seen from below, its picture reads the right way)
   g.rotateX(under ? Math.PI / 2 : -Math.PI / 2)
   g.computeVertexNormals()
+  // (16k triangles a face: indexed, so the pointer passing over a record costs nothing: lib/render/bvh)
+  g.computeBoundsTree()
   return g
 }
 const geo = new Map<string, { top: BufferGeometry; under: BufferGeometry; rim: CylinderGeometry }>()
@@ -142,7 +147,7 @@ export function Disc({ p, art, disc = 0 }: { p: Pressing; art: Art; disc?: numbe
   const S = sizeOf(p)
   const g = discGeo(S)
   const label = S.label
-  const mats = useMemo(() => [vinyl(art.sides[2 * disc], label + 4, S.r - 3), vinyl(art.sides[2 * disc + 1], label + 4, S.r - 3)], [art, disc, label, S.r])
+  const mats = useMemo(() => [vinyl(art.side(2 * disc), label + 4, S.r - 3), vinyl(art.side(2 * disc + 1), label + 4, S.r - 3)], [art, disc, label, S.r])
   const rim = useMemo(() => bruno({ color: art.inks.rim, shade: '#4a4060' }), [art])
   useEffect(() => () => mats.forEach((m) => m.dispose()), [mats])
   // (the sheen turns round the disc's middle, wherever it's carried)
