@@ -21,3 +21,5 @@ public/models/civic.glb
 
 # the Melee disc and box art (Nintendo's): kept local, as the Civic is; without them the disc and case draw their own
 public/textures/melee/
+# the GameCube's references (dimensions.com's drawing, Wikimedia Commons photos, David's): looked at locally
+public/reference/gamecube/

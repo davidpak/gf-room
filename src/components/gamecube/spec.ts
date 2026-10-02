@@ -23,28 +23,7 @@
  */
 const IN = 25.4
 
-export const CUBE = {
-  w: 150,
-  h: 110,
-  d: 161,
-  feet: 4, // (it stands this high on its rubber feet)
-  r: 7, // (its edges' round)
-  // (the lid: its corners rounded wide, the buttons in them; open: how far it swings up, radians; gap: it sits this
-  // far over its bed, the disc under it)
-  lid: { w: 124, d: 122, r: 30, t: 5, hingeZ: -64, open: 1.25, window: 39, gap: 1.6 },
-  well: { r: 44 },
-  buttons: {
-    power: { x: -60, z: -66, r: 7.5 }, // [G] back left, light grey
-    reset: { x: -60, z: 58, r: 5.5 }, // front left
-    open: { x: 60, z: 58, r: 6.5 }, // front right
-  },
-  lamp: { x: -45, z: -71 },
-  panel: { x0: -71, x1: 30, y0: 12, y1: 76 }, // [G] the silver port panel on the front
-  ports: { y: 54, xs: [-58, -35, -12, 11], r: 7 },
-  slots: { y: 27, xs: [-46, -2], w: 34, h: 5 },
-  handle: { back: 26, r: 5.5, y: 92 },
-  mass: 2.4,
-}
+export { CUBE } from './cube' // ([G]: measured, with its sources and checks)
 export const DISC = { r: 40, hole: 7.5, t: 1.2 }
 export const PAD = {
   w: 150,

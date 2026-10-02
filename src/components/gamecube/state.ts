@@ -111,6 +111,12 @@ export function moveDisc() {
     setTimeout(() => set({ disc: 'console', flight: null }), FLIGHT * 1000)
   }
 }
+/** back as it came: Melee in it, the lid shut (the fix-it prompt) */
+export function tidyCube() {
+  if (s.flight) return
+  if (s.lid) lidSound(false)
+  set({ disc: 'console', lid: false, caseOpen: false })
+}
 export function toggleCase() {
   if (s.flight) return
   clickSound()
@@ -133,4 +139,4 @@ export function padButton(b: 'start' | 'a' | 'b' | 'x' | 'y', pad: number) {
   }
 }
 
-if (import.meta.env.DEV && typeof window !== 'undefined') Object.assign(window, { __cube: { get: getCube, pressPower, pressOpen, pressReset, pressTv, shutLid, moveDisc, toggleCase, padButton } }) // (for trying it from the console)
+if (import.meta.env.DEV && typeof window !== 'undefined') Object.assign(window, { __cube: { get: getCube, pressPower, pressOpen, pressReset, pressTv, shutLid, moveDisc, toggleCase, padButton, tidyCube } }) // (for trying it from the console)

@@ -1,25 +1,34 @@
 import { useMemo, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { CatmullRomCurve3, CylinderGeometry, ExtrudeGeometry, Shape, SphereGeometry, TubeGeometry, Vector3, type Group, type Mesh } from 'three'
+import { CylinderGeometry, ExtrudeGeometry, LatheGeometry, Path, RepeatWrapping, Shape, Vector2, type BufferGeometry, type Group, type Mesh } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from '../quad/bruno'
 import { anchor, canvasTexture, capped, rrect } from './anchors'
+import { CUBE, lidOutline } from './cube'
 import { Disc } from './Disc'
-import { COLORS, CUBE } from './spec'
+import { COLORS } from './spec'
 import { getCube, moveDisc, pressOpen, pressPower, pressReset, shutLid, useCube } from './state'
 
 /**
- * The GameCube [G], toy style, its frame's origin under its middle on the ground, its front +z. Its faces painted (the
- * port panel and its ports, the vents, the buttons' rings and names: into the faces' own textures, nothing stuck on);
- * the lid its own part, hinged at the back, popping up on its spring; the buttons their own parts, each clicked:
- * POWER (its lamp lights green), OPEN (the lid pops), RESET; the lid clicked shut. The disc under the lid on its
- * spindle (./Disc; a click on it with the lid up takes it out to its case). The controllers' plugs in ports 1 and 2,
- * the AV plug in its back (./anchors: the cables leave from them).
+ * The GameCube [G], built from its measured spec (./cube: dimensions.com's drawing, the rear photo), toy style. Its
+ * frame: the origin on the ground under its middle, its front +z.
+ *
+ *   the body   a block up to the floor of the lid's well, its walls painted all the way round from one strip (the
+ *              seam round its bottom, the port insides and card slots on the front, the vent grids on the sides, the
+ *              sockets on the back); the top over it, a frame with the lid's outline cut through (the well's walls),
+ *              its face painted (the buttons' rings and names, the raised Nintendo pill, the finger dip)
+ *   the lid    flush in its hole, the round black window painted in; hinged at the back, popping up on its spring
+ *   the front  the silver panel standing proud of it, the four ports and two slots cut through it
+ *   the back   the black strap of the handle looped out; the AV plug in its socket
+ *   in it      the drive, its spindle, the disc on it (./Disc)
+ *
+ * Its buttons each their own part, clicked: POWER (the lamp beside it lights), OPEN (the lid pops), RESET; the lid
+ * clicked shut; the disc, with the lid up, out to its case (./state). The controllers' plugs in ports 1 and 2 and the
+ * AV plug are where the cables leave from (./anchors).
  */
-const { w: CW, h: CH, d: CD, feet: FEET, lid: L } = CUBE
-const BODY = CH - FEET
+const { w: CW, h: CH, d: CD, feet: FEET, round: RND, lid: L } = CUBE
+const FLOOR = CH - CUBE.well.depth // (the well's floor: the body's top)
 const PX = 4 // (canvas pixels a millimetre)
-const LID_Z = L.hingeZ + L.d / 2 // (the lid's middle)
 
 /** a rounded rectangle, w × h, its corners r, about (cx, cy) */
 export function roundRect(w: number, h: number, r: number, cx = 0, cy = 0) {
@@ -37,164 +46,206 @@ export function roundRect(w: number, h: number, r: number, cx = 0, cy = 0) {
   s.absarc(x + r, y + r, r, Math.PI, Math.PI * 1.5, false)
   return s
 }
+/** a plan shape from [x, z] points (drawn as x, -z: the back up) */
+const fromPlan = (pts: [number, number][], into = new Shape()) => {
+  into.setFromPoints(pts.map(([x, z]) => new Vector2(x, -z)))
+  return into
+}
+/** a plan shape stood up: extruded from y0 up (its caps' uv the plan's own x and -z) */
+const standUp = (g: ExtrudeGeometry, y0: number) => g.rotateX(-Math.PI / 2).translate(0, y0, 0)
 
-function faces() {
-  const plain = bruno({ color: COLORS.indigo, shade: '#3a3070' })
-  const under = bruno({ color: '#3a3274', shade: '#2a2350' })
-  // the top: the lid's bed (darker) and the well in it under the lid, the buttons' rings and their names, the maker's name
-  const top = canvasTexture(CW * PX, CD * PX, (g) => {
-    const X = (x: number) => (x + CW / 2) * PX
-    const Y = (z: number) => (z + CD / 2) * PX
-    g.fillStyle = COLORS.indigo
-    g.fillRect(0, 0, CW * PX, CD * PX)
-    g.fillStyle = COLORS.indigoDark
-    rrect(g, X(-L.w / 2 - 1), Y(L.hingeZ - 1), (L.w + 2) * PX, (L.d + 2) * PX, (L.r + 1) * PX)
-    g.fill()
-    g.fillStyle = '#29262f'
-    g.beginPath()
-    g.arc(X(0), Y(LID_Z), CUBE.well.r * PX, 0, Math.PI * 2)
-    g.fill()
-    g.strokeStyle = '#3b3746'
-    g.lineWidth = 2 * PX
-    g.beginPath()
-    g.arc(X(0), Y(LID_Z), (CUBE.well.r - 7) * PX, 0, Math.PI * 2)
-    g.stroke()
-    for (const b of Object.values(CUBE.buttons)) {
-      g.fillStyle = '#3e3588'
-      g.beginPath()
-      g.arc(X(b.x), Y(b.z), (b.r + 2.4) * PX, 0, Math.PI * 2)
-      g.fill()
+// ---- the body's walls: one strip painted round it. Its outline (plan) clockwise from the middle of the back, so the
+// strip's seam is there, behind the handle; s the distance round from there
+const Q = (Math.PI * RND) / 2 // (a corner's quarter round)
+const SIDE_X = CW - 2 * RND
+const SIDE_Z = CD - 2 * RND
+const PERIM = 2 * SIDE_X + 2 * SIDE_Z + 4 * Q
+const sOn = {
+  back: (x: number) => (x >= 0 ? x : PERIM + x),
+  right: (z: number) => SIDE_X / 2 + Q + (z + SIDE_Z / 2),
+  front: (x: number) => SIDE_X / 2 + Q + SIDE_Z + Q + (SIDE_X / 2 - x),
+  left: (z: number) => SIDE_X / 2 + Q + SIDE_Z + Q + SIDE_X + Q + (SIDE_Z / 2 - z),
+}
+function bodyOutline(): [number, number][] {
+  const pts: [number, number][] = [[0, -CD / 2]]
+  const corner = (cx: number, cz: number, a0: number) => {
+    for (let i = 0; i <= 6; i++) {
+      const a = a0 + (Math.PI / 2) * (i / 6)
+      pts.push([cx + RND * Math.cos(a), cz + RND * Math.sin(a)])
     }
-    g.fillStyle = '#9a91e0'
-    g.font = `bold ${3 * PX}px Arial, sans-serif`
-    g.textAlign = 'center'
-    g.textBaseline = 'middle'
-    const { power, reset, open } = CUBE.buttons
-    g.fillText('POWER', X(power.x + 1), Y(power.z + power.r + 6))
-    g.fillText('RESET', X(reset.x + 1), Y(reset.z - reset.r - 5.5))
-    g.fillText('OPEN', X(open.x - 1), Y(open.z - open.r - 5.5))
-    g.strokeStyle = '#4b42a0'
-    g.lineWidth = 0.8 * PX
-    rrect(g, X(34), Y(-CD / 2 + 4), 34 * PX, 9 * PX, 4.5 * PX)
-    g.stroke()
-    g.fillStyle = '#4b42a0'
-    g.font = `italic bold ${4.6 * PX}px Arial, sans-serif`
-    g.fillText('Nintendo', X(51), Y(-CD / 2 + 8.6))
-  })
-  // the front: the silver panel, its four ports (their numbers in dots over them), the memory card slots
-  const front = canvasTexture(CW * PX, BODY * PX, (g) => {
-    const X = (x: number) => (x + CW / 2) * PX
-    const Y = (y: number) => (CH - y) * PX
-    g.fillStyle = COLORS.indigo
-    g.fillRect(0, 0, CW * PX, BODY * PX)
-    const p = CUBE.panel
-    g.fillStyle = COLORS.silver
-    rrect(g, X(p.x0), Y(p.y1), (p.x1 - p.x0) * PX, (p.y1 - p.y0) * PX, 5 * PX)
-    g.fill()
-    g.strokeStyle = '#a9aab6'
-    g.lineWidth = 0.8 * PX
-    g.stroke()
-    CUBE.ports.xs.forEach((x, i) => {
-      g.fillStyle = '#9fa1ad'
-      g.beginPath()
-      g.arc(X(x), Y(CUBE.ports.y), (CUBE.ports.r + 1.6) * PX, 0, Math.PI * 2)
-      g.fill()
-      g.fillStyle = '#26242c'
-      g.beginPath()
-      g.arc(X(x), Y(CUBE.ports.y), CUBE.ports.r * PX, 0, Math.PI * 2)
-      g.fill()
-      g.fillStyle = '#5b5a66'
-      for (let k = 0; k <= i; k++) {
-        g.beginPath()
-        g.arc(X(x + (k - i / 2) * 2.6), Y(CUBE.ports.y + CUBE.ports.r + 4.5), 0.8 * PX, 0, Math.PI * 2)
-        g.fill()
-      }
-    })
-    for (const [i, x] of CUBE.slots.xs.entries()) {
-      g.fillStyle = '#b7b8c4'
-      rrect(g, X(x - CUBE.slots.w / 2 - 2), Y(CUBE.slots.y + CUBE.slots.h / 2 + 2), (CUBE.slots.w + 4) * PX, (CUBE.slots.h + 4) * PX, 2 * PX)
-      g.fill()
-      g.fillStyle = '#3a3842'
-      rrect(g, X(x - CUBE.slots.w / 2), Y(CUBE.slots.y + CUBE.slots.h / 2), CUBE.slots.w * PX, CUBE.slots.h * PX, 1 * PX)
-      g.fill()
-      g.fillStyle = '#6d6c78'
-      g.font = `bold ${2.6 * PX}px Arial, sans-serif`
-      g.textAlign = 'center'
-      g.fillText(i ? 'SLOT B' : 'SLOT A', X(x), Y(CUBE.slots.y - 7))
+  }
+  // (plan x right, z front; clockwise seen from above: along the back to the right, down the right side…)
+  corner(CW / 2 - RND, -CD / 2 + RND, -Math.PI / 2)
+  corner(CW / 2 - RND, CD / 2 - RND, 0)
+  corner(-CW / 2 + RND, CD / 2 - RND, Math.PI / 2)
+  corner(-CW / 2 + RND, -CD / 2 + RND, Math.PI)
+  return pts
+}
+/** where along the strip a point of the outline is (nearest of the outline's own points: the walls are built from them) */
+function stripUV(outline: [number, number][]) {
+  const s: number[] = [0]
+  for (let i = 1; i < outline.length; i++) s.push(s[i - 1] + Math.hypot(outline[i][0] - outline[i - 1][0], outline[i][1] - outline[i - 1][1]))
+  const at = (x: number, y: number) => {
+    let best = 0
+    let bd = Infinity
+    for (let i = 0; i < outline.length; i++) {
+      const d = Math.hypot(outline[i][0] - x, -outline[i][1] - y)
+      if (d < bd) [bd, best] = [d, i]
     }
-  })
-  // the right side: its vent grille
-  const right = canvasTexture(CD * PX, BODY * PX, (g) => {
-    g.fillStyle = COLORS.indigo
-    g.fillRect(0, 0, CD * PX, BODY * PX)
-    const X = (z: number) => (CD / 2 - z) * PX
-    const Y = (y: number) => (CH - y) * PX
-    g.fillStyle = '#2d2668'
-    for (let z = 34; z > -62; z -= 6.2)
-      for (let y = 30; y < 92; y += 6.2) {
-        rrect(g, X(z), Y(y + 4.4), 4.4 * PX, 4.4 * PX, 1.2 * PX)
-        g.fill()
-      }
-  })
-  // the back: its sockets (power in, the AV out, the covered ports)
-  const back = canvasTexture(CW * PX, BODY * PX, (g) => {
-    g.fillStyle = COLORS.indigo
-    g.fillRect(0, 0, CW * PX, BODY * PX)
-    const X = (x: number) => (CW / 2 - x) * PX
-    const Y = (y: number) => (CH - y) * PX
-    g.fillStyle = '#2b2733'
-    g.beginPath()
-    g.arc(X(-48), Y(36), 5 * PX, 0, Math.PI * 2)
-    g.fill()
-    rrect(g, X(32), Y(44), 26 * PX, 10 * PX, 2 * PX)
-    g.fill()
-    g.fillStyle = '#4a419c'
-    for (const x of [-20, 6, 46]) {
-      rrect(g, X(x + 9), Y(70), 18 * PX, 12 * PX, 2 * PX)
-      g.fill()
-    }
-  })
-  return [bruno({ map: right }), plain, bruno({ map: top }), under, bruno({ map: front }), bruno({ map: back })]
+    return s[best] / PERIM
+  }
+  return {
+    generateTopUV: (_g: ExtrudeGeometry, v: number[], a: number, b: number, c: number) => [a, b, c].map((i) => new Vector2(v[i * 3], v[i * 3 + 1])),
+    generateSideWallUV: (_g: ExtrudeGeometry, v: number[], a: number, b: number, c: number, d: number) => {
+      const h = FLOOR - FEET
+      const uv = [a, b, c, d].map((i) => new Vector2(1 - at(v[i * 3], v[i * 3 + 1]), v[i * 3 + 2] / h))
+      // (the quad that closes the loop: carried on past the end, not back across the whole strip)
+      const lo = Math.min(...uv.map((p) => p.x))
+      for (const p of uv) if (p.x - lo > 0.5) p.x -= 1
+      return uv
+    },
+  }
 }
 
-function lidFaces() {
-  const top = capped(
-    canvasTexture(L.w * PX, L.d * PX, (g) => {
-      const W = L.w * PX
-      const H = L.d * PX
-      g.fillStyle = '#6154c2'
-      g.fillRect(0, 0, W, H)
-      const cx = W / 2
-      const cy = H / 2
+// ---- the painted faces
+const ink = { dark: '#2a2560', hole: '#1d1a24', key: '#8d8b98', seam: '#463d96', label: '#b4acef' }
+function wallTexture() {
+  const W = Math.ceil(PERIM * PX)
+  const H = Math.ceil((FLOOR - FEET) * PX)
+  const t = canvasTexture(W, H, (g) => {
+    const X = (s: number) => (PERIM - s) * PX // (the strip runs the other way round the canvas: see stripUV)
+    const Y = (y: number) => (FLOOR - y) * PX
+    g.fillStyle = COLORS.indigo
+    g.fillRect(0, 0, W, H)
+    // the seam round the bottom
+    g.fillStyle = ink.seam
+    g.fillRect(0, Y(CUBE.band) - 0.5 * PX, W, 1 * PX)
+    // the front: behind the panel's holes, the ports' insides (each keyed) and the card slots
+    for (const x of CUBE.ports.xs) {
+      const cx = X(sOn.front(x))
+      const cy = Y(CUBE.ports.y)
+      g.fillStyle = ink.hole
+      g.beginPath()
+      g.arc(cx, cy, (CUBE.ports.r + 0.6) * PX, 0, Math.PI * 2)
+      g.fill()
+      const k = CUBE.ports.key
+      g.fillStyle = ink.key
+      g.beginPath()
+      g.moveTo(cx - (k.w / 2) * PX, cy - (k.h / 2) * PX)
+      g.lineTo(cx + (k.w / 2) * PX, cy - (k.h / 2) * PX)
+      g.lineTo(cx + (k.w / 2 - 1.6) * PX, cy + (k.h / 2) * PX)
+      g.lineTo(cx - (k.w / 2 - 1.6) * PX, cy + (k.h / 2) * PX)
+      g.closePath()
+      g.fill()
+      g.fillStyle = ink.hole
+      g.fillRect(cx - 2.6 * PX, cy - 1.2 * PX, 5.2 * PX, 2.4 * PX)
+    }
+    for (const x of CUBE.slots.xs) {
+      g.fillStyle = ink.hole
+      rrect(g, X(sOn.front(x)) - ((CUBE.slots.w + 1) / 2) * PX, Y(CUBE.slots.y + CUBE.slots.h / 2 + 0.5), (CUBE.slots.w + 1) * PX, (CUBE.slots.h + 1) * PX, 1.5 * PX)
+      g.fill()
+    }
+    // each side: its vent grid (dark cells between bars), the curved lip under it
+    const v = CUBE.vents
+    const half = (v.n * v.cell) / 2
+    for (const side of ['left', 'right'] as const) {
+      for (let i = 0; i < v.n; i++)
+        for (let j = 0; j < v.n; j++) {
+          const z0 = -half + i * v.cell
+          const s0 = sOn[side](z0 + 0.7)
+          const s1 = sOn[side](z0 + v.cell - 0.7)
+          const xa = Math.min(X(s0), X(s1))
+          const xb = Math.max(X(s0), X(s1))
+          g.fillStyle = ink.dark
+          rrect(g, xa, Y(v.y1 - j * v.cell - 0.7), xb - xa, (v.cell - 1.4) * PX, 0.8 * PX)
+          g.fill()
+        }
+      const mid = X(sOn[side](0))
+      g.strokeStyle = ink.seam
+      g.lineWidth = 1.4 * PX
+      g.beginPath()
+      g.ellipse(mid, Y(v.y0 - 3), (half + 4) * PX, 4.5 * PX, 0, 0.15 * Math.PI, 0.85 * Math.PI)
+      g.stroke()
+    }
+    // the back: the frame round its recess, the inset panel, the sockets and their names, the vent slots
+    const bx = (x: number) => X(sOn.back(x))
+    const bp = CUBE.backPanel
+    g.fillStyle = '#4f45a4'
+    g.fillRect(Math.min(bx(bp.x0), bx(bp.x1)), Y(bp.y1), Math.abs(bx(bp.x1) - bx(bp.x0)), (bp.y1 - bp.y0) * PX)
+    g.strokeStyle = ink.seam
+    g.lineWidth = 0.8 * PX
+    g.strokeRect(Math.min(bx(-68), bx(68)), Y(100), Math.abs(bx(68) - bx(-68)), 92 * PX)
+    const socket = (o: { x: number; y: number; w: number; h: number }, fill: string) => {
+      g.fillStyle = fill
+      rrect(g, bx(o.x) - (o.w / 2) * PX, Y(o.y + o.h / 2), o.w * PX, o.h * PX, 1.6 * PX)
+      g.fill()
+    }
+    socket(CUBE.av, ink.hole)
+    socket(CUBE.digital, '#3a3448')
+    g.fillStyle = '#9b97aa'
+    g.fillRect(bx(CUBE.digital.x) - 8 * PX, Y(CUBE.digital.y + 1.5), 16 * PX, 3 * PX)
+    socket(CUBE.dc, ink.hole)
+    g.fillStyle = '#6a6578'
+    g.beginPath()
+    g.arc(bx(CUBE.dc.x) - 2.2 * PX, Y(CUBE.dc.y), 1.3 * PX, 0, Math.PI * 2)
+    g.arc(bx(CUBE.dc.x) + 2.2 * PX, Y(CUBE.dc.y), 1.3 * PX, 0, Math.PI * 2)
+    g.fill()
+    const bv = CUBE.backVents
+    for (let i = 0; i < bv.n; i++) {
+      const x = bv.x0 + ((bv.x1 - bv.x0) * (i + 0.5)) / bv.n
+      g.fillStyle = ink.hole
+      g.fillRect(bx(x) - 1.6 * PX, Y(bv.y1), 3.2 * PX, (bv.y1 - bv.y0) * PX)
+    }
+    g.fillStyle = ink.label
+    g.font = `bold ${2.6 * PX}px Arial, sans-serif`
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText('ANALOG AV OUT', bx(CUBE.av.x), Y(CUBE.av.y + CUBE.av.h / 2 + 3))
+    g.fillText('DIGITAL AV OUT', bx(CUBE.digital.x), Y(CUBE.digital.y + CUBE.digital.h / 2 + 3))
+    g.fillText('DC 12V IN', bx(CUBE.dc.x), Y(CUBE.dc.y + CUBE.dc.h / 2 + 3))
+  })
+  t.wrapS = RepeatWrapping
+  return t
+}
+/** the top, seen from above (x right, the back up): the frame's face, or the lid's */
+function topTexture(lid: boolean) {
+  const t = canvasTexture(CW * PX, CD * PX, (g) => {
+    const X = (x: number) => (x + CW / 2) * PX
+    const Y = (z: number) => (z + CD / 2) * PX
+    g.fillStyle = lid ? '#6154c2' : COLORS.indigo
+    g.fillRect(0, 0, CW * PX, CD * PX)
+    if (lid) {
+      // the round black window, a rim round it
       g.fillStyle = '#121016'
       g.beginPath()
-      g.arc(cx, cy, L.window * PX, 0, Math.PI * 2)
+      g.arc(X(0), Y(CUBE.window.z), CUBE.window.r * PX, 0, Math.PI * 2)
       g.fill()
       g.strokeStyle = '#2b2833'
       g.lineWidth = 1.2 * PX
       g.beginPath()
-      g.arc(cx, cy, (L.window - 1.5) * PX, 0, Math.PI * 2)
+      g.arc(X(0), Y(CUBE.window.z), (CUBE.window.r - 1.5) * PX, 0, Math.PI * 2)
       g.stroke()
-      // its name in the window, a little cube over it
+      // its name across it, a little cube by it
+      const cx = X(0)
+      const cy = Y(0)
       g.strokeStyle = '#b9b7c8'
       g.lineWidth = 0.5 * PX
       const s = 4.2 * PX
       const ex = cx - 21 * PX
-      const ey = cy - 0.6 * PX
       g.beginPath()
-      g.moveTo(ex, ey - s)
-      g.lineTo(ex + s * 0.87, ey - s / 2)
-      g.lineTo(ex + s * 0.87, ey + s / 2)
-      g.lineTo(ex, ey + s)
-      g.lineTo(ex - s * 0.87, ey + s / 2)
-      g.lineTo(ex - s * 0.87, ey - s / 2)
+      g.moveTo(ex, cy - s)
+      g.lineTo(ex + s * 0.87, cy - s / 2)
+      g.lineTo(ex + s * 0.87, cy + s / 2)
+      g.lineTo(ex, cy + s)
+      g.lineTo(ex - s * 0.87, cy + s / 2)
+      g.lineTo(ex - s * 0.87, cy - s / 2)
       g.closePath()
-      g.moveTo(ex, ey)
-      g.lineTo(ex, ey + s)
-      g.moveTo(ex, ey)
-      g.lineTo(ex - s * 0.87, ey - s / 2)
-      g.moveTo(ex, ey)
-      g.lineTo(ex + s * 0.87, ey - s / 2)
+      g.moveTo(ex, cy)
+      g.lineTo(ex, cy + s)
+      g.moveTo(ex, cy)
+      g.lineTo(ex - s * 0.87, cy - s / 2)
+      g.moveTo(ex, cy)
+      g.lineTo(ex + s * 0.87, cy - s / 2)
       g.stroke()
       g.fillStyle = '#d9d8e4'
       g.font = `bold ${6 * PX}px Arial, sans-serif`
@@ -204,69 +255,184 @@ function lidFaces() {
       g.font = `${2.4 * PX}px Arial, sans-serif`
       g.fillStyle = '#a9a7b8'
       g.fillText('N I N T E N D O', cx - 15 * PX, cy - 5.2 * PX)
-    }),
-    -L.w / 2,
-    L.w / 2,
-    -L.d / 2,
-    L.d / 2,
-  )
-  return [bruno({ map: top }), bruno({ color: '#5a4dba', shade: '#3a3070' })]
+      return
+    }
+    // the frame: the buttons' recessed rings, their names
+    for (const b of Object.values(CUBE.buttons)) {
+      g.fillStyle = '#3e3588'
+      g.beginPath()
+      g.arc(X(b.x), Y(b.z), b.ring * PX, 0, Math.PI * 2)
+      g.fill()
+    }
+    g.fillStyle = ink.label
+    g.font = `bold ${2.4 * PX}px Arial, sans-serif`
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    const { power, reset, open } = CUBE.buttons
+    g.fillText('POWER', X(power.x - 1), Y(power.z + power.ring + 3.4))
+    g.fillText('RESET', X(reset.x - 1), Y(reset.z - reset.ring - 3.4))
+    g.fillText('OPEN', X(open.x + 1), Y(open.z - open.ring - 3.4))
+    // the raised Nintendo pill, back right
+    const lg = CUBE.logo
+    g.strokeStyle = '#4b42a0'
+    g.lineWidth = 0.8 * PX
+    rrect(g, X(lg.x0 - CW / 2), Y(lg.y0 - CD / 2), (lg.x1 - lg.x0) * PX, (lg.y1 - lg.y0) * PX, ((lg.y1 - lg.y0) / 2) * PX)
+    g.stroke()
+    g.fillStyle = '#4b42a0'
+    g.font = `italic bold ${4.2 * PX}px Arial, sans-serif`
+    g.fillText('Nintendo', X((lg.x0 + lg.x1) / 2 - CW / 2), Y((lg.y0 + lg.y1) / 2 - CD / 2 + 0.3))
+    // the finger dip under the lid's front edge
+    const gp = CUBE.grip
+    g.fillStyle = '#463d96'
+    g.beginPath()
+    g.ellipse(X((gp.x0 + gp.x1) / 2 - CW / 2), Y(L.frontMid - CD / 2), ((gp.x1 - gp.x0) / 2) * PX, (gp.dip - L.frontMid + 0.5) * PX, 0, 0, Math.PI)
+    g.fill()
+  })
+  return capped(t, -CW / 2, CW / 2, -CD / 2, CD / 2)
+}
+function panelTexture() {
+  const P = CUBE.panel
+  const t = canvasTexture(Math.round(P.w * PX), Math.round((P.y1 - P.y0) * PX), (g) => {
+    const X = (x: number) => (x + P.w / 2) * PX
+    const Y = (y: number) => (P.y1 - y) * PX
+    g.fillStyle = COLORS.silver
+    g.fillRect(0, 0, g.canvas.width, g.canvas.height)
+    CUBE.ports.xs.forEach((x, i) => {
+      g.strokeStyle = '#aeb0bc'
+      g.lineWidth = 1.4 * PX
+      g.beginPath()
+      g.arc(X(x), Y(CUBE.ports.y), (CUBE.ports.r + 0.8) * PX, 0, Math.PI * 2)
+      g.stroke()
+      g.fillStyle = '#6e6d7a'
+      for (let k = 0; k <= i; k++) {
+        g.beginPath()
+        g.arc(X(x + (k - i / 2) * 2.6), Y(CUBE.ports.y + CUBE.ports.r + 4.2), 0.75 * PX, 0, Math.PI * 2)
+        g.fill()
+      }
+    })
+    g.fillStyle = '#8a8a96'
+    g.font = `bold ${2.4 * PX}px Arial, sans-serif`
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    CUBE.slots.xs.forEach((x, i) => g.fillText(i ? 'SLOT B' : 'SLOT A', X(x), Y(CUBE.slots.y - CUBE.slots.h / 2 - 4)))
+  })
+  return capped(t, -P.w / 2, P.w / 2, P.y0, P.y1)
 }
 
-const BODY_GEO = new RoundedBoxGeometry(CW, BODY, CD, 3, CUBE.r)
-const LID_GEO = new ExtrudeGeometry(roundRect(L.w, L.d, L.r), { depth: L.t - 2, bevelEnabled: true, bevelThickness: 1, bevelSize: 1, bevelSegments: 2, curveSegments: 12 })
-  .rotateX(-Math.PI / 2)
-  .translate(0, 1, L.d / 2)
-const HANDLE_GEO = (() => {
-  const y = CUBE.handle.y
-  const z0 = -CD / 2 + 3
-  const z1 = -CD / 2 - CUBE.handle.back
-  const pts = [
-    [-56, z0],
-    [-56, z1 + 9],
-    [-47, z1],
-    [47, z1],
-    [56, z1 + 9],
-    [56, z0],
-  ].map(([x, z]) => new Vector3(x, y, z))
-  return new TubeGeometry(new CatmullRomCurve3(pts, false, 'centripetal', 0.1), 64, CUBE.handle.r, 10)
-})()
-const BUTTON = new CylinderGeometry(1, 1, 1, 32)
-const LAMP = new SphereGeometry(1.7, 12, 8)
-const FOOT = new CylinderGeometry(9, 9, FEET, 20)
-const PLUG = new RoundedBoxGeometry(15, 12, 22, 2, 3)
+// ---- the parts
+function bodyGeometry() {
+  const out = bodyOutline()
+  return standUp(new ExtrudeGeometry(fromPlan(out), { depth: FLOOR - FEET, bevelEnabled: false, UVGenerator: stripUV(out) as never }), FEET)
+}
+function frameGeometry() {
+  const outer = fromPlan(bodyOutline())
+  outer.holes.push(fromPlan(lidOutline(L.gap), new Path() as Shape))
+  return standUp(new ExtrudeGeometry(outer, { depth: CH - FLOOR, bevelEnabled: false }), FLOOR)
+}
+function lidGeometry() {
+  const b = 0.8
+  return standUp(new ExtrudeGeometry(fromPlan(lidOutline(-b)), { depth: L.t - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 2 }), CH - L.t)
+}
+function panelGeometry() {
+  const P = CUBE.panel
+  const x0 = -P.w / 2
+  const x1 = P.w / 2
+  const r = P.r
+  const rb = 0.8
+  const s = new Shape()
+  s.moveTo(x0 + rb, P.y0)
+  s.lineTo(x1 - rb, P.y0)
+  s.absarc(x1 - rb, P.y0 + rb, rb, -Math.PI / 2, 0, false)
+  s.lineTo(x1, P.y1 - r)
+  s.absarc(x1 - r, P.y1 - r, r, 0, Math.PI / 2, false)
+  s.lineTo(x0 + r, P.y1)
+  s.absarc(x0 + r, P.y1 - r, r, Math.PI / 2, Math.PI, false)
+  s.lineTo(x0, P.y0 + rb)
+  s.absarc(x0 + rb, P.y0 + rb, rb, Math.PI, Math.PI * 1.5, false)
+  for (const x of CUBE.ports.xs) s.holes.push(new Path().absarc(x, CUBE.ports.y, CUBE.ports.r, 0, Math.PI * 2, true))
+  for (const x of CUBE.slots.xs) s.holes.push(roundRect(CUBE.slots.w, CUBE.slots.h, 1.5, x, CUBE.slots.y))
+  const b = 0.5
+  return new ExtrudeGeometry(s, { depth: P.proud - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 2, curveSegments: 20 }).translate(0, 0, CD / 2 + b)
+}
+function handleGeometry() {
+  const H = CUBE.handle
+  const x = H.w / 2 - H.t / 2
+  const z0 = -CD / 2 + 3 // (its ends sunk into the back)
+  const z1 = -CD / 2 - H.out
+  // its middle line round the U, then that offset either side by half its thickness
+  const mid: [number, number][] = [[-x, z0]]
+  const corner = (cx: number, cz: number, a0: number) => {
+    for (let i = 0; i <= 8; i++) {
+      const a = a0 + (Math.PI / 2) * (i / 8)
+      mid.push([cx + H.r * Math.cos(a), cz + H.r * Math.sin(a)])
+    }
+  }
+  corner(-x + H.r, z1 + H.r, Math.PI)
+  corner(x - H.r, z1 + H.r, -Math.PI / 2)
+  mid.push([x, z0])
+  const side = (k: number) =>
+    mid.map((p, i): [number, number] => {
+      const a = mid[Math.max(0, i - 1)]
+      const b = mid[Math.min(mid.length - 1, i + 1)]
+      const tx = b[0] - a[0]
+      const tz = b[1] - a[1]
+      const l = Math.hypot(tx, tz)
+      return [p[0] - (tz / l) * k, p[1] + (tx / l) * k]
+    })
+  const ring = [...side(H.t / 2 - 1), ...side(-(H.t / 2 - 1)).reverse()]
+  const b = 1
+  return standUp(new ExtrudeGeometry(fromPlan(ring), { depth: H.y1 - H.y0 - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 2 }), H.y0)
+}
+/** a round button's profile turned: a dome on top, or (with \`inner\`) a smaller button standing in it */
+const BUTTON = (r: number, h: number, dome: number, inner = 0) =>
+  new LatheGeometry(
+    (inner
+      ? [[0, h + 0.6], [inner - 0.3, h + 0.6], [inner, h], [r - 0.6, h], [r, h - 0.6], [r, 0], [0, 0]]
+      : [[0, h + dome], [r * 0.6, h + dome * 0.7], [r - 0.6, h], [r, h - 0.6], [r, 0], [0, 0]]
+    )
+      .reverse()
+      .map(([x, y]) => new Vector2(x, y)),
+    32,
+  )
+const LAMP = new CylinderGeometry(1.4, 1.4, 1.2, 14)
+const FOOT = new RoundedBoxGeometry(14, FEET, 9, 1, 0.6)
+const DRIVE = new CylinderGeometry(CUBE.well.drive, CUBE.well.drive, 2, 48)
+const SPINDLE = new CylinderGeometry(6, 6.5, 1.5, 24)
+const PLUG = new RoundedBoxGeometry(15, 13, 20, 2, 3)
 const BOOT = new CylinderGeometry(3.6, 4.6, 12, 14).rotateX(Math.PI / 2)
-const AVPLUG = new RoundedBoxGeometry(27, 11, 18, 2, 2.5)
+const AVPLUG = new RoundedBoxGeometry(CUBE.av.w - 1, CUBE.av.h - 1, 18, 2, 2.5)
 
 const M = {
+  frameSide: bruno({ color: COLORS.indigo, shade: '#3a3070' }),
+  floor: bruno({ color: '#2c2838', shade: '#1c1a24' }),
+  lidSide: bruno({ color: '#5a4dba', shade: '#3a3070' }),
+  panelSide: bruno({ color: '#b9bac4', shade: '#7e7f8c' }),
   grey: bruno({ color: '#dcdce4', shade: '#8e8ea0' }),
-  button: bruno({ color: '#4a40a0', shade: '#2e2766' }),
-  black: bruno({ color: '#25242b', shade: '#151419' }),
-  rubber: bruno({ color: '#1e1d22', shade: '#121115' }),
+  button: bruno({ color: '#4c42a6', shade: '#2e2766' }),
+  black: bruno({ color: '#232127', shade: '#141217' }),
+  drive: bruno({ color: '#1b1a20', shade: '#0f0e13' }),
+  spindle: bruno({ color: '#9a98a6', shade: '#55536a' }),
   lampOff: bruno({ color: '#3c4a3e', shade: '#1e2620' }),
   lampOn: bruno({ color: '#7dff9a', emissive: '#48ff78', emissiveIntensity: 1.2 }),
-  spindle: bruno({ color: '#4a4752', shade: '#2a2830' }),
   plug1: bruno({ color: COLORS.indigo, shade: '#3a3070' }),
   plug2: bruno({ color: COLORS.black, shade: '#18171c' }),
 }
 
 /** a button on top: clicked, it does its thing, and dips */
-function Button({ k, at, r, h, m, act }: { k: string; at: { x: number; z: number }; r: number; h: number; m: ReturnType<typeof bruno>; act: () => void }) {
+function Button({ k, at, geo, m, act }: { k: string; at: { x: number; z: number }; geo: BufferGeometry; m: ReturnType<typeof bruno>; act: () => void }) {
   const ref = useRef<Mesh>(null)
   useFrame(() => {
     const o = ref.current
     if (!o) return
     const p = getCube().pressed[k] ?? -9
-    const dip = performance.now() / 1000 - p < 0.16 ? 1.2 : 0
-    o.position.y = CH + h / 2 - dip
+    o.position.y = CH - 1 - (performance.now() / 1000 - p < 0.16 ? 1.2 : 0)
   })
   return (
     <mesh
       ref={ref}
-      geometry={BUTTON}
+      geometry={geo}
       material={m}
-      position={[at.x, CH + h / 2, at.z]}
-      scale={[r, h, r]}
+      position={[at.x, CH - 1, at.z]}
       onClick={(e) => {
         e.stopPropagation()
         act()
@@ -282,8 +448,29 @@ function Button({ k, at, r, h, m, act }: { k: string; at: { x: number; z: number
 
 export function GameCube({ onBody }: { onBody?: (e: ThreeEvent<MouseEvent>) => void }) {
   const c = useCube()
-  const body = useMemo(faces, [])
-  const lidMats = useMemo(lidFaces, [])
+  const geo = useMemo(
+    () => ({
+      body: bodyGeometry(),
+      frame: frameGeometry(),
+      lid: lidGeometry(),
+      panel: panelGeometry(),
+      handle: handleGeometry(),
+      power: BUTTON(CUBE.buttons.power.r, 2.2, 0.8),
+      reset: BUTTON(CUBE.buttons.reset.r, 1.8, -0.4),
+      open: BUTTON(CUBE.buttons.open.r, 1.8, 0, CUBE.buttons.open.inner),
+    }),
+    [],
+  )
+  const mats = useMemo(
+    () => ({
+      // (an extrusion's materials: its caps, then its walls)
+      body: [M.floor, bruno({ map: wallTexture() })],
+      frame: [bruno({ map: topTexture(false) }), M.frameSide],
+      lid: [bruno({ map: topTexture(true) }), M.lidSide],
+      panel: [bruno({ map: panelTexture() }), M.panelSide],
+    }),
+    [],
+  )
   // the lid on its spring: up with a bounce, shut with a snap
   const lid = useRef<Group>(null)
   const spring = useRef({ a: 0, v: 0 })
@@ -293,11 +480,9 @@ export function GameCube({ onBody }: { onBody?: (e: ThreeEvent<MouseEvent>) => v
     const s = spring.current
     const open = getCube().lid
     const target = open ? -L.open : 0
-    const k = 320
-    const damp = open ? 8 : 34
     const h = Math.min(dt, 1 / 30)
     for (let i = 0; i < 4; i++) {
-      s.v += (-k * (s.a - target) - damp * s.v) * (h / 4)
+      s.v += (-320 * (s.a - target) - (open ? 8 : 34) * s.v) * (h / 4)
       s.a += s.v * (h / 4)
     }
     if (!open && s.a > 0) {
@@ -306,60 +491,60 @@ export function GameCube({ onBody }: { onBody?: (e: ThreeEvent<MouseEvent>) => v
     }
     g.rotation.x = s.a
   })
+  const body = (e: ThreeEvent<MouseEvent>) => {
+    if (!onBody) return
+    e.stopPropagation()
+    onBody(e)
+  }
+  const hingeZ = L.back - CD / 2
+  const seat = FLOOR + 2 + 1 // (on the spindle, on the drive)
   const { power, reset, open } = CUBE.buttons
   return (
     <group>
-      <mesh
-        geometry={BODY_GEO}
-        material={body}
-        position={[0, FEET + BODY / 2, 0]}
-        castShadow
-        receiveShadow
-        onClick={(e) => {
-          if (!onBody) return
-          e.stopPropagation()
-          onBody(e)
-        }}
-      />
-      {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => <mesh key={`${sx}${sz}`} geometry={FOOT} material={M.rubber} position={[sx * 52, FEET / 2, sz * 60]} />))}
-      <mesh geometry={HANDLE_GEO} material={M.black} castShadow />
-      {/* the lid, hinged at its back edge */}
-      <group ref={lid} position={[0, CH + L.gap, L.hingeZ]} userData={{ live: true }}>
+      <mesh geometry={geo.body} material={mats.body} castShadow receiveShadow onClick={body} />
+      <mesh geometry={geo.frame} material={mats.frame} castShadow receiveShadow onClick={body} />
+      <mesh geometry={geo.panel} material={mats.panel} castShadow receiveShadow onClick={body} />
+      <mesh geometry={geo.handle} material={M.black} castShadow onClick={body} />
+      {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => <mesh key={`${sx}${sz}`} geometry={FOOT} material={M.black} position={[sx * 60, FEET / 2, sz * 68]} />))}
+      {/* the well: the drive, its spindle */}
+      <mesh geometry={DRIVE} material={M.drive} position={[0, FLOOR + 1, CUBE.window.z]} />
+      <mesh geometry={SPINDLE} material={M.spindle} position={[0, FLOOR + 2.75, CUBE.window.z]} />
+      <group ref={anchor('seat-console')} position={[0, seat, CUBE.window.z]} userData={{ live: true }}>
+        {c.disc === 'console' && <Disc onClick={() => c.lid && moveDisc()} />}
+      </group>
+      {/* the lid, flush in its hole, hinged at its back edge */}
+      <group ref={lid} position={[0, CH, hingeZ]} userData={{ live: true }}>
         <mesh
-          geometry={LID_GEO}
-          material={lidMats}
+          geometry={geo.lid}
+          material={mats.lid}
+          position={[0, -CH, -hingeZ]}
           castShadow
           onClick={(e) => {
-            if (!getCube().lid) return
+            if (!getCube().lid) return body(e)
             e.stopPropagation()
             shutLid()
           }}
         />
       </group>
-      {/* the disc on its spindle under the lid */}
-      <mesh geometry={BUTTON} material={M.spindle} position={[0, CH + 0.5, LID_Z]} scale={[7, 1, 7]} />
-      <group ref={anchor('seat-console')} position={[0, CH + 0.2, LID_Z]} userData={{ live: true }}>
-        {c.disc === 'console' && <Disc onClick={() => c.lid && moveDisc()} />}
-      </group>
       {/* the buttons, and the power lamp (live: they move, it changes) */}
       <group userData={{ live: true }}>
-        <Button k="power" at={power} r={power.r} h={3} m={M.grey} act={pressPower} />
-        <Button k="reset" at={reset} r={reset.r} h={2.4} m={M.button} act={pressReset} />
-        <Button k="open" at={open} r={open.r} h={2.6} m={M.button} act={pressOpen} />
-        <mesh geometry={LAMP} material={c.power ? M.lampOn : M.lampOff} position={[CUBE.lamp.x, CH + 0.4, CUBE.lamp.z]} />
+        <Button k="power" at={power} geo={geo.power} m={M.grey} act={pressPower} />
+        <Button k="reset" at={reset} geo={geo.reset} m={M.button} act={pressReset} />
+        <Button k="open" at={open} geo={geo.open} m={M.button} act={pressOpen} />
+        <mesh geometry={LAMP} material={c.power ? M.lampOn : M.lampOff} position={[CUBE.lamp.x, CH + 0.2, CUBE.lamp.z]} />
       </group>
-      {/* the controllers' plugs in ports 1 and 2, the AV plug in the back */}
+      {/* the controllers' plugs in ports 1 and 2; the AV plug in its socket at the back */}
       {[0, 1].map((i) => (
-        <group key={i} position={[CUBE.ports.xs[i], CUBE.ports.y, CD / 2]}>
-          <mesh geometry={PLUG} material={i ? M.plug2 : M.plug1} position={[0, 0, 7]} castShadow />
-          <mesh geometry={BOOT} material={i ? M.plug2 : M.plug1} position={[0, 0, 22]} />
-          <group ref={anchor(`port${i + 1}`)} position={[0, 0, 27]} />
+        <group key={i} position={[CUBE.ports.xs[i], CUBE.ports.y, CD / 2 + CUBE.panel.proud]}>
+          <mesh geometry={PLUG} material={i ? M.plug2 : M.plug1} position={[0, 0, 8]} castShadow />
+          <mesh geometry={BOOT} material={i ? M.plug2 : M.plug1} position={[0, 0, 23]} />
+          <group ref={anchor(`port${i + 1}`)} position={[0, 0, 28]} />
         </group>
       ))}
-      <group position={[20, 39, -CD / 2]}>
+      <group position={[CUBE.av.x, CUBE.av.y, -CD / 2]}>
         <mesh geometry={AVPLUG} material={M.black} position={[0, 0, -7]} castShadow />
-        <mesh geometry={BOOT} material={M.black} position={[0, 0, -20]} />
-        <group ref={anchor('avout')} position={[0, 0, -25]} rotation={[0, Math.PI, 0]} />
+        <mesh geometry={BOOT} material={M.black} position={[0, 0, -21]} />
+        <group ref={anchor('avout')} position={[0, 0, -26]} rotation={[0, Math.PI, 0]} />
       </group>
     </group>
   )
