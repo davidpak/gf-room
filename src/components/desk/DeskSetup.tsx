@@ -6,7 +6,7 @@ import { power } from '../../lib/power'
 import { Desk } from './Desk'
 import { DESK, STACK } from './spec'
 import { Lamp } from '../room/Lamp'
-import { SeatedDoll, SEATED } from '../doll/SeatedDoll'
+import { LiveDoll } from '../doll/LiveDoll'
 import { LiveCharger, type ChargerSetup, type ChargerState } from '../charger/ChargerPhysics'
 import { CHARGER, LAMP_BACK, cablePoints, lampOutlets } from '../charger/spec'
 import { LAMP } from '../lamp/spec'
@@ -19,11 +19,11 @@ import { LiveTissues } from '../tissues/Tissues'
 import { TISSUES } from '../tissues/spec'
 import { LAPTOP_BOTTOM, LiveLaptop, laptopSockets } from '../laptop/Laptop'
 
-// Rina's lamp on the back-right corner, and David (crocheted) sitting against its base
+// Rina's lamp on the back-right corner
 const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
 const LAMP_YAW = -0.6 // turned to face into the desk
-const DOLL_YAW = -1.3 // on the desk side of the lamp, facing the room
-const DOLL_R = 110 - SEATED.backZ - 4 // his back against the rim of the lamp's base
+/** David, crocheted: on the far side from the lamp, the back-left corner, turned a little in toward the desk */
+const DOLL_HOME = new Matrix4().makeRotationY(0.45).setPosition(-DESK.top.w / 2 + 130, 0, -DESK.top.d / 2 + 120)
 
 /**
  * The wall outlet behind the desk, at outlet height, on the right where the lamp and the desk's motor
@@ -51,12 +51,12 @@ const DESK_CORD = 950
 const DESK_PLAN: [number, number][] = [[340, -305]]
 /**
  * The charger's cable on the desk: out of its top, over its face toward the lamp's left (away from
- * the back corner), across the base and off it, then a loose loop round the far side of David out
+ * the back corner), across the base and off it, then a loose loop round toward the middle and out
  * toward the middle of the desk. (x, z) steps in the lamp's frame, left being -x.
  */
 const CHARGER_LOOP: [number, number][] = [[-14, 10], [-85, 10], [-165, 100], [-185, 220], [-145, 340], [-65, 400], [15, 420]]
 /**
- * Plugged into her laptop: the head as above (off the lamp's base), then behind David and the laptop
+ * Plugged into her laptop: the head as above (off the lamp's base), then behind the laptop
  * close behind the laptop, round its back left corner and into its back port from the left. (x, z)
  * in the desktop's frame; the middle ones bow toward the wall as far as the cable's length needs.
  */
@@ -65,7 +65,7 @@ const BOW = [0.2, 0.7, 1, 0.5, 0] // (how much each bows)
 const LAMP_EDGE = Math.sqrt(LAMP.base.r ** 2 - (LAMP.base.ring + 1.5) ** 2) // port to the base's edge, going left
 
 /**
- * Rina's desk with everything on it, live: the lamp and David, her charger (in the lamp, its far end in
+ * Rina's desk with everything on it, live: the lamp, David crocheted (his own thing: carry him about), her charger (in the lamp, its far end in
  * her laptop), the mints, the tissues, the laptop, the lamp's and the desk's cords to the wall outlet.
  *   at     where the desk stands (x, z: its middle; it faces +z)
  *   wall   from the desk's back edge to the wall behind it, where the outlet is (no wall: it floats 80 back)
@@ -159,6 +159,13 @@ export function DeskSetup({ at = [0, 0], wall = 80, keys = true }: { at?: [numbe
     if (!t) return null
     t.updateWorldMatrix(true, false)
     return t.matrixWorld.clone().multiply(LAPTOP_HOME)
+  }
+
+  const dollAt = () => {
+    const t = top.current
+    if (!t) return null
+    t.updateWorldMatrix(true, false)
+    return t.matrixWorld.clone().multiply(DOLL_HOME)
   }
 
   const tissuesAt = () => {
@@ -263,14 +270,12 @@ export function DeskSetup({ at = [0, 0], wall = 80, keys = true }: { at?: [numbe
           <group ref={lamp} position={LAMP_AT} rotation={[0, LAMP_YAW, 0]}>
             <Lamp />
           </group>
-          <group position={[LAMP_AT[0] + Math.sin(DOLL_YAW) * DOLL_R, 0, LAMP_AT[2] + Math.cos(DOLL_YAW) * DOLL_R]} rotation={[0, DOLL_YAW, 0]}>
-            <SeatedDoll />
-          </group>
         </Desk>
       </group>
       <LiveCharger state={charger} set={(p) => setCharger((s) => ({ ...s, ...p }))} setup={setup} />
       {/* Rina's claw clips up the pole, the Wumpus on the amber one */}
       <LampTrinkets lamp={lamp} />
+      <LiveDoll homeAt={dollAt} spawn={spawn(DOLL_HOME.elements[12], 900, DOLL_HOME.elements[14])} />
       <LiveMints homeAt={mintsAt} spawn={spawn(300, 800, 150)} />
       <LiveTissues homeAt={tissuesAt} spawn={spawn(505, 900, 70)} />
       <LiveLaptop homeAt={laptopAt} spawn={spawn(60, 900, 50)} bodyOut={laptopBody} />

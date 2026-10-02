@@ -29,7 +29,7 @@ import { ROOM } from './spec'
  *   closet  south-east, mirrored bypass doors facing the bed
  *   door    south wall near the west corner
  *
- *   on it   everything from the desk's page, live (../desk/DeskSetup): the lamp, David crocheted against it,
+ *   on it   everything from the desk's page, live (../desk/DeskSetup): the lamp, David crocheted (to carry about),
  *           her laptop and charger, the mints, the tissues, the cords to the outlet on the wall behind
  *   camera  first person (./FirstPerson): standing at eye height, walking about inside the walls (the
  *           cutaway in ./Shell still works for the check sheet's views from outside)
