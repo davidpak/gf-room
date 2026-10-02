@@ -181,7 +181,7 @@ export function Turntable() {
       <Driver />
       <Eastwood on={on}>
         {d.on && art && S && (
-          <Flip key={d.on.p.uri} face={d.on.face} t={discThick(S)}>
+          <Flip key={`${d.on.p.uri}/${d.on.disc}`} face={d.on.face} t={discThick(S)} r={S.r}>
             <Disc p={d.on.p} art={art} disc={d.on.disc} />
           </Flip>
         )}
@@ -193,23 +193,41 @@ export function Turntable() {
 /** where the stylus is now, in the player's frame (for a look at it) */
 export const stylusNow = () => stylusAt(live.a)
 
-/** the disc turned over (face 1 up), with a turn of the hand: lifted off the spindle, over, back down */
-function Flip({ face, t, children }: { face: 0 | 1; t: number; children: React.ReactNode }) {
+/**
+ * The disc turned over (face 1 up) the way a hand does it: lifted straight up off the spindle, eased left clear of
+ * the arm, up higher than it's wide (so, turned on its edge, it's clear of the deck), turned over, and set back down
+ * the same way. A record just put on comes down onto the spindle from above.
+ */
+const smooth = (x: number) => {
+  const c = Math.max(0, Math.min(1, x))
+  return c * c * (3 - 2 * c)
+}
+function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; children: React.ReactNode }) {
   const g = useRef<Group>(null)
-  const at = useRef(face * Math.PI)
-  const arrive = useRef(1) // (a record just put on comes down onto the spindle)
-  useFrame((_, dt) => {
+  const shown = useRef<0 | 1>(face) // (the face up when it last settled)
+  const s = useRef(0) // (a turn's progress: 0–1 up, 1–2 over, 2–3 down)
+  const arrive = useRef(1)
+  useFrame((_, dtRaw) => {
     const o = g.current
     if (!o) return
-    const want = face * Math.PI
-    const d = want - at.current
-    at.current += Math.sign(d) * Math.min(Math.abs(d), Math.min(dt, 0.05) * 3.4)
-    const r = at.current
-    o.rotation.z = r
-    // (its thickness made up turned over; up off the spindle while it turns)
-    arrive.current = Math.max(0, arrive.current - Math.min(dt, 0.05) * 1.6)
-    const drop = arrive.current * arrive.current * 90
-    o.position.y = (t * (1 - Math.cos(r))) / 2 + EW.platter.spindleH * 1.6 * Math.sin(r) + drop
+    const dt = Math.min(dtRaw, 0.05)
+    if (face !== shown.current) {
+      s.current += dt / 0.6
+      if (s.current >= 3) {
+        shown.current = face
+        s.current = 0
+      }
+    }
+    const k = s.current
+    const lift = smooth(k) * (1 - smooth(k - 2))
+    const over = smooth(k - 1)
+    const H = r + 35 // (on its edge, its lowest point 35 over the platter)
+    const y = H * lift
+    o.rotation.z = (shown.current + (face - shown.current) * over) * Math.PI
+    // (off the spindle before it moves sideways; its thickness made up, turned over)
+    o.position.x = -28 * smooth((y - EW.platter.spindleH - 4) / 40)
+    arrive.current = Math.max(0, arrive.current - dt * 1.3)
+    o.position.y = (t * (1 - Math.cos(o.rotation.z))) / 2 + y + arrive.current * arrive.current * 200
   })
   return <group ref={g}>{children}</group>
 }

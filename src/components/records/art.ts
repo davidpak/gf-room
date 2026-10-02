@@ -63,13 +63,13 @@ export function inksOf(im: HTMLImageElement | HTMLCanvasElement | null): Inks {
   return { label: hex(pick.r, pick.g, pick.b), ink: lum > 140 ? '#1d1a24' : '#fbf3e6', spine: hex(ar / n, ag / n, ab / n), spineInk: avgLum > 140 ? '#1d1a24' : '#fbf3e6', rim: '#2a2a30', palette }
 }
 
-/** how it's pressed: classic black, or (a fancy pressing) the cover's colour, marbled, splattered; the same album always the same */
-export type Pressed = 'black' | 'colour' | 'marble' | 'splatter'
+/** how it's pressed: classic black, or (a fancy pressing) the cover's colour, or two of them marbled; the same album always the same */
+export type Pressed = 'black' | 'colour' | 'marble'
 export function pressedAs(uri: string): Pressed {
   let h = 0
   for (const ch of uri) h = (h * 33 + ch.charCodeAt(0)) >>> 0
   const f = (h % 1000) / 1000
-  return f < 0.3 ? 'black' : f < 0.55 ? 'colour' : f < 0.8 ? 'marble' : 'splatter'
+  return f < 0.45 ? 'black' : f < 0.8 ? 'colour' : 'marble'
 }
 
 /** the vinyl itself before the grooves are cut in it: its colour at each point (drawn small, scaled up) */
@@ -84,7 +84,7 @@ function vinylBase(kind: Pressed, pal: RGB[], seed: number, size: number) {
   } else if (kind === 'colour') {
     g.fillStyle = css(pal[0], 0.85)
     g.fillRect(0, 0, size, size)
-  } else if (kind === 'marble') {
+  } else {
     // two colours swirled together, a pale vein between
     const img = g.createImageData(size, size)
     const a = pal[0]
@@ -101,17 +101,6 @@ function vinylBase(kind: Pressed, pal: RGB[], seed: number, size: number) {
         img.data[o + 3] = 255
       }
     g.putImageData(img, 0, 0)
-  } else {
-    // splatter: the second colour, flecked and splashed with the first and the light one
-    g.fillStyle = css(pal[1], 0.82)
-    g.fillRect(0, 0, size, size)
-    for (let i = 0; i < 220; i++) {
-      const r = (hash(seed + i * 3) ** 3) * size * 0.045 + size * 0.002
-      g.fillStyle = css(i % 3 ? pal[0] : pal[2], 0.95)
-      g.beginPath()
-      g.ellipse(hash(seed + i) * size, hash(seed + i * 7 + 1) * size, r, r * (0.6 + hash(i + seed * 5) * 0.6), hash(i * 11 + seed) * 3, 0, Math.PI * 2)
-      g.fill()
-    }
   }
   return c
 }

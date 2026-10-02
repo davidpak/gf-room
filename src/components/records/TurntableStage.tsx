@@ -14,21 +14,24 @@ import { Light } from './Light'
 import { lift, needle } from './play'
 import { cancelChange } from './changer'
 import { Crate } from './Crate'
+import { Showcase, showRecord, usePicked } from './Showcase'
 import { Turntable } from './Turntable'
 import { type Pressing } from './vinyl'
 
 /**
  * The record player on its own (gallery first): the Victrola Eastwood, full size, in the Quad's evening light, her
- * records leaning in a row beside it (her saved albums on Spotify when she's logged in). Click a record to put it on.
+ * records in a crate beside it (her saved albums on Spotify when she's logged in). Click a record to take it out and
+ * look at it (./Showcase); click its record to put it on.
  * &check: the sheet (the manual's drawing and Victrola's photos beside it, and the checks).
  */
-/** a record from the crate onto the platter (the one there, if any, back in its jacket) */
-function putOn(p: Pressing) {
+/** a record onto the platter, its first side up (the one there, if any, back in its jacket) */
+function putOn(p: Pressing, disc = 0) {
   cancelChange()
   lift()
   needle.runout = false
   needle.ended = false
-  setDeck({ on: { p, disc: 0, face: 0 }, arm: { a: getDeck().arm.a, down: false }, lid: true })
+  showRecord(null)
+  setDeck({ on: { p, disc, face: 0 }, arm: { a: getDeck().arm.a, down: false }, lid: true })
 }
 
 function Scene({ records }: { records: Pressing[] }) {
@@ -40,16 +43,46 @@ function Scene({ records }: { records: Pressing[] }) {
       <Light extent={900} />
       <Turntable />
       <group position={[470, 0, -40]} rotation={[0, -0.35, 0]}>
-        <Crate records={records} onPick={putOn} playing={d.on?.p.uri} />
+        <Crate records={records} onPick={showRecord} playing={d.on?.p.uri} />
       </group>
+      <Showcase onPut={putOn} />
     </>
   )
 }
 
+/** what's written about the record taken out to look at: the album, how it's pressed, what to do */
+function About() {
+  const p = usePicked()
+  if (!p) return null
+  const discs = p.sides.length / 2
+  const songs = p.sides.reduce((n, x) => n + x.bands.length, 0)
+  const min = Math.round(p.sides.reduce((n, x) => n + x.ms, 0) / 60000)
+  const letters = p.sides.filter((x) => x.bands.length).map((x) => x.letter)
+  const pressed = p.size === 'single' ? '7" single · 45 RPM' : `${discs === 1 ? 'one 12" record' : `${discs} × 12" records`} · sides ${letters[0]}–${letters[letters.length - 1]} · 33⅓ RPM`
+  const t: React.CSSProperties = { font: "700 18px 'Gaegu', 'Nunito', cursive", color: '#fff4e6', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }
+  return (
+    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, zIndex: 21, pointerEvents: 'none', textAlign: 'center' }}>
+      <div style={{ ...t, fontSize: 28 }}>{p.title}</div>
+      <div style={t}>
+        {p.artist}
+        {p.year ? ` · ${p.year.slice(0, 4)}` : ''}
+      </div>
+      <div style={{ ...t, fontWeight: 400, opacity: 0.85 }}>
+        {pressed} · {songs} songs · {min} min
+      </div>
+      <div style={{ ...t, fontWeight: 400, fontSize: 16, opacity: 0.75, marginTop: 6 }}>
+        click {discs > 1 ? 'a record' : 'the record'} to put it on · click anywhere else (or Esc) to put it back
+      </div>
+    </div>
+  )
+}
+
 function Status() {
+  const looking = usePicked()
   const isIn = useSyncExternalStore(onAuth, loggedIn)
   const p = usePlayer()
   const d = useDeck()
+  if (looking) return null
   const box: React.CSSProperties = { position: 'fixed', left: '50%', bottom: 84, transform: 'translateX(-50%)', font: "700 18px 'Gaegu', 'Nunito', cursive", color: '#fff4e6', zIndex: 20, textAlign: 'center', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }
   if (!isIn)
     return (
@@ -75,6 +108,7 @@ export function TurntableStage() {
         <ToyControls target={[40, 60, 0]} minDistance={150} maxDistance={4000} maxPolarAngle={Math.PI / 2 - 0.05} />
       </Canvas>
       <Status />
+      <About />
     </>
   )
 }
