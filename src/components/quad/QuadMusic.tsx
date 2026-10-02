@@ -124,7 +124,7 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
         _n.set(-0.08, 0.32, 1).normalize().applyQuaternion(_q)
         frameAround(pos, look, aspect, _c, 4900 * K, 3200 * K, _n)
       },
-      hint: 'click the record player, the crate to go through her records, or the Dig box to look for more',
+      quiet: true,
     }),
     [],
   )
@@ -144,8 +144,7 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
         _n.set(0, 1.1, 0.9).normalize().applyQuaternion(_q)
         frameAround(pos, look, aspect, _c, 470 * K, 520 * K, _n)
       },
-      hint: 'POWER, then drag the arm over a record · CUE lifts it · drag the big knob for volume',
-      back: 'back to the stand',
+      quiet: true,
       keys: (e) => {
         if (e.key !== 'Escape') return false
         lookAt({ spot: standSpot, i: null })

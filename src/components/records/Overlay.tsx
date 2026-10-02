@@ -3,13 +3,12 @@ import { loggedIn, login, missingScopes, onAuth } from '../../lib/spotify/auth'
 import { usePlayer } from '../../lib/spotify/player'
 import { openCrate, recordUp, useBrowse } from './browse'
 import { useDeck } from './deck'
-import { LABEL } from './library'
-import { digFor, digMore, getShelf, showSaved, useShelf } from './shelf'
+import { digFor, getShelf, showSaved, useShelf } from './shelf'
 
 /**
  * What the page writes about the records (the same on the record player's own page and on the Quad):
- *   the record up or out: its album, artist, year, how it's pressed, what to do (and, out: more by this artist,
- *   into the crate in place of hers); while the crate holds what she dug for: back to her own records
+ *   the record up or out: its album, its artist and year, nothing more (while the crate holds what she dug for:
+ *   the way back to her own records)
  *   otherwise: log in (or again, for the crates' newer permissions), or what's playing
  *   the Dig card: what to look for (what's found goes in the crate)
  */
@@ -25,63 +24,33 @@ export const askDig = (on = true) => {
 }
 const useAsking = () => useSyncExternalStore((f) => (askSubs.add(f), () => void askSubs.delete(f)), () => asking)
 
-function About({ bottom, hints }: { bottom: number; hints: boolean }) {
+function About({ bottom }: { bottom: number }) {
   const b = useBrowse()
-  const shelf = useShelf()
+  useShelf() // (the record up changes as the crate's filled)
   const p = recordUp()
   useEffect(() => {
     // (the page's own title and hint step aside meanwhile)
     document.body.classList.toggle('browsing', b.mode !== 'none')
   }, [b.mode])
   if (!p || !b.crate) return null
-  const crate = b.crate ? { label: b.crate === 'dig' ? shelf.dug || LABEL.dig : LABEL[b.crate] } : null
-  const discs = p.sides.length / 2
-  const songs = p.sides.reduce((k, x) => k + x.bands.length, 0)
-  const min = Math.round(p.sides.reduce((k, x) => k + x.ms, 0) / 60000)
-  const letters = p.sides.filter((x) => x.bands.length).map((x) => x.letter)
-  const pressed = p.size === 'single' ? '7" single · 45 RPM' : `${discs === 1 ? 'one 12" record' : `${discs} × 12" records`} · sides ${letters[0]}–${letters[letters.length - 1]} · 33⅓ RPM`
   return (
     <div style={{ position: 'fixed', left: 0, right: 0, bottom, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, zIndex: 21, pointerEvents: 'none', textAlign: 'center' }}>
       <div style={{ ...T, fontSize: 28 }}>{p.title}</div>
       <div style={T}>
         {p.artist}
         {p.year ? ` · ${p.year.slice(0, 4)}` : ''}
-        {b.mode === 'crate' && crate ? `  ·  ${crate.label}, ${b.i + 1} of ${shelf.crates[b.crate].length}` : ''}
       </div>
-      {b.mode === 'out' && (
-        <div style={{ ...T, fontWeight: 400, opacity: 0.85 }}>
-          {p.sides.length
-            ? `${pressed} · ${songs} songs · ${min} min`
-            : shelf.pressing === p.uri
-              ? 'pressing its record…'
-              : shelf.pressFailed
-                ? `couldn't press it: ${/resting/.test(shelf.pressFailed) ? 'Spotify needs a rest, try again in a few minutes' : 'Spotify didn\'t answer'}`
-                : ''}
-        </div>
+      {b.crate === 'dig' && (
+        <button
+          style={{ ...PILL, fontSize: 16, marginTop: 6 }}
+          onClick={() => {
+            showSaved()
+            openCrate('saved', 0)
+          }}
+        >
+          ♡ back to her records
+        </button>
       )}
-      {hints && (
-      <div style={{ ...T, fontWeight: 400, fontSize: 16, opacity: 0.75, marginTop: 4 }}>
-        {b.mode === 'crate' ? 'A / D or ← → to flip through · Enter (or click it) to take it out · Esc to step back' : `click ${discs > 1 ? 'a record' : 'the record'} to play it · right-drag to turn it round · A / D for the next one · Esc to put it back`}
-      </div>
-      )}
-      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-        {b.mode === 'out' && p.artistId && (
-          <button style={{ ...PILL, fontSize: 16 }} onClick={() => digMore(p.artistId!, p.artist.split(',')[0]).then(() => openCrate('dig', 0))}>
-            ⛏ more by {p.artist.split(',')[0]}
-          </button>
-        )}
-        {b.crate === 'dig' && (
-          <button
-            style={{ ...PILL, fontSize: 16 }}
-            onClick={() => {
-              showSaved()
-              openCrate('saved', 0)
-            }}
-          >
-            ♡ back to her records
-          </button>
-        )}
-      </div>
     </div>
   )
 }
@@ -175,11 +144,10 @@ function DigCard() {
 }
 
 /** `status`: whether to show the log-in / playing line (on the Quad: only while the player's looked at) */
-/** `hints`: what to do, under the record (the Quad has its own hint bar: off there) */
-export function RecordsOverlay({ bottom = 110, status = true, hints = true }: { bottom?: number; status?: boolean; hints?: boolean }) {
+export function RecordsOverlay({ bottom = 110, status = true }: { bottom?: number; status?: boolean }) {
   return (
     <>
-      <About bottom={bottom} hints={hints} />
+      <About bottom={bottom} />
       {status && <Status bottom={bottom - 26} />}
       <DigCard />
     </>

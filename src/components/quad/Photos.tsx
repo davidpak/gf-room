@@ -76,7 +76,7 @@ export function LookControls() {
     return () => window.removeEventListener('keydown', key, true)
   }, [l])
   return (
-    <div className={'quad-near' + (l ? ' on' : '')}>
+    <div className={'quad-near' + (l && !l.spot.quiet ? ' on' : '')}>
       {l && l.i === null && l.spot.hint && <>{l.spot.hint} · </>}
       {l && l.i === null && !l.spot.hint && <>click a photo to look closer · </>}
       {l && l.i !== null && l.spot.items.length > 1 && (

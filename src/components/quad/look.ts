@@ -22,6 +22,8 @@ export type Spot = {
   keys?: (e: KeyboardEvent) => boolean
   /** its own hint, instead of the photos' */
   hint?: string
+  /** no hint bar at all while it's looked at (the record stand: nothing written over it but what's on) */
+  quiet?: boolean
   /** what Esc does from it (said in the hint bar: 'back to the car' when not said) */
   back?: string
 }

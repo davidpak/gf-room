@@ -50,7 +50,7 @@ const toward = (o: Object3D, up: number) => _n.set(0, up, 1).normalize().transfo
 export const crateSpot: Spot = {
   key: 'crate',
   items: [],
-  hint: 'A / D or ← → to flip through · Enter or click to take one out',
+  quiet: true,
   frame: (pos, at, aspect) => {
     const o = s.crate && crateRefs.get(s.crate)?.crate
     if (!o) return
@@ -76,8 +76,7 @@ export const crateSpot: Spot = {
 export const recordSpot: Spot = {
   key: 'record',
   items: [],
-  hint: 'click a record to play it · right-drag to turn it round · A / D for the next one',
-  back: 'put it back',
+  quiet: true,
   frame: (pos, at, aspect) => {
     const o = s.crate && crateRefs.get(s.crate)?.out
     if (!o) return

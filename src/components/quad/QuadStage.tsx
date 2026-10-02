@@ -169,7 +169,7 @@ function LookOverlays() {
     <>
       <PaintBox on={key === 'easel'} bottom={124} />
       <DolphinButton show={key === 'gametv'} bottom={124} />
-      <RecordsOverlay bottom={150} hints={false} status={key === 'turntable'} />
+      <RecordsOverlay bottom={150} status={key === 'turntable'} />
     </>
   )
 }
