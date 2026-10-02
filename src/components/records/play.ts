@@ -14,6 +14,7 @@ import { LEAD_IN, atRadius, radiusAt, sizeOf, type Side } from './vinyl'
  * there.
  *
  * A record that isn't from Spotify (the made-up ones), or before Spotify's caught up: the needle keeps its own time.
+ * At the end of a side it says so (`ended`), and ./changer turns the record over.
  */
 export const needle = {
   /** in a song's groove, the record turning under it */
@@ -22,6 +23,8 @@ export const needle = {
   ms: 0,
   /** off the end of the side: sat in the run-out */
   runout: false,
+  /** …got there by playing to the end of the side (not set down there): the changer turns the record over */
+  ended: false,
   /** Spotify's playing this record for us (since when: its first state may still be the last one's) */
   spotify: false,
   since: 0,
@@ -92,6 +95,7 @@ export function tick(dt: number): number | null {
       needle.spotify = false
       needle.playing = false
       needle.runout = true
+      needle.ended = true
       return angleFor(sizeOf(d.on.p).label + 3) // (the run-out spirals it in to the lock groove by the label)
     }
     needle.band = k
@@ -102,6 +106,7 @@ export function tick(dt: number): number | null {
       needle.spotify = false
       needle.playing = false
       needle.runout = true
+      needle.ended = true
     }
   } else if (!needle.spotify || !fresh) {
     needle.ms += dt * 1000
@@ -113,6 +118,7 @@ export function tick(dt: number): number | null {
       } else if (!needle.spotify) {
         needle.playing = false
         needle.runout = true
+        needle.ended = true
       } else needle.ms = b.ms
     }
   }

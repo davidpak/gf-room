@@ -6,13 +6,14 @@ import { loggedIn, login, onAuth } from '../../lib/spotify/auth'
 import { usePlayer } from '../../lib/spotify/player'
 import { CheckSheet } from '../check/CheckSheet'
 import { ToyControls } from '../stage/ToyControls'
-import { DEMO, pressSaved } from './crate'
+import { DEMO, pressSaved } from './library'
 import { getDeck, setDeck, useDeck } from './deck'
 import { EW, checkEastwood } from './victrola'
 import { Eastwood } from './Eastwood'
 import { Light } from './Light'
 import { lift, needle } from './play'
-import { Jacket, useArt } from './Record'
+import { cancelChange } from './changer'
+import { Crate } from './Crate'
 import { Turntable } from './Turntable'
 import { type Pressing } from './vinyl'
 
@@ -21,37 +22,26 @@ import { type Pressing } from './vinyl'
  * records leaning in a row beside it (her saved albums on Spotify when she's logged in). Click a record to put it on.
  * &check: the sheet (the manual's drawing and Victrola's photos beside it, and the checks).
  */
-function Sleeve({ p, x, z }: { p: Pressing; x: number; z: number }) {
-  const art = useArt(p)
-  const d = useDeck()
-  if (!art) return null
-  const playing = d.on?.p.uri === p.uri
-  const put = (e: ThreeEvent<MouseEvent>) => {
-    e.stopPropagation()
-    if (getDeck().arm.down) setDeck({ arm: { ...getDeck().arm, down: false } })
-    lift()
-    needle.runout = false
-    setDeck({ on: { p, disc: 0, face: 0 }, arm: { a: getDeck().arm.a, down: false }, lid: true })
-  }
-  return (
-    <group position={[x, 0, z]} rotation={[-0.16, 0.3, 0]} onClick={put} onPointerOver={() => (document.body.style.cursor = 'pointer')} onPointerOut={() => (document.body.style.cursor = '')}>
-      <group position={[0, playing ? 30 : 0, 0]}>
-        <Jacket p={p} art={art} />
-      </group>
-    </group>
-  )
+/** a record from the crate onto the platter (the one there, if any, back in its jacket) */
+function putOn(p: Pressing) {
+  cancelChange()
+  lift()
+  needle.runout = false
+  needle.ended = false
+  setDeck({ on: { p, disc: 0, face: 0 }, arm: { a: getDeck().arm.a, down: false }, lid: true })
 }
 
 function Scene({ records }: { records: Pressing[] }) {
+  const d = useDeck()
   const get = useThree((s) => s.get)
   if (import.meta.env.DEV) Object.assign(window, { __r3f: get, __deck: { getDeck, setDeck, needle } })
   return (
     <>
       <Light extent={900} />
       <Turntable />
-      {records.map((p, i) => (
-        <Sleeve key={p.uri} p={p} x={560 + (i % 2) * 40} z={-330 + i * 120} />
-      ))}
+      <group position={[470, 0, -40]} rotation={[0, -0.35, 0]}>
+        <Crate records={records} onPick={putOn} playing={d.on?.p.uri} />
+      </group>
     </>
   )
 }
@@ -76,7 +66,7 @@ export function TurntableStage() {
   const isIn = useSyncExternalStore(onAuth, loggedIn)
   const [records, setRecords] = useState<Pressing[]>(DEMO)
   useEffect(() => {
-    if (isIn) pressSaved(6).then((r) => r.length && setRecords(r), console.error)
+    if (isIn) pressSaved(12).then((r) => r.length && setRecords(r), console.error)
   }, [isIn])
   return (
     <>

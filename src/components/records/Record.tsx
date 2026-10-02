@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BoxGeometry, CanvasTexture, CylinderGeometry, DoubleSide, RingGeometry, SRGBColorSpace, Vector3, type Mesh, type Texture, type WebGLProgramParametersWithUniforms } from 'three'
+import { BufferGeometry, CanvasTexture, CylinderGeometry, Float32BufferAttribute, SRGBColorSpace, Vector3, type Mesh, type Texture, type WebGLProgramParametersWithUniforms } from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { LOOK, bruno } from '../quad/bruno'
 import { drawBack, drawCover, drawSide, inksOf, loadCover, type Inks } from './art'
 import { sizeOf, type Pressing } from './vinyl'
@@ -82,34 +83,67 @@ function vinyl(map: Texture, inner: number, outer: number) {
   return m
 }
 
-const geo = new Map<string, { top: RingGeometry; under: RingGeometry; rim: CylinderGeometry }>()
-const discGeo = (r: number, hole: number) => {
-  const k = `${r}/${hole}`
-  let g = geo.get(k)
-  if (!g) {
-    g = {
-      top: new RingGeometry(hole, r, 160, 1).rotateX(-Math.PI / 2),
-      // (seen from under, read the right way round: the ring turned over the other way, its uv mirrored)
-      under: (() => {
-        const u = new RingGeometry(hole, r, 160, 1)
-        const uv = u.attributes.uv
-        for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i))
-        return u.rotateX(Math.PI / 2)
-      })(),
-      rim: new CylinderGeometry(r, r, 1, 160, 1, true),
+/**
+ * The disc's shape, its faces planar-mapped (the side's picture straight on): flat across the grooves, the label's
+ * area raised a little, a raised bead round the edge, rounded off (records rest on these two, the grooves clear).
+ */
+const BASE = 0.35 // (the bead's and the label's rise over the grooves, each face)
+export const discThick = (S: { t: number }) => S.t + 2 * BASE
+function bump(r: number, S: { r: number; label: number }) {
+  if (r <= S.label + 1) return 0.3
+  if (r <= S.label + 2.5) return 0.3 * (1 - (r - S.label - 1) / 1.5)
+  if (r < S.r - 3) return 0
+  if (r < S.r - 1.4) return BASE * ((r - (S.r - 3)) / 1.6) ** 0.7
+  return BASE - (BASE - 0.12) * ((r - (S.r - 1.4)) / 1.4) ** 2
+}
+function face(S: { r: number; hole: number; label: number }, under: boolean) {
+  const radii = [S.hole, S.label - 2, S.label + 1, S.label + 1.8, S.label + 2.5]
+  for (let r = S.label + 8; r < S.r - 3; r += 8) radii.push(r)
+  radii.push(S.r - 3, S.r - 2.4, S.r - 1.8, S.r - 1.4, S.r - 0.9, S.r - 0.4, S.r)
+  const seg = 160
+  const pos: number[] = []
+  const uv: number[] = []
+  const idx: number[] = []
+  radii.forEach((r) => {
+    const z = bump(r, S)
+    for (let i = 0; i <= seg; i++) {
+      const th = (i / seg) * Math.PI * 2
+      const x = r * Math.cos(th)
+      const y = r * Math.sin(th)
+      pos.push(x, y, z)
+      uv.push(under ? 1 - (x / S.r + 1) / 2 : (x / S.r + 1) / 2, (y / S.r + 1) / 2)
     }
-    geo.set(k, g)
-  }
+  })
+  for (let j = 0; j < radii.length - 1; j++)
+    for (let i = 0; i < seg; i++) {
+      const p = j * (seg + 1) + i
+      const q = p + seg + 1
+      idx.push(p, q, p + 1, q, q + 1, p + 1)
+    }
+  const g = new BufferGeometry()
+  g.setAttribute('position', new Float32BufferAttribute(pos, 3))
+  g.setAttribute('uv', new Float32BufferAttribute(uv, 2))
+  g.setIndex(idx)
+  // (up for the top; the face under turned over the other way: its picture read the right way round from below)
+  g.rotateX(under ? Math.PI / 2 : -Math.PI / 2)
+  g.computeVertexNormals()
   return g
 }
-const RIM = bruno({ color: '#2a2a30', shade: '#4a4060' })
+const geo = new Map<string, { top: BufferGeometry; under: BufferGeometry; rim: CylinderGeometry }>()
+const discGeo = (S: { r: number; hole: number; label: number }) => {
+  const k = `${S.r}/${S.hole}`
+  let g = geo.get(k)
+  if (!g) geo.set(k, (g = { top: face(S, false), under: face(S, true), rim: new CylinderGeometry(S.r, S.r, 1, 160, 1, true) }))
+  return g
+}
 
-/** disc `disc` of the pressing (sides 2·disc and 2·disc + 1) */
+/** disc `disc` of the pressing (sides 2·disc and 2·disc + 1); its lowest points (the bead, the label, under) at y 0 */
 export function Disc({ p, art, disc = 0 }: { p: Pressing; art: Art; disc?: number }) {
   const S = sizeOf(p)
-  const g = discGeo(S.r, S.hole)
+  const g = discGeo(S)
   const label = S.label
-  const mats = useMemo(() => [vinyl(art.sides[2 * disc], label + 4, S.r - 1.5), vinyl(art.sides[2 * disc + 1], label + 4, S.r - 1.5)], [art, disc, label, S.r])
+  const mats = useMemo(() => [vinyl(art.sides[2 * disc], label + 4, S.r - 3), vinyl(art.sides[2 * disc + 1], label + 4, S.r - 3)], [art, disc, label, S.r])
+  const rim = useMemo(() => bruno({ color: art.inks.rim, shade: '#4a4060' }), [art])
   useEffect(() => () => mats.forEach((m) => m.dispose()), [mats])
   // (the sheen turns round the disc's middle, wherever it's carried)
   const track = (m: ReturnType<typeof vinyl>) => (o: Mesh | null) => {
@@ -117,26 +151,68 @@ export function Disc({ p, art, disc = 0 }: { p: Pressing; art: Art; disc?: numbe
   }
   return (
     <group>
-      <mesh ref={track(mats[0])} geometry={g.top} material={mats[0]} position={[0, S.t, 0]} castShadow receiveShadow />
-      <mesh ref={track(mats[1])} geometry={g.under} material={mats[1]} />
-      <mesh geometry={g.rim} material={RIM} position={[0, S.t / 2, 0]} scale={[1, S.t, 1]} />
+      <mesh ref={track(mats[0])} geometry={g.top} material={mats[0]} position={[0, BASE + S.t, 0]} castShadow receiveShadow />
+      <mesh ref={track(mats[1])} geometry={g.under} material={mats[1]} position={[0, BASE, 0]} />
+      <mesh geometry={g.rim} material={rim} position={[0, BASE + S.t / 2, 0]} scale={[1, S.t + 0.24, 1]} />
     </group>
   )
 }
 
-/** the jacket: the cover, the back, card edges in the cover's own colour */
-const jackets = new Map<string, BoxGeometry>()
-export function Jacket({ p, art }: { p: Pressing; art: Art }) {
+/** the jacket's spine and top edge, printed: the album and its artist along them */
+function edgeArt(p: Pressing, art: Art, along: 'v' | 'u') {
+  const c = document.createElement('canvas')
+  const L = 1024
+  const W = 40
+  c.width = along === 'v' ? W : L
+  c.height = along === 'v' ? L : W
+  const g = c.getContext('2d')!
+  g.fillStyle = art.inks.spine
+  g.fillRect(0, 0, c.width, c.height)
+  g.fillStyle = art.inks.spineInk
+  g.font = "700 26px 'Gaegu', 'Nunito', cursive"
+  g.textBaseline = 'middle'
+  g.textAlign = 'center'
+  const text = `${p.title}  ·  ${p.artist}`.toUpperCase()
+  g.save()
+  if (along === 'v') {
+    g.translate(W / 2, L / 2)
+    g.rotate(-Math.PI / 2)
+  } else g.translate(L / 2, W / 2)
+  let t = text
+  while (g.measureText(t).width > L * 0.92 && t.length > 4) t = t.slice(0, -2)
+  g.fillText(t === text ? t : t + '…', 0, 1)
+  g.restore()
+  const tex = new CanvasTexture(c)
+  tex.colorSpace = SRGBColorSpace
+  tex.anisotropy = 8
+  return tex
+}
+
+/**
+ * The jacket: the cover, the back, card edges in the cover's own colour, the spine (and top) printed; rounded a
+ * touch at its corners. `peek` (0..1): how far its record's slid out of its open edge (+x), standing in it.
+ */
+const jackets = new Map<string, RoundedBoxGeometry>()
+export function Jacket({ p, art, peek = 0 }: { p: Pressing; art: Art; peek?: number }) {
   const S = sizeOf(p)
   const k = `${S.sleeve}`
   let box = jackets.get(k)
-  if (!box) jackets.set(k, (box = new BoxGeometry(S.sleeve, S.sleeve, S.sleeveT)))
+  if (!box) jackets.set(k, (box = new RoundedBoxGeometry(S.sleeve, S.sleeve, S.sleeveT, 2, Math.min(1.2, S.sleeveT / 2 - 0.1))))
   const mats = useMemo(() => {
     const edge = bruno({ color: art.inks.spine })
-    return [edge, edge, edge, edge, bruno({ map: art.cover }), bruno({ map: art.back })]
-  }, [art])
-  return <mesh geometry={box} material={mats} position={[0, S.sleeve / 2, 0]} castShadow receiveShadow />
+    return [edge, bruno({ map: edgeArt(p, art, 'v') }), bruno({ map: edgeArt(p, art, 'u') }), edge, bruno({ map: art.cover }), bruno({ map: art.back })]
+  }, [art, p])
+  return (
+    <group>
+      <mesh geometry={box} material={mats} position={[0, S.sleeve / 2, 0]} castShadow receiveShadow />
+      {peek > 0 && (
+        // (standing in the jacket's plane, side A toward the cover; slid out of the open edge by peek of its width)
+        <group position={[S.sleeve / 2 + peek * 2 * S.r - S.r, S.sleeve / 2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <group position={[0, -discThick(S) / 2, 0]}>
+            <Disc p={p} art={art} />
+          </group>
+        </group>
+      )}
+    </group>
+  )
 }
-
-/** paper inner sleeve: white, the record's middle showing through its round window */
-export const INNER = bruno({ color: '#f7f2ea', side: DoubleSide })

@@ -28,7 +28,7 @@ export const LP = {
   sideMax: 24 * 60_000, // (ms: a side at the standard pitch)
   mass: 0.15, // kg [TYP]
   sleeve: 12.375 * IN, // 314.3 [SL]
-  sleeveT: 3,
+  sleeveT: 4.5, // [TYP] the jacket with its record and inner sleeve in it, 3.5–5
 }
 export const SINGLE = {
   r: (6.875 * IN) / 2, // 87.3 [E4]
@@ -41,7 +41,7 @@ export const SINGLE = {
   sideMax: 7.5 * 60_000, // (a 7" side: about 7½ minutes at 45)
   mass: 0.04,
   sleeve: 7.25 * IN, // 184.2 [SL]
-  sleeveT: 1.5,
+  sleeveT: 3,
 }
 export type Size = typeof LP
 

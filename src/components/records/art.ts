@@ -20,16 +20,18 @@ export function loadCover(url: string): Promise<HTMLImageElement | null> {
   })
 }
 
-export type Inks = { label: string; ink: string; spine: string }
+export type RGB = [number, number, number]
+export type Inks = { label: string; ink: string; spine: string; spineInk: string; rim: string; palette: RGB[] }
 /** the label's colour: the cover's most colourful common colour; its ink black or cream, whichever reads */
 export function inksOf(im: HTMLImageElement | HTMLCanvasElement | null): Inks {
-  if (!im) return { label: '#f2d7c9', ink: '#2b2538', spine: '#2b2538' }
+  if (!im) return { label: '#f2d7c9', ink: '#2b2538', spine: '#2b2538', spineInk: '#fbf3e6', rim: '#2a2a30', palette: [[230, 150, 170], [150, 120, 200], [245, 230, 210]] }
   const c = document.createElement('canvas')
   c.width = c.height = 16
   const g = c.getContext('2d', { willReadFrequently: true })!
   g.drawImage(im, 0, 0, 16, 16)
   const d = g.getImageData(0, 0, 16, 16).data
   let best = { s: -1, r: 0, g: 0, b: 0 }
+  const px: { c: RGB; score: number; hue: number }[] = []
   let ar = 0
   let ag = 0
   let ab = 0
@@ -43,13 +45,75 @@ export function inksOf(im: HTMLImageElement | HTMLCanvasElement | null): Inks {
     const sat = mx ? (mx - mn) / mx : 0
     const score = sat * (0.4 + mx / 255) // (colourful, and not too dark)
     if (score > best.s) best = { s: score, r, g: gg, b }
+    const hue = mx === mn ? 0 : mx === r ? ((gg - b) / (mx - mn) + 6) % 6 : mx === gg ? (b - r) / (mx - mn) + 2 : (r - gg) / (mx - mn) + 4
+    px.push({ c: [r, gg, b], score, hue: hue * 60 })
   }
   const n = d.length / 4
   const hex = (r: number, g2: number, b: number) => '#' + [r, g2, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')
   // (a grey cover: its average, lightened, for a quiet label)
   const pick = best.s > 0.25 ? best : { r: ar / n + (255 - ar / n) * 0.35, g: ag / n + (255 - ag / n) * 0.35, b: ab / n + (255 - ab / n) * 0.35 }
   const lum = 0.2126 * pick.r + 0.7152 * pick.g + 0.0722 * pick.b
-  return { label: hex(pick.r, pick.g, pick.b), ink: lum > 140 ? '#1d1a24' : '#fbf3e6', spine: hex(ar / n, ag / n, ab / n) }
+  // the palette, for coloured vinyl: the most colourful, the most colourful of another hue, and a light one
+  px.sort((a, b) => b.score - a.score)
+  const first = px[0]
+  const second = px.find((q) => Math.min(Math.abs(q.hue - first.hue), 360 - Math.abs(q.hue - first.hue)) > 50 && q.score > 0.15) ?? { c: [ar / n, ag / n, ab / n] as RGB }
+  const light = [...px].sort((a, b) => b.c[0] + b.c[1] + b.c[2] - (a.c[0] + a.c[1] + a.c[2]))[0]
+  const palette: RGB[] = [first.score > 0.2 ? first.c : [pick.r, pick.g, pick.b], second.c, light.c]
+  const avgLum = (0.2126 * ar + 0.7152 * ag + 0.0722 * ab) / n
+  return { label: hex(pick.r, pick.g, pick.b), ink: lum > 140 ? '#1d1a24' : '#fbf3e6', spine: hex(ar / n, ag / n, ab / n), spineInk: avgLum > 140 ? '#1d1a24' : '#fbf3e6', rim: '#2a2a30', palette }
+}
+
+/** how it's pressed: classic black, or (a fancy pressing) the cover's colour, marbled, splattered; the same album always the same */
+export type Pressed = 'black' | 'colour' | 'marble' | 'splatter'
+export function pressedAs(uri: string): Pressed {
+  let h = 0
+  for (const ch of uri) h = (h * 33 + ch.charCodeAt(0)) >>> 0
+  const f = (h % 1000) / 1000
+  return f < 0.3 ? 'black' : f < 0.55 ? 'colour' : f < 0.8 ? 'marble' : 'splatter'
+}
+
+/** the vinyl itself before the grooves are cut in it: its colour at each point (drawn small, scaled up) */
+function vinylBase(kind: Pressed, pal: RGB[], seed: number, size: number) {
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const g = c.getContext('2d')!
+  const css = (q: RGB, k = 1) => `rgb(${q[0] * k}, ${q[1] * k}, ${q[2] * k})`
+  if (kind === 'black') {
+    g.fillStyle = 'rgb(26, 26, 27)'
+    g.fillRect(0, 0, size, size)
+  } else if (kind === 'colour') {
+    g.fillStyle = css(pal[0], 0.85)
+    g.fillRect(0, 0, size, size)
+  } else if (kind === 'marble') {
+    // two colours swirled together, a pale vein between
+    const img = g.createImageData(size, size)
+    const a = pal[0]
+    const b = pal[1]
+    const v = pal[2]
+    for (let y = 0; y < size; y++)
+      for (let x = 0; x < size; x++) {
+        const u = x / size
+        const w = y / size
+        const t = 0.5 + 0.5 * Math.sin(9 * u + 4 * Math.sin(7 * w + seed) + 2.5 * Math.sin(13 * (u + w) + seed * 2))
+        const vein = Math.max(0, 1 - Math.abs(t - 0.5) / 0.035)
+        const o = (y * size + x) * 4
+        for (let k = 0; k < 3; k++) img.data[o + k] = (a[k] * t + b[k] * (1 - t)) * 0.85 * (1 - vein * 0.6) + v[k] * vein * 0.6
+        img.data[o + 3] = 255
+      }
+    g.putImageData(img, 0, 0)
+  } else {
+    // splatter: the second colour, flecked and splashed with the first and the light one
+    g.fillStyle = css(pal[1], 0.82)
+    g.fillRect(0, 0, size, size)
+    for (let i = 0; i < 220; i++) {
+      const r = (hash(seed + i * 3) ** 3) * size * 0.045 + size * 0.002
+      g.fillStyle = css(i % 3 ? pal[0] : pal[2], 0.95)
+      g.beginPath()
+      g.ellipse(hash(seed + i) * size, hash(seed + i * 7 + 1) * size, r, r * (0.6 + hash(i + seed * 5) * 0.6), hash(i * 11 + seed) * 3, 0, Math.PI * 2)
+      g.fill()
+    }
+  }
+  return c
 }
 
 const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`
@@ -112,18 +176,23 @@ export function drawSide(p: Pressing, side: Side, inks: Inks, size = 2048): Text
     else v = 0.095 // (the run-out)
     prof[i] = v
   }
-  const img = g.createImageData(size, size)
+  // the vinyl, then the grooves pressed into it (darker where they're cut, lighter on the smooth gaps)
+  const kind = pressedAs(p.uri)
+  let seed = 0
+  for (const ch of p.uri) seed = (seed + ch.charCodeAt(0) * 7) % 97
+  g.drawImage(vinylBase(kind, inks.palette, seed, 512), 0, 0, size, size)
+  const img = g.getImageData(0, 0, size, size)
   const d = img.data
   const h = size / 2
   for (let y = 0; y < size; y++)
     for (let x = 0; x < size; x++) {
       const r = Math.hypot(x + 0.5 - h, y + 0.5 - h) / px
       const k = Math.min(N - 1, Math.round(r / STEP))
-      const v = prof[k] * 255
+      const m = prof[k] / 0.1
       const o = (y * size + x) * 4
-      d[o] = v
-      d[o + 1] = v
-      d[o + 2] = v * 1.04
+      d[o] = Math.min(255, d[o] * m)
+      d[o + 1] = Math.min(255, d[o + 1] * m)
+      d[o + 2] = Math.min(255, d[o + 2] * m * 1.04)
       d[o + 3] = cut[k] ? 255 : 150
     }
   g.putImageData(img, 0, 0)
@@ -158,6 +227,23 @@ export function drawSide(p: Pressing, side: Side, inks: Inks, size = 2048): Text
   g.beginPath()
   g.arc(h, h, lr - 2.2 * px, 0, Math.PI * 2)
   g.stroke()
+  // the label's own name, round its top edge
+  g.save()
+  g.fillStyle = inks.ink
+  g.globalAlpha = 0.75
+  g.font = `700 ${(3.2 * lr) / 50}px ${FONT}`
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  const imprint = '✿ RINA RECORDS ✿'
+  const step = 0.075 * (50 / S.label)
+  ;[...imprint].forEach((ch, i) => {
+    g.save()
+    g.translate(h, h)
+    g.rotate((i - (imprint.length - 1) / 2) * step)
+    g.fillText(ch, 0, -(lr - 5 * (lr / 50)))
+    g.restore()
+  })
+  g.restore()
   g.fillStyle = inks.ink
   g.textAlign = 'center'
   g.textBaseline = 'middle'

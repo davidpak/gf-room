@@ -6,7 +6,8 @@ import { getDeck, live, now, press, setDeck, sideUp, useDeck } from './deck'
 import { EW, angleFor, deckY, stylusAt } from './victrola'
 import { Eastwood } from './Eastwood'
 import { bandStarts, drop, lift, needle, tick } from './play'
-import { Disc, useArt } from './Record'
+import { cancelChange, changing, sideEnded, sideFrom, sideIndex, turnTo } from './changer'
+import { Disc, discThick, useArt } from './Record'
 import { sizeOf } from './vinyl'
 
 /**
@@ -41,13 +42,15 @@ function Driver() {
     if (!isDown && down.current) lift()
     down.current = isDown
     if (!d.power && needle.playing) lift()
+    // (the end of a side, played to: on to the next, by itself)
+    if (needle.ended && needle.runout && d.power) void sideEnded()
     // where it's swung: the hand's, the music's, or where it was left
     const toward = isDown && d.power ? tick(dt) : null
     const a = d.held ? d.arm.a : toward ?? d.arm.a
     live.a += (a - live.a) * Math.min(1, dt * (d.held ? 18 : toward != null ? 10 : 5))
     // the platter: turning while it's on and the arm's off its rest (the motor's switch), up to speed
     const S = d.on ? sizeOf(d.on.p) : null
-    const target = d.power && live.a > REST + 0.04 && !needle.runout ? ((S?.rpm ?? 100 / 3) / 60) * Math.PI * 2 : 0
+    const target = d.power && (live.a > REST + 0.04 || changing.on) && !needle.runout ? ((S?.rpm ?? 100 / 3) / 60) * Math.PI * 2 : 0
     live.spin += (target - live.spin) * Math.min(1, dt * (target ? 1.6 : 0.9))
     live.turn += live.spin * dt
   })
@@ -94,12 +97,14 @@ export function Turntable() {
   const on = {
     power: () => {
       press('power')
+      cancelChange()
       const s = getDeck()
       setDeck({ power: !s.power, poweredAt: now() })
     },
     lid: () => setDeck({ lid: !getDeck().lid }),
     arm: (e: ThreeEvent<PointerEvent>) => {
       if (e.button !== 0) return
+      cancelChange()
       setDeck({ held: true, lid: true })
       drag(
         () => armTo(),
@@ -112,6 +117,7 @@ export function Turntable() {
       )
     },
     cue: () => {
+      cancelChange()
       const s = getDeck()
       if (s.arm.a > REST + 0.02) setDeck({ arm: { a: live.a, down: !s.arm.down } })
     },
@@ -119,6 +125,7 @@ export function Turntable() {
       press('playpause')
       const s = getDeck()
       if (s.mode === 'bt') return void sdk()?.togglePlay()
+      cancelChange()
       if (s.arm.a > REST + 0.02) setDeck({ arm: { a: live.a, down: !s.arm.down } })
     },
     prev: () => skip(-1),
@@ -134,9 +141,10 @@ export function Turntable() {
       // turned over, with the arm off it
       const s = getDeck()
       if (!s.on || s.arm.down || s.held) return
+      cancelChange()
       const o = s.on
       const sides = o.p.sides.length
-      const next = (2 * o.disc + o.face + 1) % sides
+      const next = (sideIndex(o) + 1) % sides
       setDeck({ on: { ...o, disc: Math.floor(next / 2), face: (next % 2) as 0 | 1 } })
       needle.runout = false
     },
@@ -146,13 +154,24 @@ export function Turntable() {
     const s = getDeck()
     if (s.mode === 'bt') return void (by < 0 ? sdk()?.previousTrack() : sdk()?.nextTrack())
     if (!s.on) return
-    const starts = bandStarts(sideUp(s.on))
-    const k = needle.playing ? needle.band : starts.findIndex((a) => a > live.a + 0.002) - 1
-    const to = Math.max(0, Math.min(starts.length - 1, (k < 0 ? starts.length - 1 : k) + by))
+    const o = s.on
+    const starts = bandStarts(sideUp(o))
+    // the song it's in (or, lifted, the one under it; in the run-out, past the last)
+    const k = needle.playing ? needle.band : needle.runout ? starts.length : starts.findIndex((a) => a > live.a + 0.002) - 1
+    const here = k < 0 ? starts.length - 1 : k
+    // (⏮ a few seconds into a song: back to its start, as players do; else the one before)
+    const to = by < 0 && needle.playing && needle.ms > 3000 ? here : here + by
+    // off this side: over to the next (or back to the last song of the one before)
+    if (to >= starts.length || to < 0) {
+      const j = sideFrom(o, sideIndex(o), by < 0 ? -1 : 1)
+      if (j != null) void turnTo(j, by < 0 ? 'last' : 0)
+      return
+    }
+    cancelChange()
     // (lifted, swung, lowered: the needle comes down at the song's start)
     needle.runout = false
     setDeck({ arm: { a: live.a, down: false } })
-    setTimeout(() => setDeck({ arm: { a: starts[to], down: true } }), 350)
+    setTimeout(() => setDeck({ arm: { a: starts[Math.max(0, to)], down: true } }), 350)
   }
   // the volume follows the knob
   useEffect(() => void sdk()?.setVolume(d.volume), [d.volume])
@@ -162,10 +181,9 @@ export function Turntable() {
       <Driver />
       <Eastwood on={on}>
         {d.on && art && S && (
-          // (face 1 up: the disc turned over)
-          <group rotation={[0, 0, d.on.face ? Math.PI : 0]} position={[0, d.on.face ? S.t : 0, 0]}>
+          <Flip key={d.on.p.uri} face={d.on.face} t={discThick(S)}>
             <Disc p={d.on.p} art={art} disc={d.on.disc} />
-          </group>
+          </Flip>
         )}
       </Eastwood>
     </group>
@@ -174,3 +192,24 @@ export function Turntable() {
 
 /** where the stylus is now, in the player's frame (for a look at it) */
 export const stylusNow = () => stylusAt(live.a)
+
+/** the disc turned over (face 1 up), with a turn of the hand: lifted off the spindle, over, back down */
+function Flip({ face, t, children }: { face: 0 | 1; t: number; children: React.ReactNode }) {
+  const g = useRef<Group>(null)
+  const at = useRef(face * Math.PI)
+  const arrive = useRef(1) // (a record just put on comes down onto the spindle)
+  useFrame((_, dt) => {
+    const o = g.current
+    if (!o) return
+    const want = face * Math.PI
+    const d = want - at.current
+    at.current += Math.sign(d) * Math.min(Math.abs(d), Math.min(dt, 0.05) * 3.4)
+    const r = at.current
+    o.rotation.z = r
+    // (its thickness made up turned over; up off the spindle while it turns)
+    arrive.current = Math.max(0, arrive.current - Math.min(dt, 0.05) * 1.6)
+    const drop = arrive.current * arrive.current * 90
+    o.position.y = (t * (1 - Math.cos(r))) / 2 + EW.platter.spindleH * 1.6 * Math.sin(r) + drop
+  })
+  return <group ref={g}>{children}</group>
+}

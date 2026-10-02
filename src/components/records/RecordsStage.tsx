@@ -8,7 +8,7 @@ import { ToyControls } from '../stage/ToyControls'
 import { Disc, Jacket, useArt } from './Record'
 import { Light } from './Light'
 import { LP, checkVinyl, type Pressing } from './vinyl'
-import { DEMO, pressSaved } from './crate'
+import { DEMO, pressSaved } from './library'
 
 /**
  * Records on their own (gallery first): her saved albums on Spotify pressed into records (logged out: three made-up
