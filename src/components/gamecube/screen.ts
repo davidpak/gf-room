@@ -1,5 +1,5 @@
 import { CanvasTexture, SRGBColorSpace } from 'three'
-import { dolphinVideo } from './dolphin'
+import { dolphinCrop, dolphinVideo } from './dolphin'
 import { screenOf, type CubeState, type Screen } from './state'
 
 /**
@@ -323,25 +323,25 @@ function draw(g: CanvasRenderingContext2D, sc: Screen, t: number, c: CubeState) 
   }
 }
 
-/** a frame of Dolphin's window, fitted into the 4:3 glass (a window taller than 4:3 has its title bar trimmed off the
- *  top first, up to a tenth of it; anything else letterboxed) */
+/** a frame of Dolphin's window: the game's picture in it (./dolphin finds it inside Dolphin's black bars and under the
+ *  window's title bar) filling the glass, as a CRT's picture fills its tube (its edges just under the bezel); a
+ *  picture far from 4:3 (widescreen) cropped to it rather than squashed */
 function frame(g: CanvasRenderingContext2D, v: HTMLVideoElement) {
-  const vw = v.videoWidth
-  const vh = v.videoHeight
-  if (!vw || !vh) return
-  let sy = 0
-  let sh = vh
-  const want = (vw * 3) / 4
-  if (vh > want) {
-    sy = Math.min(vh - want, vh * 0.1)
-    sh = vh - sy
+  const c = dolphinCrop(v)
+  if (!c) return
+  let { x, y, w, h } = c
+  const aspect = w / h
+  const want = W / H
+  if (aspect > want * 1.12) {
+    const nw = h * want
+    x += (w - nw) / 2
+    w = nw
+  } else if (aspect < want / 1.12) {
+    const nh = w / want
+    y += (h - nh) / 2
+    h = nh
   }
-  const k = Math.min(W / vw, H / sh)
-  const dw = vw * k
-  const dh = sh * k
-  g.fillStyle = '#000'
-  g.fillRect(0, 0, W, H)
-  g.drawImage(v, 0, sy, vw, sh, (W - dw) / 2, (H - dh) / 2, dw, dh)
+  g.drawImage(v, x, y, w, h, 0, 0, W, H)
 }
 
 /** the screen: its canvas, its texture, and \`update\` (each frame: true when it's been drawn again) */

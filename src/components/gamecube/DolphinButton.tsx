@@ -4,8 +4,8 @@ import { getCube, pressPower, pressTv } from './state'
 
 /**
  * The button that puts Dolphin on the TV (./dolphin): a click asks the browser to share a window (pick Dolphin's
- * game window), and the TV and the console are switched on if they aren't; again, it's taken off. Under it, the one
- * thing to set in Dolphin. Shown where the TV's being looked at (the setup's page; the Quad's TV look).
+ * game window), and the TV and the console are switched on if they aren't; again, it's taken off. Shown where the TV's
+ * being looked at (the setup's page; the Quad's TV look).
  */
 export function DolphinButton({ show = true, bottom = 24 }: { show?: boolean; bottom?: number }) {
   const on = useDolphin()
@@ -43,9 +43,7 @@ export function DolphinButton({ show = true, bottom = 24 }: { show?: boolean; bo
       >
         {on ? '■ take Dolphin off the TV' : '▶ show Dolphin on the TV'}
       </button>
-      <div style={{ font: "700 14px 'Gaegu', 'Nunito', cursive", color: '#fff4e6', textShadow: '0 1px 3px rgba(0,0,0,0.6)', textAlign: 'center', maxWidth: 520 }}>
-        {err || (on ? 'playing on the TV · in Dolphin: Controllers → Background Input, so your controller works here' : "pick Dolphin's game window when the browser asks")}
-      </div>
+      {err && <div style={{ font: "700 14px 'Gaegu', 'Nunito', cursive", color: '#fff4e6', textShadow: '0 1px 3px rgba(0,0,0,0.6)', textAlign: 'center', maxWidth: 520 }}>{err}</div>}
     </div>
   )
 }
