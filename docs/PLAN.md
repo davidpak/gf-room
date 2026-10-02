@@ -58,6 +58,13 @@ Each milestone is something you can open in a browser and show someone.
 
 ## Later
 
+- **A day–night cycle for the Quad.** Tried and reverted on 2026-10-02 (commit 00b95f3 has the full working version, reverted by the next commit), pinned to revisit. The approach:
+  - **Times of day.** Keyframes for sunrise, morning, today's midday look (unchanged), golden hour, sunset, dusk and night. Each key sets the sky gradient, light colour and intensity, sun direction, a tint on every shadow colour, bounce, fog, lamp strength and glow, blended between keys.
+  - **Cheap per frame.** `bruno` reads a few shared uniforms (light, shadow tint, lamp and glow multipliers, 12 lamp pools as vec4s), so each frame only changes those.
+  - **Night lights.** Fairy lights on the cherries (one instanced draw), string lights on both canopies, additive point halos (one draw a set), warm pools under the trees and canopies, stars and a moon.
+  - **Timing.** A 24-minute day starting at the visitor's own clock; `?time=` and `?daylen=` override it.
+  - **Cost.** About +7 draws; night cost the same as midday.
+  - **Lessons.** The sunset sun must stay at least 0.4 high, or the grass goes muddy. Decide the mood and pacing with David before building again.
 - **Melee from the Mac mini, over Tailscale.** Today the TV shows Dolphin only from the viewer's own computer (`getDisplayMedia` in `src/components/gamecube/dolphin.ts`). The solid version: Slippi runs around the clock on David's Mac mini. OBS streams its window (picture and sound) over WebRTC through MediaMTX, and the TV plays that stream with no window picker. The browser's Gamepad API (or the keyboard) sends ports 1 and 2 back to a small Node bridge on the mini, which drives Dolphin's controller pipes. `tailscale serve` hosts the site at a private HTTPS `*.ts.net` address. Expect about 60–120 ms of input lag, fine for casual play; Slippi online is still better for serious matches. The mini may need an HDMI dummy plug when running headless. Undecided: a written setup guide versus SSH access for Claude, and whether to keep the window-capture mode as a fallback.
 
 ## Known bugs
