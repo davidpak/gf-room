@@ -89,9 +89,8 @@ export function LampPost({ position = [0, 0, 0] as [number, number, number], slo
     const g = glass.current
     if (!g) return
     g.updateWorldMatrix(true, false)
-    const p = g.getWorldPosition(new Vector3())
-    shared.lamps.value[slot].set(p.x, p.y, p.z, 1)
-    return () => void shared.lamps.value[slot].set(1e9, 0, 0, 0)
+    shared.lamps.value[slot] = g.getWorldPosition(new Vector3())
+    return () => void (shared.lamps.value[slot] = new Vector3(1e9, 0, 0))
   }, [slot])
   const flicker = useRef<Group>(null)
   useFrame(({ clock }) => {

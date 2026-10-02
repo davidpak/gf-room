@@ -1,4 +1,4 @@
-import { Color, MeshLambertMaterial, Vector3, Vector4, type MeshLambertMaterialParameters, type WebGLProgramParametersWithUniforms } from 'three'
+import { Color, MeshLambertMaterial, Vector3, type MeshLambertMaterialParameters, type WebGLProgramParametersWithUniforms } from 'three'
 
 /**
  * The Quad's shading: Bruno Simon's folio-2025 formula (sources/Game/Materials/MeshDefaultMaterial.js),
@@ -30,20 +30,9 @@ export const LOOK = {
   sheen: new Color('#c9b3e3'), // (what glossy paint reflects: the lilac evening sky)
 }
 
-/** how many warm pools of light there can be (the lamp posts' four, then the night's: the trees' fairy lights, the
- *  canopies' string lights) */
-export const LAMPS = 12
-/**
- * shared by every material: the lamps (world mm; w how bright: the posts 1, the night's lights as dark as it is), the
- * time (s); and the time of day (./daylight sets them, or they stay the day as it's always been): the sun's light
- * (colour × intensity), a tint on every shadow colour, how strong the lamps' pools and the glowing things are
- */
+/** shared by every material: the lamps' positions (world, mm), the time (s) */
 export const shared = {
-  lamps: { value: Array.from({ length: LAMPS }, () => new Vector4(1e9, 0, 0, 0)) },
-  light: { value: LOOK.light.clone().multiplyScalar(LOOK.intensity) },
-  shadowTint: { value: new Color(1, 1, 1) },
-  lampK: { value: 1 },
-  glowK: { value: 1 },
+  lamps: { value: [new Vector3(1e9, 0, 0), new Vector3(1e9, 0, 0), new Vector3(1e9, 0, 0), new Vector3(1e9, 0, 0)] },
   lampRange: { value: 900 },
   time: { value: 0 },
   car: { value: new Vector3(1e9, 0, 0) }, // (the car and the camera, world: for the see-through)
@@ -69,11 +58,8 @@ export function bruno(o: Opts = {}) {
   const { shade, lit = 1, sway = 0, swayFrom = 0, warm = 1, sheen = 0, ...params } = o
   const m = new MeshLambertMaterial(params)
   const u = {
-    uLightBase: shared.light, // (the sun as it really shines: to read the Lambert pass back; uLight is it × uLit)
-    uLit: { value: lit },
-    uShadowTint: shared.shadowTint,
-    uLampK: shared.lampK,
-    uGlowK: shared.glowK,
+    uLight: { value: LOOK.light.clone().multiplyScalar(LOOK.intensity * lit) },
+    uSun: { value: LOOK.light.clone().multiplyScalar(LOOK.intensity) }, // (the sun as it really shines: to read the Lambert pass back)
     uShadow: { value: new Color(shade ?? LOOK.shadow) },
     uBounce: { value: LOOK.bounce },
     uLamp: { value: LOOK.lamp },
@@ -137,20 +123,15 @@ gl_Position = projectionMatrix * mvPosition;`,
       .replace(
         '#include <common>',
         `#include <common>
-uniform vec3 uLightBase;
-uniform float uLit;
-#define uSun uLightBase
-#define uLight (uLightBase * uLit)
+uniform vec3 uLight;
+uniform vec3 uSun;
 uniform vec3 uShadow;
-uniform vec3 uShadowTint;
-uniform float uLampK;
-uniform float uGlowK;
 uniform vec3 uBounce;
 uniform vec3 uLamp;
 uniform float uWarm;
 uniform float uSheen;
 uniform vec3 uSheenCol;
-uniform vec4 uLamps[${LAMPS}];
+uniform vec3 uLamps[4];
 uniform float uLampRange;
 uniform vec3 uCar;
 uniform vec3 uCam;
@@ -198,26 +179,26 @@ float bayer4(vec2 p) {
   float full = dot(albedo * uSun * RECIPROCAL_PI, vec3(0.3333)) + 1e-5;
   float L = dot(reflectedLight.directDiffuse, vec3(0.3333)) / full;
   float litK = smoothstep(0.12, 0.5, L);
-  vec3 col = mix(albedo * uShadow * uShadowTint, albedo * uLight, litK);
+  vec3 col = mix(albedo * uShadow, albedo * uLight, litK);
   // the bounce: faces turned down, near the ground
   float down = clamp(-vWNormal.y * 0.5 + 0.35, 0.0, 1.0) * (1.0 - smoothstep(0.0, 1400.0, vWPos.y));
   col = mix(col, albedo * uBounce * 1.4, down * 0.35 * (1.0 - litK * 0.6));
   // the lamps' warm pools
   float glow = 0.0;
-  for (int i = 0; i < ${LAMPS}; i++) {
-    vec3 d = uLamps[i].xyz - vWPos;
+  for (int i = 0; i < 4; i++) {
+    vec3 d = uLamps[i] - vWPos;
     float r = length(d);
     float f = 1.0 - smoothstep(0.0, uLampRange, r);
-    glow += uLamps[i].w * f * f * (0.55 + 0.45 * max(0.0, dot(vWNormal, d / max(r, 1.0))));
+    glow += f * f * (0.55 + 0.45 * max(0.0, dot(vWNormal, d / max(r, 1.0))));
   }
-  col += albedo * uLamp * glow * 1.3 * uWarm * uLampK;
+  col += albedo * uLamp * glow * 1.3 * uWarm;
   // gloss: the evening sky caught along the edges as they turn away, softly on the faces turned up
   if (uSheen > 0.0) {
     vec3 V = normalize(cameraPosition - vWPos);
     float edge = pow(1.0 - clamp(abs(dot(vWNormal, V)), 0.0, 1.0), 2.5);
     col += uSheenCol * uSheen * (edge * 0.9 + clamp(vWNormal.y, 0.0, 1.0) * 0.3);
   }
-  outgoingLight = col + totalEmissiveRadiance * uGlowK;
+  outgoingLight = col + totalEmissiveRadiance;
 }
 #include <opaque_fragment>`,
       )

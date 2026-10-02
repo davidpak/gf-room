@@ -8,7 +8,6 @@ import { Jacket, useArt } from '../records/Record'
 import { StillSleeves } from '../records/Sleeves'
 import { DARK, FRAME, HAND, RBOX, WOOD, slate, star, stripes } from './CookieStand'
 import { bruno } from './bruno'
-import { StringLights } from './NightLights'
 
 /**
  * The record stand's dressing (real mm; ./QuadMusic places it at the toy scale), the cookie stand's cousin: a canopy
@@ -104,6 +103,51 @@ function plankArt() {
   return t
 }
 
+/** the string lights: a wire swagged between the corners along the eaves, a bulb every so often */
+function lights() {
+  const { hx, hz, over, eave } = CANOPY
+  const x = hx + over - 30
+  const z = hz + over - 30
+  const y = eave - 290 // (just under the valance's hem)
+  const corners = [
+    [-x, z],
+    [x, z],
+    [x, -z],
+    [-x, -z],
+  ]
+  const wires: TubeGeometry[] = []
+  const bulbs: Vector3[] = []
+  for (let k = 0; k < 4; k++) {
+    if (k === 2) continue // (none along the back: it faces the trees)
+    const [ax, az] = corners[k]
+    const [bx, bz] = corners[(k + 1) % 4]
+    const len = Math.hypot(bx - ax, bz - az)
+    const swags = Math.max(1, Math.round(len / 800))
+    const pts: Vector3[] = []
+    for (let i = 0; i <= swags * 12; i++) {
+      const u = i / (swags * 12)
+      const w = (u * swags) % 1
+      const sag = 110 * 4 * w * (1 - w)
+      pts.push(new Vector3(ax + (bx - ax) * u, y - sag, az + (bz - az) * u))
+    }
+    wires.push(new TubeGeometry(new CatmullRomCurve3(pts), pts.length * 2, 5, 5, false))
+    const n = Math.round(len / 170)
+    for (let i = 1; i < n; i++) {
+      const u = i / n
+      const w = (u * swags) % 1
+      bulbs.push(new Vector3(ax + (bx - ax) * u, y - 110 * 4 * w * (1 - w) - 34, az + (bz - az) * u))
+    }
+  }
+  return { wires, bulbs }
+}
+const BULBS = [
+  bruno({ color: '#fff3cf', emissive: '#ffcf7a', emissiveIntensity: 1.3, warm: 0 }),
+  bruno({ color: '#ffe0ea', emissive: '#ffb3c8', emissiveIntensity: 1.2, warm: 0 }),
+  bruno({ color: '#ece2ff', emissive: '#d4c0ff', emissiveIntensity: 1.2, warm: 0 }),
+]
+const BULB = new SphereGeometry(26, 12, 8).scale(1, 1.25, 1)
+const CAP = new BoxGeometry(22, 26, 22)
+
 /** the canopy: four posts, the rails round the eaves, the striped roof, the valance, the plank, the lights */
 export function MusicCanopy() {
   const m = useMemo(() => {
@@ -116,7 +160,7 @@ export function MusicCanopy() {
       plank: [WOOD, WOOD, WOOD, WOOD, bruno({ map: plank, emissiveMap: plank, emissive: '#ffffff', emissiveIntensity: 0.18, shade: '#a58aa6' }), WOOD] as Material[],
     }
   }, [])
-  const g = useMemo(() => ({ roof: roofGeometry(), plank: new BoxGeometry(1700, 360, 60) }), [])
+  const g = useMemo(() => ({ roof: roofGeometry(), plank: new BoxGeometry(1700, 360, 60), lights: lights() }), [])
   const { hx, hz, over, eave, peak } = CANOPY
   return (
     <group>
@@ -148,8 +192,16 @@ export function MusicCanopy() {
       ))}
       {/* the plank, up on the front of the roof */}
       <mesh geometry={g.plank} material={m.plank} position={[0, (eave + peak) / 2 + 60, hz + over - 230]} rotation={[-0.42, 0, 0]} castShadow />
-      {/* the lights: the wire, and a bulb in a little cap every hand's breadth (none along the back: it faces the trees) */}
-      <StringLights hx={hx + over - 30} hz={hz + over - 30} y={eave - 290} skip={[2]} pool={10} />
+      {/* the lights: the wire, and a bulb in a little cap every hand's breadth */}
+      {g.lights.wires.map((w, i) => (
+        <mesh key={i} geometry={w} material={DARK} />
+      ))}
+      {g.lights.bulbs.map((p, i) => (
+        <group key={i} position={p}>
+          <mesh geometry={CAP} material={DARK} position={[0, 30, 0]} />
+          <mesh geometry={BULB} material={BULBS[i % 3]} />
+        </group>
+      ))}
     </group>
   )
 }

@@ -4,7 +4,6 @@ import { Canvas } from '../../lib/render/Canvas'
 import { CanvasTexture, Fog, PCFSoftShadowMap, SRGBColorSpace } from 'three'
 import { LOOK, shared } from './bruno'
 import { CherryTree } from './CherryTree'
-import { DayCycle, Sky, TreeLights } from './NightLights'
 import { Grass, Island, Petals, Walks } from './Ground'
 import { LampPost } from './Furniture'
 import { Building, Hedges } from './Backdrop'
@@ -30,11 +29,24 @@ import './quad.css'
 import { SET } from './set'
 
 /**
- * The Quad's north-west quarter (./set), its spring day going round, sunrise to starry night (./daylight,
- * ./NightLights; Bruno Simon's folio-2025 is the template): the brick walk through the lawn, cherries along it, lamp posts, benches, petals. Their
+ * The Quad's north-west quarter (./set), in a warm spring evening (Bruno Simon's folio-2025 is the
+ * template): the brick walk through the lawn, cherries along it, lamp posts, benches, petals. Their
  * little car drives it (./Car: WASD / arrows, Space, R), the camera following Bruno's way; trees
  * between the camera and the car open up so it's never lost.
  */
+function sky() {
+  const c = document.createElement('canvas')
+  c.width = 4
+  c.height = 256
+  const g = c.getContext('2d')!
+  const grad = g.createLinearGradient(0, 0, 0, 256)
+  LOOK.sky.forEach((col, i) => grad.addColorStop(i / (LOOK.sky.length - 1), col))
+  g.fillStyle = grad
+  g.fillRect(0, 0, 4, 256)
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  return t
+}
 
 /** dev only: the R3F store on window.__r3f() (to step frames from the console) */
 function DevStore() {
@@ -60,6 +72,7 @@ function QuadCar({ car, obstacles }: { car: { current: CarState }; obstacles: Ob
  * again on each (a tenth of a second, every click). What follows the look follows it itself (useLook).
  */
 const Scene = memo(function Scene({ car }: { car: { current: CarState } }) {
+  const background = useMemo(sky, [])
   const fog = useMemo(() => new Fog(LOOK.fog, 7000, 18000), [])
   // what the car bumps into: the trunks, the lamps, the building and the hedges (the benches it shoves: ./Physical)
   const obstacles = useMemo<Obstacle[]>(
@@ -75,9 +88,7 @@ const Scene = memo(function Scene({ car }: { car: { current: CarState } }) {
   )
   return (
     <>
-      {/* (the sky's its own: ./NightLights' DayCycle draws it as the day goes) */}
-      <DayCycle />
-      <Sky />
+      <primitive attach="background" object={background} />
       <primitive attach="fog" object={fog} />
       <Clock />
       <DevStore />
@@ -101,7 +112,6 @@ const Scene = memo(function Scene({ car }: { car: { current: CarState } }) {
       <Grass />
       <Walks />
       <Petals />
-      <TreeLights />
       {SET.trees.map((t, i) => (
         <CherryTree key={i} model={t.model} position={[t.x, 0, t.z]} rotation={t.rot} scale={t.scale} />
       ))}
