@@ -86,3 +86,5 @@ export async function pressIn(id: CrateId, uri: string) {
 export const digFor = (q: string) => fillDig(q, () => dig(q))
 /** the Dig crate filled with an artist's albums */
 export const digMore = (artistId: string, name: string) => fillDig(`more by ${name}`, () => digArtist(artistId))
+
+if (import.meta.env.DEV && typeof window !== 'undefined') Object.assign(window, { __shelf: { getShelf, set } }) // (for trying it from the console)

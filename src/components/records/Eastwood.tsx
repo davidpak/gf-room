@@ -3,6 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { BoxGeometry, CanvasTexture, CircleGeometry, Color, CylinderGeometry, DoubleSide, Group, LatheGeometry, Mesh, SRGBColorSpace, Vector2, type Texture } from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { bruno } from '../quad/bruno'
+import { Static } from '../../lib/render/Static'
 import { EW, deckY } from './victrola'
 import { getDeck, live, now } from './deck'
 import { needle } from './play'
@@ -338,6 +339,7 @@ export function Eastwood({ on = {}, children }: { on?: Partial<Record<Parts, (e:
   const A = EW.arm
   const sideY = EW.feet + (T - EW.feet) / 2
   return (
+    <Static>
     <group>
       {/* the cabinet */}
       {[-1, 1].map((s) => (
@@ -355,19 +357,21 @@ export function Eastwood({ on = {}, children }: { on?: Partial<Record<Parts, (e:
         <mesh key={i} geometry={g.foot} material={m.black} position={[x, EW.feet / 2, z]} />
       ))}
       {/* the strip's buttons and knobs */}
-      <group {...hand('power')}>
+      <group {...hand('power')} userData={{ live: true }}>
         <mesh ref={(o) => void (buttons.current[0] = o)} geometry={g.button} material={m.silver} position={[k.buttons.xs[0], deckY, k.z]} scale={[k.buttons.r[0], 1, k.buttons.r[0]]} />
       </group>
       {(['bt', 'playpause', 'prev', 'next'] as const).map((n, i) => (
-        <group key={n} {...hand(n)}>
+        <group key={n} {...hand(n)} userData={{ live: true }}>
           <mesh ref={(o) => void (buttons.current[i + 1] = o)} geometry={g.button} material={m.silver} position={[k.buttons.xs[i + 1], deckY, k.z]} scale={[k.buttons.r[i + 1], 1, k.buttons.r[i + 1]]} />
         </group>
       ))}
+      <group userData={{ live: true }}>
       <mesh ref={knobSmall} {...hand('small')} geometry={g.knob} material={m.knurl} position={[k.knobs.small.x, deckY, k.z]} scale={[k.knobs.small.r, k.knobs.small.h, k.knobs.small.r]} castShadow />
       <mesh ref={knobBig} {...hand('big')} geometry={g.knob} material={m.knurl} position={[k.knobs.big.x, deckY, k.z]} scale={[k.knobs.big.r, k.knobs.big.h, k.knobs.big.r]} castShadow />
+      </group>
       {/* the platter, turning; what's on it turns with it */}
       <group position={[P.x, deckY, P.z]}>
-        <group ref={platter} {...hand('platter')}>
+        <group ref={platter} {...hand('platter')} userData={{ live: true }}>
           <mesh geometry={g.platterRim} material={m.platter} castShadow receiveShadow />
           <mesh geometry={g.platterTop} material={m.platterTop} position={[0, P.h, 0]} receiveShadow />
           <mesh geometry={g.spindle} material={m.silver} position={[0, P.h, 0]} />
@@ -387,7 +391,7 @@ export function Eastwood({ on = {}, children }: { on?: Partial<Record<Parts, (e:
       {/* the arm: its fixed block, and the arm swinging out of it */}
       <mesh geometry={g.block} material={m.black} position={[A.pivot.x, deckY + A.block.h / 2, A.pivot.z - 8]} castShadow />
       <group position={[A.pivot.x, deckY + A.height, A.pivot.z]}>
-        <group ref={arm}>
+        <group ref={arm} userData={{ live: true }}>
           <group ref={armLift} {...hand('arm')}>
             <mesh geometry={g.tube} material={m.silver} position={[0, 0, A.L / 2]} scale={[1, 1, A.L - 32]} castShadow />
             {/* the headshell, turned in toward the spindle, the cartridge under it, the finger lift out its side */}
@@ -404,7 +408,7 @@ export function Eastwood({ on = {}, children }: { on?: Partial<Record<Parts, (e:
       </group>
       {/* the lid, hinged at the back */}
       <group position={[0, deckY + EW.lid.hinge.y, EW.lid.hinge.z]}>
-        <group ref={lid} {...hand('lid')}>
+        <group ref={lid} {...hand('lid')} userData={{ live: true }}>
           <group position={[0, -EW.lid.hinge.y, -EW.lid.hinge.z]}>
             <mesh geometry={g.lidTop} material={m.lid} position={[0, EW.h - T - EW.lid.t / 2, (EW.deck.z1 + BACK + 6) / 2]} />
             <mesh geometry={g.lidFront} material={m.lid} position={[0, (EW.h - T) / 2, EW.deck.z1 - EW.lid.t / 2]} />
@@ -417,6 +421,7 @@ export function Eastwood({ on = {}, children }: { on?: Partial<Record<Parts, (e:
         ))}
       </group>
     </group>
+    </Static>
   )
 }
 

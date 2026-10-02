@@ -14,7 +14,7 @@ import { sizeOf, type Pressing } from './vinyl'
  * Disc: lying in its frame's xz plane, its middle at the origin, side A up (its label's top toward -z), its bottom
  * at y 0. Jacket: standing in its xy plane, the cover toward +z, its bottom at y 0, its open edge at +x.
  */
-export type Art = { cover: Texture; back: Texture; side: (k: number) => Texture; inks: Inks }
+export type Art = { cover: Texture; back: () => Texture; side: (k: number) => Texture; inks: Inks }
 const cache = new Map<string, Promise<Art>>()
 
 /** the pressing's pictures (cached by album: drawn once however many times it's shown) */
@@ -35,7 +35,8 @@ export function artOf(p: Pressing): Promise<Art> {
       // (each side drawn the first time its record's shown: a crate of albums costs only their jackets)
       const sides: Texture[] = []
       const side = (k: number) => (sides[k] ??= drawSide(p, p.sides[k], inks, p.size === 'lp' ? 2048 : 1024))
-      return { cover, back: drawBack(p, inks), side, inks }
+      let back: Texture | null = null
+      return { cover, back: () => (back ??= drawBack(p, inks)), side, inks }
     })
     cache.set(key, a)
   }
@@ -200,18 +201,42 @@ function edgeArt(p: Pressing, art: Art, along: 'v' | 'u') {
  * touch at its corners. `peek` (0..1): how far its record's slid out of its open edge (+x), standing in it.
  */
 const jackets = new Map<string, RoundedBoxGeometry>()
-export function Jacket({ p, art, peek = 0 }: { p: Pressing; art: Art; peek?: number }) {
+/** the same box, its faces in two groups: the cover (+z), then all the rest (a jacket seen in passing: two draws) */
+const twoFaced = new Map<string, BufferGeometry>()
+function twoFacedOf(box: RoundedBoxGeometry, k: string) {
+  let g = twoFaced.get(k)
+  if (!g) {
+    g = box.clone()
+    // (an index over its points in the new order: its own index's, or, unindexed, the points themselves)
+    const idx = box.index?.array
+    const cover = box.groups[4]
+    const rest: number[] = []
+    const front: number[] = []
+    box.groups.forEach((gr, i) => {
+      for (let j = gr.start; j < gr.start + gr.count; j++) (i === 4 ? front : rest).push(idx ? idx[j] : j)
+    })
+    g.setIndex([...front, ...rest])
+    g.clearGroups()
+    g.addGroup(0, cover.count, 0)
+    g.addGroup(cover.count, rest.length, 1)
+    twoFaced.set(k, g)
+  }
+  return g
+}
+/** `lite`: seen in passing: its cover, and the rest in its spine's colour (its printed spine and back left off) */
+export function Jacket({ p, art, peek = 0, shadow = true, lite = false }: { p: Pressing; art: Art; peek?: number; shadow?: boolean; lite?: boolean }) {
   const S = sizeOf(p)
   const k = `${S.sleeve}`
   let box = jackets.get(k)
   if (!box) jackets.set(k, (box = new RoundedBoxGeometry(S.sleeve, S.sleeve, S.sleeveT, 2, Math.min(1.2, S.sleeveT / 2 - 0.1))))
   const mats = useMemo(() => {
     const edge = bruno({ color: art.inks.spine })
-    return [edge, bruno({ map: edgeArt(p, art, 'v') }), bruno({ map: edgeArt(p, art, 'u') }), edge, bruno({ map: art.cover }), bruno({ map: art.back })]
-  }, [art, p])
+    if (lite) return [bruno({ map: art.cover }), edge]
+    return [edge, bruno({ map: edgeArt(p, art, 'v') }), bruno({ map: edgeArt(p, art, 'u') }), edge, bruno({ map: art.cover }), bruno({ map: art.back() })]
+  }, [art, p, lite])
   return (
     <group>
-      <mesh geometry={box} material={mats} position={[0, S.sleeve / 2, 0]} castShadow receiveShadow />
+      <mesh geometry={lite ? twoFacedOf(box, k) : box} material={mats} position={[0, S.sleeve / 2, 0]} castShadow={shadow} receiveShadow />
       {peek > 0 && (
         // (standing in the jacket's plane, side A toward the cover; slid out of the open edge by peek of its width)
         <group position={[S.sleeve / 2 + peek * 2 * S.r - S.r, S.sleeve / 2, 0]} rotation={[Math.PI / 2, 0, 0]}>

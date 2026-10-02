@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { BoxGeometry, CanvasTexture, ExtrudeGeometry, Path, RepeatWrapping, SRGBColorSpace, Shape, type Group, type Object3D } from 'three'
+import { BoxGeometry, CanvasTexture, ExtrudeGeometry, Path, RepeatWrapping, SRGBColorSpace, Shape, type Group, type InstancedMesh, type Material, type Object3D, Color, Matrix4, Quaternion, Vector3 } from 'three'
 import { bruno } from '../quad/bruno'
+import { Static } from '../../lib/render/Static'
 import { useLook } from '../quad/look'
 import { crateRefs, lookMoved, openCrate, takeOut, useBrowse } from './browse'
 import type { CrateId } from './library'
 import { crateNote, useShelf } from './shelf'
-import { Disc, Jacket, discThick, useArt } from './Record'
+import { Disc, Jacket, discThick, useArt, type Art } from './Record'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import { LP, sizeOf, type Pressing } from './vinyl'
 import { CRATE } from './rack'
 
@@ -130,8 +132,29 @@ function frontArt(label: string, empty: string) {
   return t
 }
 
-function Record({ p, z, pose, onPick, onTake }: { p: Pressing; z: number; pose: 'rest' | 'hover' | 'up' | 'out'; onPick: () => void; onTake: (disc: number, at: Object3D) => void }) {
-  const art = useArt(p)
+/**
+ * A record behind the front one: plain. Its cover's hidden by the one in front (its top edge all that shows), so it's
+ * drawn as one piece in a colour of its own, casting no shadow: a crate of a dozen costs a dozen draws, not 150, and
+ * none of their covers, backs and spines are drawn or loaded till they're seen.
+ */
+const PLAIN = (() => {
+  const g = new RoundedBoxGeometry(LP.sleeve, LP.sleeve, LP.sleeveT, 2, 1.2)
+  g.clearGroups()
+  return g
+})()
+const plainMats = new Map<string, Material>()
+function plainOf(p: Pressing, art: Art | null) {
+  let h = 0
+  for (const ch of p.uri) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  const colour = art?.inks.spine ?? `hsl(${h % 360}, 32%, 68%)`
+  let m = plainMats.get(colour)
+  if (!m) plainMats.set(colour, (m = bruno({ color: colour, shade: '#9a7f9a' })))
+  return m
+}
+
+function Record({ p, z, pose, full, onPick, onTake }: { p: Pressing; z: number; pose: 'rest' | 'hover' | 'up' | 'out'; full: boolean; onPick: () => void; onTake: (disc: number, at: Object3D) => void }) {
+  // (its cover, back, spine: only for the one in front, or one picked out; the rest plain till then)
+  const art = useArt(full || pose !== 'rest' ? p : null)
   const S = sizeOf(p)
   const g = useRef<Group>(null)
   const slides = useRef<(Group | null)[]>([])
@@ -165,7 +188,6 @@ function Record({ p, z, pose, onPick, onTake }: { p: Pressing; z: number; pose: 
       d.visible = d.position.x > 1
     })
   })
-  if (!art) return null
   const stop = (e: ThreeEvent<MouseEvent | PointerEvent>) => e.stopPropagation()
   const discs = p.sides.length / 2
   return (
@@ -181,10 +203,11 @@ function Record({ p, z, pose, onPick, onTake }: { p: Pressing; z: number; pose: 
         }}
         onPointerOut={() => (document.body.style.cursor = '')}
       >
-        <Jacket p={p} art={art} />
+        {art ? <Jacket p={p} art={art} shadow={false} lite={pose === 'rest'} /> : <mesh geometry={PLAIN} material={plainOf(p, null)} position={[0, LP.sleeve / 2, 0]} />}
       </group>
       {/* its records, behind the jacket, sliding out of its open edge (+x) when it's out */}
       {discsOn &&
+        art &&
         Array.from({ length: discs }, (_, j) => (
           <group key={j} ref={(d) => void (slides.current[j] = d)} position={[0, S.sleeve / 2, -S.sleeveT / 2 - 2 - j * (discThick(S) + 2)]} visible={false}>
             <group
@@ -217,6 +240,55 @@ function Record({ p, z, pose, onPick, onTake }: { p: Pressing; z: number; pose: 
   )
 }
 
+/** the records at rest behind the front one: plain jackets, all one draw (an instance each, its own colour) */
+const _m = new Matrix4()
+const _q = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -C.lean)
+const _p = new Vector3()
+const _one = new Vector3(1, 1, 1)
+const _zero = new Vector3(0, 0, 0)
+const _o = new Vector3(0, LP.sleeve / 2, 0)
+const PLAIN_MAT = bruno({ color: '#ffffff', shade: '#9a7f9a' })
+function PlainStack({ records, drawn, z, onOver, onOut, onPick }: { records: Pressing[]; drawn: (i: number) => boolean; z: (i: number) => number; onOver: (i: number) => void; onOut: (i: number) => void; onPick: (i: number) => void }) {
+  const ref = useRef<InstancedMesh>(null)
+  const n = records.length
+  useEffect(() => {
+    const m = ref.current
+    if (!m) return
+    records.forEach((p, i) => {
+      // (its middle: up its height from its foot, the foot leaned back with the rest)
+      _p.copy(_o).applyQuaternion(_q).add(new Vector3(0, C.floor, z(i)))
+      _m.compose(_p, _q, drawn(i) ? _zero : _one)
+      m.setMatrixAt(i, _m)
+      m.setColorAt(i, new Color((plainOf(p, null) as unknown as { color: Color }).color))
+    })
+    m.instanceMatrix.needsUpdate = true
+    if (m.instanceColor) m.instanceColor.needsUpdate = true
+    m.computeBoundingSphere()
+  })
+  if (!n) return null
+  return (
+    <instancedMesh
+      key={n}
+      ref={ref}
+      args={[PLAIN, PLAIN_MAT, n]}
+      receiveShadow
+      onPointerMove={(e) => {
+        e.stopPropagation()
+        if (e.instanceId != null) onOver(e.instanceId)
+        document.body.style.cursor = 'pointer'
+      }}
+      onPointerOut={(e) => {
+        if (e.instanceId != null) onOut(e.instanceId)
+        document.body.style.cursor = ''
+      }}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (e.instanceId != null) onPick(e.instanceId)
+      }}
+    />
+  )
+}
+
 /**
  * A crate of records: `id` which (./library), `label` its name on its card. `onTake` a record clicked out of its
  * jacket (the pressing, which disc, the disc's place in the world). `onCard`: its card clicked (the Dig crate: what
@@ -236,9 +308,8 @@ export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: Cra
   // (empty: what it says while it loads, or why it couldn't; else what it was given)
   const showEmpty = records.length ? '' : crateNote(id, shelf) || empty
   const mFront = useMemo(() => {
-    const f = bruno({ map: frontArt(label, showEmpty), shade: C.colors.pineShade })
-    return [m, m, m, m, f, m]
-  }, [label, showEmpty, m])
+    return bruno({ map: frontArt(label, showEmpty), shade: C.colors.pineShade })
+  }, [label, showEmpty])
   const g = useMemo(() => {
     const W = C.in.w + 2 * C.wall
     return {
@@ -260,6 +331,21 @@ export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: Cra
   }, [id])
   const n = records.length
   const gap = Math.min(28, (C.in.d - 50) / Math.max(1, n - 1))
+  const zOf = (i: number) => C.in.d / 2 - 30 - i * gap
+  const poseOf = (i: number) => (mine && b.mode === 'out' && b.i === i ? 'out' : mine && b.i === i ? 'up' : !mine && over === i ? 'hover' : 'rest') as 'rest' | 'hover' | 'up' | 'out'
+  const pick = (i: number) => gate?.() || (!mine ? openCrate(id, i) : b.mode === 'crate' && b.i === i ? takeOut(i) : openCrate(id, i))
+  // (a record that's been woken stays drawn on its own a moment after it's back at rest: it settles, then rejoins
+  // the batch)
+  const [awake, setAwake] = useState<Set<number>>(() => new Set())
+  const woken = records.map((_, i) => poseOf(i) !== 'rest')
+  const wokenKey = woken.map((w) => (w ? 1 : 0)).join('')
+  useEffect(() => {
+    const now = new Set<number>()
+    woken.forEach((w, i) => w && now.add(i))
+    setAwake((a) => new Set([...a, ...now]))
+    const t = setTimeout(() => setAwake(new Set(now)), 1200)
+    return () => clearTimeout(t)
+  }, [wokenKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const open = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     if (gate?.()) return
@@ -268,6 +354,8 @@ export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: Cra
   }
   return (
     <group ref={(o) => void (refs.current.crate = o)}>
+      {/* (its boards merged: a crate three draws, not eleven) */}
+      <Static>
       <group onClick={open} onPointerOver={(e) => (e.stopPropagation(), !mine && (document.body.style.cursor = 'pointer'))} onPointerOut={() => (document.body.style.cursor = '')}>
         <mesh geometry={g.floor} material={m} position={[0, C.floor / 2, 0]} castShadow receiveShadow />
         {[-1, 1].map((s) => (
@@ -291,22 +379,19 @@ export function Crate({ id, label, onTake, onCard, empty = '', gate }: { id: Cra
         onPointerOver={(e) => (e.stopPropagation(), (document.body.style.cursor = 'pointer'))}
         onPointerOut={() => (document.body.style.cursor = '')}
       />
+      </Static>
       {/* (where a record taken out is: the camera frames it) */}
       <object3D ref={(o) => void (refs.current.out = o)} position={[0, OUT.y + LP.sleeve / 2, OUT.z]} />
       {records.map((p, i) => {
-        const pose = mine && b.mode === 'out' && b.i === i ? 'out' : mine && b.i === i ? 'up' : !mine && over === i ? 'hover' : 'rest'
+        const pose = poseOf(i)
+        if (i !== 0 && pose === 'rest' && !awake.has(i)) return null
         return (
           <group key={p.uri} onPointerOver={() => setOver(i)} onPointerOut={() => setOver((o) => (o === i ? null : o))}>
-            <Record
-              p={p}
-              z={C.in.d / 2 - 30 - i * gap}
-              pose={pose}
-              onPick={() => gate?.() || (!mine ? openCrate(id, i) : b.mode === 'crate' && b.i === i ? takeOut(i) : openCrate(id, i))}
-              onTake={(disc, at) => onTake(p, disc, at)}
-            />
+            <Record p={p} z={zOf(i)} pose={pose} full={i === 0} onPick={() => pick(i)} onTake={(disc, at) => onTake(p, disc, at)} />
           </group>
         )
       })}
+      <PlainStack records={records} drawn={(i) => i === 0 || poseOf(i) !== 'rest' || awake.has(i)} z={zOf} onOver={setOver} onOut={(i) => setOver((o) => (o === i ? null : o))} onPick={pick} />
     </group>
   )
 }

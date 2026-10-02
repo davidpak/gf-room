@@ -18,6 +18,7 @@ import { QuadLime, RideHint } from './QuadLime'
 import { QuadArt } from './QuadArt'
 import { QuadGame } from './QuadGame'
 import { QuadMusic } from './QuadMusic'
+const NO_MUSIC = typeof location !== 'undefined' && new URLSearchParams(location.search).has('nomusic')
 import { RecordsOverlay } from '../records/Overlay'
 import { PaintBox } from '../art/PaintBox'
 import { DolphinButton } from '../gamecube/DolphinButton'
@@ -119,7 +120,8 @@ function Scene({ car, paused }: { car: { current: CarState }; paused: boolean })
         <QuadLime car={car} obstacles={obstacles} />
         <QuadArt car={car} />
         <QuadGame car={car} />
-        <QuadMusic car={car} />
+        {/* (&nomusic: the Quad without the record stand, to measure what it costs) */}
+        {!NO_MUSIC && <QuadMusic car={car} />}
       </World>
       <Photos car={car} />
       <Building />

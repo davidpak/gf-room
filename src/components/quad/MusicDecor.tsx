@@ -346,7 +346,7 @@ export function NowPlayingEasel() {
       <mesh geometry={ledge} material={WOOD} position={[0, EASEL.ledge, 40]} castShadow />
       {d.on && art && (
         <group position={[0, EASEL.ledge + 12, 30]} rotation={[-EASEL.lean, 0, 0]} scale={0.95}>
-          <Jacket p={d.on.p} art={art} />
+          <Jacket p={d.on.p} art={art} lite />
         </group>
       )}
     </group>
@@ -381,6 +381,7 @@ export function Notes({ from }: { from: [number, number, number] }) {
         tex.offset.set(i % 2 ? 0.5 : 0, 0)
         tex.needsUpdate = true
         const mesh = new Mesh(new PlaneGeometry(90, 90), new MeshBasicMaterial({ map: tex, color: NOTE_COLOURS[i % 4], transparent: true, depthWrite: false, opacity: 0 }))
+        mesh.visible = false
         return { mesh, t: 99, x: 0, z: 0 } // (99: resting, till a record plays)
       }),
     [],
@@ -393,6 +394,7 @@ export function Notes({ from }: { from: [number, number, number] }) {
       if (n.t > 2.8) {
         if (!on) {
           ;(n.mesh.material as MeshBasicMaterial).opacity = 0
+          n.mesh.visible = false // (not drawn while it rests)
           n.t = 99
           return
         }
@@ -406,6 +408,7 @@ export function Notes({ from }: { from: [number, number, number] }) {
       n.mesh.position.set(from[0] + n.x + Math.sin(n.t * 2.4 + n.z) * 40, from[1] + 40 + f * 520, from[2] + n.z)
       n.mesh.quaternion.copy(state.camera.quaternion)
       ;(n.mesh.material as MeshBasicMaterial).opacity = Math.min(1, f * 5) * (1 - f) * 0.95
+      n.mesh.visible = true
       n.mesh.scale.setScalar(0.7 + f * 0.6)
     })
   })
@@ -445,12 +448,20 @@ function hangingFace(label: string) {
   t.colorSpace = SRGBColorSpace
   return t
 }
-const HANG_DISC = new CylinderGeometry(150, 150, 3, 48).rotateX(Math.PI / 2) // (standing, its faces toward ±z)
+const HANG_DISC = (() => {
+  // (standing, its faces toward ±z; two groups: its rim, then both faces)
+  const g = new CylinderGeometry(150, 150, 3, 48).rotateX(Math.PI / 2)
+  const [torso, top, bottom] = g.groups
+  g.clearGroups()
+  g.addGroup(torso.start, torso.count, 0)
+  g.addGroup(top.start, top.count + bottom.count, 1)
+  return g
+})()
 const STRING = new CylinderGeometry(1.5, 1.5, 1, 4)
 const HANG_RIM = bruno({ color: '#1f1c24' })
 export function VinylWall() {
   const { hx, hz, eave } = CANOPY
-  const mats = useMemo(() => HANG_LABELS.map((l) => { const f = bruno({ map: hangingFace(l) }); return [HANG_RIM, f, f] as Material[] }), [])
+  const mats = useMemo(() => HANG_LABELS.map((l) => { const f = bruno({ map: hangingFace(l) }); return [HANG_RIM, f] as Material[] }), [])
   const discs = useMemo(() => [-900, -450, 0, 450, 900].map((x, i) => ({ x: x + ((i * 37) % 60) - 30, drop: 260 + ((i * 97) % 200), turn: 0.2 + (i % 3) * 0.12, phase: i * 1.7 })), [])
   const refs = useRef<(Mesh | null)[]>([])
   useFrame(({ clock }) => {
@@ -464,7 +475,7 @@ export function VinylWall() {
       {discs.map((d, i) => (
         <group key={i} position={[Math.max(-hx + 160, Math.min(hx - 160, d.x)), 0, 0]}>
           <mesh geometry={STRING} material={DARK} position={[0, -d.drop / 2, 0]} scale={[1, d.drop, 1]} />
-          <mesh ref={(m) => void (refs.current[i] = m)} geometry={HANG_DISC} material={mats[i]} position={[0, -d.drop - 150, 0]} castShadow />
+          <mesh ref={(m) => void (refs.current[i] = m)} geometry={HANG_DISC} material={mats[i]} position={[0, -d.drop - 150, 0]} />
         </group>
       ))}
     </group>
@@ -552,5 +563,5 @@ export function PicksRack({ records, title }: { records: import('../records/viny
 }
 function PickJacket({ p }: { p: import('../records/vinyl').Pressing }) {
   const art = useArt(p)
-  return art ? <Jacket p={p} art={art} /> : null
+  return art ? <Jacket p={p} art={art} lite /> : null
 }

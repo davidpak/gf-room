@@ -4,7 +4,7 @@ import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier
 import { Quaternion, Vector3, type Group } from 'three'
 import { Static } from '../../lib/render/Static'
 import { Prompts } from '../prompt/Prompts'
-import { setBrowseParent, useBrowse } from '../records/browse'
+import { getBrowse, openCrate, setBrowseParent, takeOut, useBrowse } from '../records/browse'
 import { Crate } from '../records/Crate'
 import { CRATES, type CrateId } from '../records/library'
 import { LooseRecords, takeLoose } from '../records/Loose'
@@ -86,6 +86,7 @@ function Picks() {
 
 export function QuadMusic({ car }: { car: { current: CarState } }) {
   useFillCrates()
+  if (import.meta.env.DEV) Object.assign(window, { __music: { openCrate, takeOut, getBrowse, getLook } }) // (for trying it from the console)
   // ---- looking: the whole stand first; from there, the player or a crate; Esc back a step at a time
   const standSpot = useMemo<Spot>(
     () => ({
@@ -234,13 +235,17 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
       </LiveProp>
       <LiveProp id="musicpicks" label="" set="music" at={home(PICKS_AT.x, 0, PICKS_AT.z, PICKS_AT.rot)} car={car} lift={60} feelPts={[[0, 0]]} feelR={S(RACK.w)}>
         <group scale={K} onClick={toStand}>
-          <Picks />
+          <Static>
+            <Picks />
+          </Static>
         </group>
         <CuboidCollider args={[S(RACK.w), S(RACK.h), S(RACK.d)]} position={[0, S(RACK.h), -40 * K]} mass={1.5} friction={0.8} />
       </LiveProp>
       <LiveProp id="musiceasel" label="" set="music" at={home(EASEL_AT.x, 0, EASEL_AT.z, EASEL_AT.rot)} car={car} lift={60} feelPts={[[0, 0]]} feelR={S(400)}>
         <group scale={K} onClick={toStand}>
-          <NowPlayingEasel />
+          <Static>
+            <NowPlayingEasel />
+          </Static>
         </group>
         <CuboidCollider args={[S(380), S(820), S(260)]} position={[0, S(820), -60 * K]} mass={0.8} friction={0.8} />
       </LiveProp>

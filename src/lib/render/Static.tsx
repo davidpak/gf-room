@@ -145,6 +145,7 @@ export function Static({ children }: { children: ReactNode }) {
     if (!o || !o.parent) return
     o.matrixWorld.multiplyMatrices(o.parent.matrixWorld, o.matrix)
     for (const l of loose.current) {
+      if (!l.parent) continue // (taken away since it was last merged round: gone from the list at the next rebuild)
       if (l.matrixAutoUpdate) l.updateMatrix()
       l.matrixWorld.multiplyMatrices(l.parent!.matrixWorld, l.matrix)
     }
