@@ -324,7 +324,7 @@ function draw(g: CanvasRenderingContext2D, sc: Screen, t: number, c: CubeState) 
 }
 
 /** a frame of Dolphin's window: the game's picture in it (./dolphin finds it inside Dolphin's black bars and under the
- *  window's title bar) filling the glass, as a CRT's picture fills its tube (its edges just under the bezel); a
+ *  window's title bar) filling the bezel's opening edge to edge; a
  *  picture far from 4:3 (widescreen) cropped to it rather than squashed */
 function frame(g: CanvasRenderingContext2D, v: HTMLVideoElement) {
   const c = dolphinCrop(v)

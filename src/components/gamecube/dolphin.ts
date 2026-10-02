@@ -38,7 +38,7 @@ export function dolphinCrop(v: HTMLVideoElement) {
   const d = g.getImageData(0, 0, pw, ph).data
   const lit = (x: number, y: number) => {
     const i = (y * pw + x) * 4
-    return d[i] + d[i + 1] + d[i + 2] > 45
+    return d[i] + d[i + 1] + d[i + 2] > 24 // (Dolphin's bars are pure black; a dark menu's edge isn't)
   }
   // a row (or column) is a bar when almost nothing in it, across the picture so far, is lit
   const rowBar = (y: number, x0: number, x1: number) => {
@@ -74,6 +74,11 @@ export function dolphinCrop(v: HTMLVideoElement) {
   // no bar above it (the picture up against the title bar): the title bar trimmed as before, up to a tenth
   if (y0 === 0 && (x1 - x0 + 1) * 0.75 < y1 - y0 + 1) y0 = Math.round(Math.min((y1 + 1) - (x1 - x0 + 1) * 0.75, ph * 0.1))
   const k = vw / pw
+  // (let out a pixel of the probe all round: better a hair of the bar than a hair of the picture lost)
+  x0 = Math.max(0, x0 - 1)
+  y0 = Math.max(0, y0 - 1)
+  x1 = Math.min(pw - 1, x1 + 1)
+  y1 = Math.min(ph - 1, y1 + 1)
   crop = { x: x0 * k, y: y0 * k, w: (x1 - x0 + 1) * k, h: (y1 - y0 + 1) * k }
   // (too small to be the game: a black screen, a fade; keep the whole window)
   if (crop.w < vw * 0.3 || crop.h < vh * 0.3) crop = { x: 0, y: 0, w: vw, h: vh }

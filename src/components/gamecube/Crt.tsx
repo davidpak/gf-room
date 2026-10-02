@@ -153,7 +153,14 @@ export function Crt({ onBody, onScreen }: { onBody?: (e: ThreeEvent<MouseEvent>)
   const bezel = useMemo(bezelGeometry, [])
   const front = useMemo(() => [bruno({ map: frontTexture() }), M.side], [])
   const back = useMemo(() => bruno({ map: backTexture() }), [])
-  const screen = useMemo(makeScreen, [])
+  const screen = useMemo(() => {
+    const s = makeScreen()
+    // (the picture on exactly the bezel's opening: the glass reaches 8 under the bezel all round, and that's left to
+    // the picture's edge pixels, so nothing of it's lost under the bezel)
+    s.texture.repeat.set((S.w + 16) / S.w, (S.h + 16) / S.h)
+    s.texture.offset.set(-8 / S.w, -8 / S.h)
+    return s
+  }, [])
   const glass = useMemo(() => bruno({ map: screen.texture, emissiveMap: screen.texture, emissive: '#ffffff', emissiveIntensity: 0 }), [screen])
   const lamp = useRef<Mesh>(null)
   const sw = useRef<Mesh>(null)
