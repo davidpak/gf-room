@@ -51,8 +51,8 @@ export const GAP = 1.3
 /** steady pitch: mm the groove moves inward per turn, so a side of sideMax just reaches endMin */
 export const pitchOf = (s: Size) => (s.start - LEAD_IN - s.endMin) / ((s.sideMax / 60_000) * s.rpm)
 
-export type In = { name: string; ms: number; artists?: string }
-export type Band = { track: number; name: string; ms: number; r0: number; r1: number }
+export type In = { name: string; ms: number; uri?: string }
+export type Band = { track: number; name: string; ms: number; uri?: string; r0: number; r1: number }
 export type Side = { letter: string; bands: Band[]; ms: number; pitch: number; end: number }
 export type Pressing = {
   size: 'lp' | 'single'
@@ -106,7 +106,7 @@ export function cutSide(size: Size, letter: string, tracks: { i: number; t: In }
     if (k) r -= GAP
     const r0 = r
     r -= (t.ms / 60_000) * size.rpm * pitch
-    return { track: i, name: t.name, ms: t.ms, r0, r1: r }
+    return { track: i, name: t.name, ms: t.ms, uri: t.uri, r0, r1: r }
   })
   return { letter, bands, ms, pitch, end: r }
 }

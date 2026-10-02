@@ -1,69 +1,20 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { CanvasTexture, PCFSoftShadowMap, SRGBColorSpace, Vector3, type Group } from 'three'
+import { PCFSoftShadowMap, Vector3, type Group } from 'three'
 import { Canvas } from '../../lib/render/Canvas'
 import { loggedIn, login, onAuth } from '../../lib/spotify/auth'
-import { album, cover, savedAlbums } from '../../lib/spotify/api'
 import { CheckSheet } from '../check/CheckSheet'
-import { LOOK, bruno } from '../quad/bruno'
 import { ToyControls } from '../stage/ToyControls'
 import { Disc, Jacket, useArt } from './Record'
-import { LP, checkVinyl, press, type Pressing } from './vinyl'
+import { Light } from './Light'
+import { LP, checkVinyl, type Pressing } from './vinyl'
+import { DEMO, pressSaved } from './crate'
 
 /**
  * Records on their own (gallery first): her saved albums on Spotify pressed into records (logged out: three made-up
  * ones), each jacket standing with its disc lying in front. Click a disc to turn it over (side B), again for the
  * next disc of a double album. &check: the sheet (the standard's numbers, the pressing's checks).
  */
-function sky() {
-  const c = document.createElement('canvas')
-  c.width = 4
-  c.height = 256
-  const g = c.getContext('2d')!
-  const grad = g.createLinearGradient(0, 0, 0, 256)
-  LOOK.sky.forEach((col, i) => grad.addColorStop(i / (LOOK.sky.length - 1), col))
-  g.fillStyle = grad
-  g.fillRect(0, 0, 4, 256)
-  const t = new CanvasTexture(c)
-  t.colorSpace = SRGBColorSpace
-  return t
-}
-const LAWN = bruno({ color: '#7fae57' })
-function Light({ extent = 1200 }: { extent?: number }) {
-  const background = useMemo(sky, [])
-  return (
-    <>
-      <primitive attach="background" object={background} />
-      <directionalLight color={LOOK.light} intensity={LOOK.intensity} position={LOOK.sun.clone().multiplyScalar(2400)} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-extent} shadow-camera-right={extent} shadow-camera-top={extent} shadow-camera-bottom={-extent} shadow-camera-near={50} shadow-camera-far={6000} shadow-bias={-0.0004} shadow-normalBias={0.5} />
-      <mesh material={LAWN} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <circleGeometry args={[4000, 64]} />
-      </mesh>
-    </>
-  )
-}
-
-/** made-up albums, for when she's not logged in */
-const DEMO: Pressing[] = [
-  press({ uri: 'demo:sunday', title: 'Sunday Morning Pancakes', artist: 'The Picnic Ducks', year: '2026', cover: '', tracks: ['Syrup', 'Blueberries', 'Second Helping', 'Orange Juice', 'Nap', 'Dishes (Later)', 'Crumbs', 'Back to Bed', 'Brunch Again'].map((name, i) => ({ name, ms: 150_000 + ((i * 47_000) % 130_000) })) }),
-  press({ uri: 'demo:quad', title: 'Cherry Blossom Quad', artist: 'Rina & David', year: '2026', cover: '', tracks: ['Petals', 'The Long Walk', 'Under the Trees', 'Paper Planes', 'Lime Scooter', 'Melee at Midnight', 'Cookies', 'Lamp Posts', 'Goodnight', 'Again Tomorrow', 'Ducks', 'Fin'].map((name, i) => ({ name, ms: 200_000 + ((i * 61_000) % 160_000) })) }),
-  press({ uri: 'spotify:track:demo', title: 'Our Song', artist: 'Two of Us', year: '2026', cover: '', tracks: [{ name: 'Our Song', ms: 214_000 }] }),
-]
-
-async function pressSaved(n = 6): Promise<Pressing[]> {
-  const albums = await savedAlbums(n)
-  const full = await Promise.all(albums.map((a) => album(a.id)))
-  return full.map((a) =>
-    press({
-      uri: a.uri,
-      title: a.name,
-      artist: a.artists.map((x) => x.name).join(', '),
-      year: a.release_date,
-      cover: cover(a) ?? '',
-      tracks: a.tracks!.items.map((t) => ({ name: t.name, ms: t.duration_ms })),
-    }),
-  )
-}
-
 function One({ p, x }: { p: Pressing; x: number }) {
   const art = useArt(p)
   const [face, setFace] = useState(0) // (sides seen: 0 A, 1 B, 2 C…)
