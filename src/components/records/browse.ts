@@ -76,7 +76,7 @@ export const crateSpot: Spot = {
 export const recordSpot: Spot = {
   key: 'record',
   items: [],
-  hint: 'click a record to play it · A / D for the next one',
+  hint: 'click a record to play it · right-drag to turn it round · A / D for the next one',
   back: 'put it back',
   frame: (pos, at, aspect) => {
     const o = s.crate && crateRefs.get(s.crate)?.out

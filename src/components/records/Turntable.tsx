@@ -3,7 +3,7 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Plane, Vector3, type Group } from 'three'
 import { sdk } from '../../lib/spotify/player'
 import { getDeck, live, now, press, setDeck, sideUp, useDeck } from './deck'
-import { EW, angleFor, deckY, stylusAt } from './victrola'
+import { EW, FIT, angleFor, deckY, stylusAt } from './victrola'
 import { Eastwood } from './Eastwood'
 import { bandStarts, drop, lift, needle, tick } from './play'
 import { cancelChange, changing, sideEnded, sideFrom, sideIndex, turnTo } from './changer'
@@ -23,7 +23,7 @@ import { sizeOf } from './vinyl'
  *   BT / PHONO   the small knob: in BT the player's a speaker for Spotify (▶❚❚ ◀◀ ▶▶ play, skip it)
  */
 const REST = EW.arm.rest
-const MAX = angleFor(EW.platter.hub - 4) // (as far in as it'll go)
+const MAX = angleFor((EW.platter.hub - 4) / FIT) // (as far in as it'll go)
 
 function Driver() {
   const down = useRef(false)
@@ -103,7 +103,8 @@ export function Turntable({ gate }: { gate?: () => boolean } = {}) {
       const s = getDeck()
       setDeck({ power: !s.power, poweredAt: now() })
     },
-    lid: () => setDeck({ lid: !getDeck().lid }),
+    // (not shut over a record: it'd go through it)
+    lid: () => setDeck({ lid: !getDeck().lid || !!getDeck().on }),
     arm: (e: ThreeEvent<PointerEvent>) => {
       if (e.button !== 0) return
       cancelChange()
@@ -185,8 +186,10 @@ export function Turntable({ gate }: { gate?: () => boolean } = {}) {
       <Driver />
       <Eastwood on={gated}>
         {d.on && art && S && (
-          <Flip key={`${d.on.p.uri}/${d.on.disc}`} face={d.on.face} t={discThick(S)} r={S.r}>
-            <Disc p={d.on.p} art={art} disc={d.on.disc} />
+          <Flip key={`${d.on.p.uri}/${d.on.disc}`} face={d.on.face} t={discThick(S) * FIT} r={S.r * FIT}>
+            <group scale={FIT}>
+              <Disc p={d.on.p} art={art} disc={d.on.disc} />
+            </group>
           </Flip>
         )}
       </Eastwood>
@@ -203,10 +206,11 @@ export const stylusNow = () => stylusAt(live.a)
  *   slid       eased left, its edge out from under the arm
  *   up         lifted level, higher than it's wide (on its edge, it's still clear of the deck)
  *   over       turned over
- * and back down the same way, the other face up. A record just put on comes down onto the spindle that way too
+ * and back down the same way, the other face up. Up on its edge it's brought forward too (toward the strip): the
+ * open lid leans back over the deck's back half, and a record standing there would go through its glass. A record just put on comes down onto the spindle that way too
  * (from up, slid, tipped). The poses are joined by a smooth curve (Catmull-Rom through them, still at the ends).
  */
-type Pose = [x: number, y: number, rz: number] // (rz: the turn about the front-to-back axis; less lowers the right side)
+type Pose = [x: number, y: number, rz: number, z: number] // (rz: the turn about the front-to-back axis; less lowers the right side; z: forward)
 function curve(keys: Pose[], times: number[], t: number): Pose {
   const n = keys.length
   if (t <= times[0]) return keys[0]
@@ -218,7 +222,7 @@ function curve(keys: Pose[], times: number[], t: number): Pose {
   // tangents: through the neighbours (none at the ends: it starts and stops still)
   const tan = (j: number, c: number) => (j === 0 || j === n - 1 ? 0 : ((keys[j + 1][c] - keys[j - 1][c]) / (times[j + 1] - times[j - 1])) * h)
   const out: number[] = []
-  for (let c = 0; c < 3; c++) {
+  for (let c = 0; c < 4; c++) {
     const p0 = keys[i][c]
     const p1 = keys[i + 1][c]
     const m0 = tan(i, c)
@@ -238,13 +242,16 @@ function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; chi
   const tip = Math.asin((EW.platter.spindleH + 3) / r)
   const slide = -26
   const H = r + 35
+  // (forward enough that, on its edge, its back edge is in front of the open lid's front edge: z -62 from the
+  // cabinet's middle, the spindle at -14)
+  const fwd = Math.max(0, r - 14 - 62 + 45)
   const path = useMemo(() => {
-    const down = (f: number): Pose => [0, 0, f * Math.PI]
-    const tipped = (f: number): Pose => [0, r * Math.sin(tip), f * Math.PI - tip]
-    const slid = (f: number): Pose => [slide, r * Math.sin(tip) + 6, f * Math.PI - tip]
-    const up = (f: number): Pose => [slide, H, f * Math.PI]
+    const down = (f: number): Pose => [0, 0, f * Math.PI, 0]
+    const tipped = (f: number): Pose => [0, r * Math.sin(tip), f * Math.PI - tip, 0]
+    const slid = (f: number): Pose => [slide, r * Math.sin(tip) + 6, f * Math.PI - tip, fwd * 0.4]
+    const up = (f: number): Pose => [slide, H, f * Math.PI, fwd]
     return { down, tipped, slid, up }
-  }, [r, tip, H])
+  }, [r, tip, H, fwd])
   useFrame((_, dtRaw) => {
     const o = g.current
     if (!o) return
@@ -254,7 +261,7 @@ function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; chi
     if (arriving.current) {
       // put on: in from above, down the last part of the way
       clock.current += dt
-      const keys = [[slide, H + 60, face * Math.PI] as Pose, P.slid(face), P.tipped(face), P.down(face)]
+      const keys = [[slide, H + 60, face * Math.PI, fwd] as Pose, P.slid(face), P.tipped(face), P.down(face)]
       const times = [0, 0.55, 0.85, 1.15]
       pose = curve(keys, times, clock.current)
       if (clock.current >= 1.15) {
@@ -265,7 +272,7 @@ function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; chi
       clock.current += dt
       const f0 = from.current
       // (over: the turn continues the same way round from where it was)
-      const keys = [P.down(f0), P.tipped(f0), P.slid(f0), P.up(f0), [slide, H, (f0 + 1) * Math.PI] as Pose, P.slid(f0 + 1 as 0 | 1), P.tipped(f0 + 1 as 0 | 1), P.down(f0 + 1 as 0 | 1)]
+      const keys = [P.down(f0), P.tipped(f0), P.slid(f0), P.up(f0), [slide, H, (f0 + 1) * Math.PI, fwd] as Pose, P.slid(f0 + 1 as 0 | 1), P.tipped(f0 + 1 as 0 | 1), P.down(f0 + 1 as 0 | 1)]
       const times = [0, 0.35, 0.6, 1.0, 1.55, 1.95, 2.2, 2.55]
       pose = curve(keys, times, clock.current)
       if (clock.current >= 2.55) {
@@ -275,6 +282,7 @@ function Flip({ face, t, r, children }: { face: 0 | 1; t: number; r: number; chi
       }
     } else pose = P.down(face)
     o.position.x = pose[0]
+    o.position.z = pose[3]
     o.rotation.z = pose[2]
     // (its thickness made up as it turns over: the disc's turned about its own middle)
     o.position.y = pose[1] + (t * (1 - Math.cos(pose[2]))) / 2

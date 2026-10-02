@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { BoxGeometry, CanvasTexture, Euler, ExtrudeGeometry, Matrix4, Path, Quaternion, RepeatWrapping, SRGBColorSpace, Shape, Vector3, type Group, type InstancedMesh } from 'three'
 import { bruno } from '../quad/bruno'
 import { Static } from '../../lib/render/Static'
@@ -143,6 +143,8 @@ const MAX = 50 // (records the crate holds: a 4.5 mm jacket every 5 mm)
  * The record up (or out), close up: its jacket with its own cover (sharp at this size, where the sheet's square
  * isn't), and, out, its records sliding out of the jacket's open edge, fanned. Placed by the crate, each frame,
  * where its jacket in the crate is; `ready` once its cover's in hand (till then the crate's own jacket shows).
+ * Out, a right-drag turns it round (jacket and records together, about their middle), to see its back, its edges,
+ * its records from behind; it turns back square as it goes back in.
  */
 function Hero({ p, out, onUp, onPlay, ready, place }: { p: Pressing; out: boolean; onUp: () => void; onPlay: (disc: number) => void; ready: (on: boolean) => void; place: (g: Group | null) => void }) {
   const art = useArt(p)
@@ -156,8 +158,52 @@ function Hero({ p, out, onUp, onPlay, ready, place }: { p: Pressing; out: boolea
   const [over, setOver] = useState<number | null>(null)
   // (its records only made while it's out, or going back in)
   const [discsOn, setDiscsOn] = useState(false)
+  // ---- turned round by a right-drag while it's out
+  const dom = useThree((s) => s.gl.domElement)
+  const spin = useRef<Group>(null)
+  const turn = useRef({ yaw: 0, pitch: 0, from: null as { x: number; y: number } | null })
+  useEffect(() => {
+    if (!out) return
+    const t = turn.current
+    // (caught before anything else on the page sees it: the right button's this record's, while it's out)
+    const down = (e: PointerEvent) => {
+      if (e.button !== 2) return
+      e.preventDefault()
+      e.stopPropagation()
+      t.from = { x: e.clientX, y: e.clientY }
+    }
+    const move = (e: PointerEvent) => {
+      if (!t.from) return
+      t.yaw += (e.clientX - t.from.x) * 0.012
+      t.pitch = Math.max(-1.35, Math.min(1.35, t.pitch + (e.clientY - t.from.y) * 0.012))
+      t.from = { x: e.clientX, y: e.clientY }
+    }
+    const up = (e: PointerEvent) => void (e.button === 2 && (t.from = null))
+    const menu = (e: Event) => e.preventDefault()
+    dom.addEventListener('pointerdown', down, true)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    dom.addEventListener('contextmenu', menu)
+    return () => {
+      dom.removeEventListener('pointerdown', down, true)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      dom.removeEventListener('contextmenu', menu)
+      t.from = null
+      // (back square as it goes back in)
+      t.yaw = 0
+      t.pitch = 0
+    }
+  }, [out, dom])
   useFrame((_, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
+    const sp = spin.current
+    if (sp) {
+      // (the shortest way round to where it's turned)
+      const k = Math.min(1, dt * 14)
+      sp.rotation.y += (turn.current.yaw - sp.rotation.y) * k
+      sp.rotation.x += (turn.current.pitch - sp.rotation.x) * k
+    }
     // its records slide out once it's out (one after the other), back in before it goes back
     outT.current = out ? outT.current + dt : Math.max(0, Math.min(outT.current, 0.9) - dt * 3)
     if (out !== discsOn && (out || outT.current === 0)) setDiscsOn(out)
@@ -173,8 +219,13 @@ function Hero({ p, out, onUp, onPlay, ready, place }: { p: Pressing; out: boolea
   const stop = (e: ThreeEvent<MouseEvent | PointerEvent>) => e.stopPropagation()
   const discs = p.sides.length / 2
   if (!art) return null
+  // (turned about the middle of the whole: the jacket and its records fanned out of it)
+  const cx = fanned(p)
   return (
     <group ref={place}>
+      <group position={[cx, S.sleeve / 2, 0]}>
+      <group ref={spin}>
+      <group position={[-cx, -S.sleeve / 2, 0]}>
       <group
         onClick={(e) => {
           stop(e)
@@ -186,7 +237,8 @@ function Hero({ p, out, onUp, onPlay, ready, place }: { p: Pressing; out: boolea
         }}
         onPointerOut={() => (document.body.style.cursor = '')}
       >
-        <Jacket p={p} art={art} shadow={false} lite />
+        {/* (out, it can be turned round: its back printed, its spine; in the crate its cover's all that's seen) */}
+        <Jacket p={p} art={art} shadow={false} lite={!out} />
       </group>
       {/* its records, behind the jacket, sliding out of its open edge (+x) when it's out: a click plays one */}
       {discsOn &&
@@ -216,6 +268,9 @@ function Hero({ p, out, onUp, onPlay, ready, place }: { p: Pressing; out: boolea
             </group>
           </group>
         ))}
+      </group>
+      </group>
+      </group>
     </group>
   )
 }
@@ -226,9 +281,9 @@ function warm(p: Pressing) {
   const w = window as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => void }
   const idle = (f: () => void) => (w.requestIdleCallback ? w.requestIdleCallback(f, { timeout: 600 }) : setTimeout(f, 60))
   void artOf(p).then((a) => {
-    // (one side at a time: each its own idle moment)
+    // (one side at a time, then the jacket's back: each its own idle moment)
     const next = (k: number) => {
-      if (k >= Math.min(2, p.sides.length)) return
+      if (k >= Math.min(2, p.sides.length)) return idle(() => uploadSoon(a.back()))
       idle(() => {
         const s = a.side(k)
         uploadSoon(s.label)

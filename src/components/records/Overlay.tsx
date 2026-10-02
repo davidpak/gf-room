@@ -61,7 +61,7 @@ function About({ bottom, hints }: { bottom: number; hints: boolean }) {
       )}
       {hints && (
       <div style={{ ...T, fontWeight: 400, fontSize: 16, opacity: 0.75, marginTop: 4 }}>
-        {b.mode === 'crate' ? 'A / D or ← → to flip through · Enter (or click it) to take it out · Esc to step back' : `click ${discs > 1 ? 'a record' : 'the record'} to play it · A / D for the next one · Esc to put it back`}
+        {b.mode === 'crate' ? 'A / D or ← → to flip through · Enter (or click it) to take it out · Esc to step back' : `click ${discs > 1 ? 'a record' : 'the record'} to play it · right-drag to turn it round · A / D for the next one · Esc to put it back`}
       </div>
       )}
       <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>

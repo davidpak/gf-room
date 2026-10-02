@@ -52,19 +52,8 @@ export function inksOf(im: CanvasImageSource | null): Inks {
   return { label: hex(pick.r, pick.g, pick.b), ink: lum > 140 ? '#1d1a24' : '#fbf3e6', spine: hex(ar / n, ag / n, ab / n), spineInk: avgLum > 140 ? '#1d1a24' : '#fbf3e6', rim: '#2a2a30', palette }
 }
 
-/** how it's pressed: classic black (most), or one solid colour, the cover's own; the same album always the same */
-export type Pressed = 'black' | 'colour'
-export function pressedAs(uri: string): Pressed {
-  let h = 0
-  for (const ch of uri) h = (h * 33 + ch.charCodeAt(0)) >>> 0
-  return (h % 1000) / 1000 < 0.6 ? 'black' : 'colour'
-}
-
-/** the vinyl itself before the grooves are cut in it: one solid colour */
-function vinylBase(kind: Pressed, pal: RGB[]) {
-  const q = pal[0]
-  return new Color(kind === 'black' ? 'rgb(26, 26, 27)' : `rgb(${Math.round(q[0] * 0.85)}, ${Math.round(q[1] * 0.85)}, ${Math.round(q[2] * 0.85)})`)
-}
+/** the vinyl itself before the grooves are cut in it: black, always (the label's where the colour is) */
+const VINYL = new Color('rgb(26, 26, 27)')
 
 const mmss = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`
 const hash = (i: number) => {
@@ -222,7 +211,7 @@ export function drawSide(p: Pressing, side: Side, inks: Inks): SideArt {
   const t = new CanvasTexture(c)
   t.colorSpace = SRGBColorSpace
   t.anisotropy = 8
-  return { label: t, prof: pt, base: vinylBase(pressedAs(p.uri), inks.palette), reach }
+  return { label: t, prof: pt, base: VINYL, reach }
 }
 
 /** the jacket's back: the album, its songs by side with their times, on the label's colour */

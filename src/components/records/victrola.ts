@@ -61,6 +61,13 @@ export const EW = {
 }
 
 export const deckY = EW.cab // the top's surface
+/**
+ * A record on this player is drawn at this size (its own mm × FIT). The Eastwood's a small player: a full 12" (r
+ * 150.8) would run through the arm's pivot block (134 from the spindle) and the lid's panes; at 0.85 (r 128) it
+ * clears the block by 6. The arm's mapping follows (angleFor, radiusAtAngle: in the record's own mm), so the songs
+ * still sit under the needle where they're cut.
+ */
+export const FIT = 0.85
 export const platterTop = deckY + EW.platter.h
 
 /** where the stylus is, for the arm turned by `a` (radians, toward the platter from straight forward) */
@@ -68,8 +75,9 @@ export function stylusAt(a: number) {
   const { pivot, L } = EW.arm
   return { x: pivot.x - L * Math.sin(a), z: pivot.z + L * Math.cos(a) }
 }
-/** the arm's angle for the stylus at radius r from the spindle (the swing toward the platter that reaches it) */
-export function angleFor(r: number) {
+/** the arm's angle for the stylus at radius r of the record on the platter (its own mm: FIT'd here) */
+export function angleFor(rec: number) {
+  const r = rec * FIT
   const { pivot, L } = EW.arm
   const dx = pivot.x - EW.platter.x
   const dz = pivot.z - EW.platter.z
@@ -83,7 +91,7 @@ export function angleFor(r: number) {
 }
 export const radiusAtAngle = (a: number) => {
   const s = stylusAt(a)
-  return Math.hypot(s.x - EW.platter.x, s.z - EW.platter.z)
+  return Math.hypot(s.x - EW.platter.x, s.z - EW.platter.z) / FIT
 }
 
 export type Check = { what: string; value: string; ok: boolean }
@@ -96,15 +104,16 @@ export function checkEastwood(): Check[] {
   c('131 high with the lid shut [M]', `${EW.cab} + lid ${EW.h - EW.cab} = ${lidTop}`, lidTop === 131)
   c('the strip + deck + back fill the depth', `${EW.strip} + ${EW.deck.z1 - EW.deck.z0} + ${EW.back + 2} = ${EW.strip + (EW.deck.z1 - EW.deck.z0) + EW.back + 2}`, EW.strip + (EW.deck.z1 - EW.deck.z0) + EW.back + 2 === EW.d)
   c('platter inside the deck', `x ${P.x - P.r}…${P.x + P.r}, z ${P.z - P.r}…${P.z + P.r}`, P.x - P.r > -EW.w / 2 + EW.side && P.z - P.r > EW.deck.z0 && P.z + P.r < EW.deck.z1)
-  const over = -(P.x - 150.8) - EW.w / 2
-  c('a 12" overhangs the left side by about an inch [G]', `${over.toFixed(0)} mm`, over > 15 && over < 40)
+  const B = EW.arm.block
+  const near = Math.hypot(EW.arm.pivot.x - B.w / 2 - P.x, Math.max(0, Math.abs(EW.arm.pivot.z - P.z) - B.d / 2))
+  c('a record (drawn at FIT) clears the pivot block', `${(150.8 * FIT).toFixed(1)} < ${near.toFixed(1)}`, 150.8 * FIT + 3 < near)
   const hold = Math.hypot(EW.arm.pivot.x - P.x, EW.arm.pivot.z - P.z)
   c('pivot to spindle about the arm’s length (it swings over the whole record) [MD]', `${hold.toFixed(1)} vs ${EW.arm.L}`, hold < EW.arm.L + 15 && hold > EW.arm.L - 15)
   const aOut = angleFor(146.05)
   const aIn = angleFor(60.3)
   c('the arm reaches the lead-in (r 146) and the run-out (r 60)', `${((aOut * 180) / Math.PI).toFixed(1)}° … ${((aIn * 180) / Math.PI).toFixed(1)}°`, Math.abs(radiusAtAngle(aOut) - 146.05) < 0.01 && Math.abs(radiusAtAngle(aIn) - 60.3) < 0.01 && aIn > aOut && aOut > 0)
   const rest = stylusAt(EW.arm.rest)
-  c('at rest, the stylus off the platter', `r ${Math.hypot(rest.x - P.x, rest.z - P.z).toFixed(0)} > ${P.r}`, Math.hypot(rest.x - P.x, rest.z - P.z) > 150.8)
+  c('at rest, the stylus off the platter', `r ${Math.hypot(rest.x - P.x, rest.z - P.z).toFixed(0)} > ${P.r}`, Math.hypot(rest.x - P.x, rest.z - P.z) > 150.8 * FIT)
   c('at rest, the stylus inside the deck', `(${rest.x.toFixed(0)}, ${rest.z.toFixed(0)})`, rest.z < EW.deck.z1 && rest.x < EW.w / 2 - EW.side)
   const sweep = [60.3, 100, 146.05].map((r) => stylusAt(angleFor(r))).every((s) => s.z < EW.deck.z1)
   c('the head stays behind the strip as it swings', sweep ? 'yes' : 'no', sweep)
