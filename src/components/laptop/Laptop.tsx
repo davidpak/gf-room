@@ -206,6 +206,7 @@ function lidPose(a: number) {
 
 /** RinaOS's px to the display's mm (drei's Html: a px is distanceFactor / 400 world units) */
 const SCREEN_DF = (L.display.w / OS_W) * 400
+const _t = new Vector3()
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
 
 /** Using the laptop: the camera glides round to face the screen, square on, near enough that the
@@ -214,13 +215,20 @@ const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
 function UseCamera({ anchor }: { anchor: RefObject<Group | null> }) {
   const active = useOsMode()
   const camera = useThree((s) => s.camera) as PerspectiveCamera
-  const controls = useThree((s) => s.controls) as unknown as { enabled: boolean; target: Vector3; update: () => void } | null
+  // the gallery's orbit controls (a `target`) or the room's camera-controls (getTarget / setLookAt)
+  const controls = useThree((s) => s.controls) as unknown as {
+    enabled: boolean
+    target?: Vector3
+    getTarget?: (out: Vector3) => Vector3
+    setLookAt?: (px: number, py: number, pz: number, tx: number, ty: number, tz: number, smooth: boolean) => void
+  } | null
+  const targetOf = () => (controls!.target ? controls!.target.clone() : controls!.getTarget!(new Vector3()))
   const tween = useRef<{ from: { p: Vector3; t: Vector3 }; to: { p: Vector3; t: Vector3 }; k: number; back: boolean } | null>(null)
   const saved = useRef<{ p: Vector3; t: Vector3 } | null>(null)
   useEffect(() => {
     const a = anchor.current
     if (!a || !controls) return
-    const now = { p: camera.position.clone(), t: controls.target.clone() }
+    const now = { p: camera.position.clone(), t: targetOf() }
     if (active) {
       saved.current = now
       const c = a.getWorldPosition(new Vector3())
@@ -241,8 +249,14 @@ function UseCamera({ anchor }: { anchor: RefObject<Group | null> }) {
     w.k = Math.min(1, w.k + Math.min(dt, 1 / 30) / 0.95)
     const k = ease(w.k)
     camera.position.lerpVectors(w.from.p, w.to.p, k)
-    controls.target.lerpVectors(w.from.t, w.to.t, k)
-    camera.lookAt(controls.target)
+    const t = _t.lerpVectors(w.from.t, w.to.t, k)
+    if (controls.target) {
+      controls.target.copy(t)
+      camera.lookAt(t)
+    } else {
+      const p = camera.position
+      controls.setLookAt?.(p.x, p.y, p.z, t.x, t.y, t.z, false)
+    }
     if (w.k >= 1) {
       tween.current = null
       if (w.back) {
