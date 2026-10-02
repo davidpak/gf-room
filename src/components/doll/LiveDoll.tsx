@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import { Euler, Quaternion, Vector3, type Group, type Matrix4 } from 'three'
 import { CapsuleCollider, CuboidCollider, RigidBody, useBeforePhysicsStep, useSphericalJoint, type RapierRigidBody } from '@react-three/rapier'
 import { Holdable } from '../../lib/physics/Holdable'
@@ -15,23 +15,25 @@ import type { DollRig } from './Doll'
  * (right-drag), set him down anywhere; "Return David" sits him back in his spot.
  *
  * His arms and legs are things of their own: each a light body pinned at its shoulder or hip (a ball joint)
- * and drawn back to its seated pose by a soft spring, so they swing and dangle when he's carried, flop when
- * he's dropped, bump into things, and settle back as he sits. They don't touch his body or each other (a
- * plush's limbs press into it). His body and head are the one body you carry.
+ * and drawn back to its seated pose by a spring, so they swing and dangle when he's carried, flop when he's
+ * dropped, and settle back as he sits. They bump into each other and into everything else; the legs into his
+ * body too (the arms hang against his sides, so not them). His body and head are the one body you carry.
  *
- * Shapes, in SeatedDoll's frame (his bottom on y 0, facing +z), mm, from ./spec: the body and head above the
- * hips (the beanie 92 across), the legs 18 thick down to the shoe (132 from the hip), the arms 10 thick to
- * the end of the hand (~90 from the shoulder). A plush: about 150 g, most of it in the body.
+ * Shapes, in SeatedDoll's frame (his bottom on y 0, facing +z), mm, from ./spec: the body and head from just
+ * above the legs (the beanie 92 across) and a seat behind the hips, so he sits, not tips over; the legs 18
+ * thick, the arms 10, each as it's drawn (the arm is modelled hanging out by DOLL.arm.spread) and cut just
+ * short enough that seated, nothing reaches into the desk: in the seated pose every limb lies on it, clear
+ * of the others (4.5 between the legs, 6 from leg to hand). A plush: about 150 g, most of it in the body.
+ * (Tried on its own in Rapier first: perched, every limb holds within 3°; dropped 15 cm, he lands sitting.)
  */
 const R = DOLL.rig
 const A = DOLL.arm
-const BODY = { half: [44, 106, 40] as const, at: [0, 118, -8] as const, mass: 0.09 }
+const BODY = { half: [44, 93, 40] as const, at: [0, 131, -8] as const, mass: 0.08 }
+const SEATBOX = { half: [40, 19, 23.5] as const, at: [0, 19.5, -24.5] as const, mass: 0.01 } // (behind the legs' ends)
 const LEG = { r: 18, len: R.hipY - 14, mass: 0.02 }
 const ARM = { r: 10, len: -A.sleeve[0][1] + A.hand.len + 2, mass: 0.01 }
-const SPRING = { k: 260, damp: 9 } // 1/s² and 1/s: soft, a little floppy; it sags a touch hanging
-const LIMB = 0x0020 // his limbs' own collision bit: they meet everything but his body and each other
-const BODY_GROUPS = groups(GROUP.item, 0xffff & ~LIMB)
-const LIMB_GROUPS = groups(LIMB, 0xffff & ~LIMB)
+const SPRING = { k: 900, damp: 16 } // 1/s² and 1/s: firm enough to hold the pose, still swings when he's moved
+const ITEM = groups(GROUP.item, 0xffff)
 
 const X = new Vector3(1, 0, 0)
 const rotX = (a: number) => new Quaternion().setFromAxisAngle(X, a)
@@ -42,41 +44,52 @@ const rotZ = (a: number) => new Quaternion().setFromAxisAngle(new Vector3(0, 0, 
 const waist = new Vector3(0, R.waistY + SEAT.hipH - R.hipY - SEAT.drop, 0)
 const LIMBS = ([1, -1] as const).flatMap((side) => [
   {
-    key: side > 0 ? 'legL' : 'legR',
+    key: (side > 0 ? 'legL' : 'legR') as 'legL' | 'legR' | 'armL' | 'armR',
     at: new Vector3(side * DOLL.legs.x, SEAT.hipH, 0),
     rest: rotX(SEAT.legX),
     out: rotZ(side * SEAT.splay),
+    model: new Quaternion(),
     shape: LEG,
     // (the drawing's turn = the body's turn back off, then this)
     under: new Quaternion(),
   },
   {
-    key: side > 0 ? 'armL' : 'armR',
+    key: (side > 0 ? 'armL' : 'armR') as 'legL' | 'legR' | 'armL' | 'armR',
     at: waist.clone().add(new Vector3(side * A.shoulder[0], A.shoulder[1] - R.waistY, 0).applyQuaternion(rotX(-SEAT.lean))),
     rest: rotX(SEAT.armX - SEAT.lean),
     out: rotZ(-side * SEAT.armIn),
+    model: rotZ(side * A.spread), // (modelled hanging out this much)
     shape: ARM,
     under: rotX(-SEAT.lean), // (the arms hang off the torso, which leans back)
   },
-]) as { key: 'legL' | 'legR' | 'armL' | 'armR'; at: Vector3; rest: Quaternion; out: Quaternion; shape: typeof LEG; under: Quaternion }[]
+]).map((L) => {
+  // its shape as drawn, and cut short enough that seated its lowest point is 0.5 above the desk
+  const turn = L.out.clone().multiply(L.model)
+  const d = new Vector3(0, -1, 0).applyQuaternion(turn).applyQuaternion(L.rest)
+  const r = L.shape.r
+  const low = (len: number) => Math.min(L.at.y + d.y * r, L.at.y + d.y * (len - r)) - r
+  const len = low(L.shape.len) < 0.5 && d.y < 0 ? r + (0.5 + r - L.at.y) / d.y : L.shape.len
+  return { ...L, turn, len }
+})
 
 const _q = new Quaternion()
 const _g = new Quaternion()
 const _p = new Vector3()
 const _e = new Vector3()
 
-/** one limb: its body, its ball joint at the body, its collider turned out as drawn */
+/** one limb: its body, its ball joint at the body (touching it only if it's a leg), its collider as drawn */
 function Limb({ torso, limb, out }: { torso: RefObject<RapierRigidBody | null>; limb: (typeof LIMBS)[number]; out: { body: RefObject<RapierRigidBody | null>; draw: RefObject<Group | null> } }) {
-  useSphericalJoint(torso as RefObject<RapierRigidBody>, out.body as RefObject<RapierRigidBody>, [
+  const joint = useSphericalJoint(torso as RefObject<RapierRigidBody>, out.body as RefObject<RapierRigidBody>, [
     [limb.at.x, limb.at.y, limb.at.z],
     [0, 0, 0],
   ])
-  const half = limb.shape.len / 2 - limb.shape.r
-  const c = new Vector3(0, -limb.shape.len / 2, 0).applyQuaternion(limb.out)
+  useEffect(() => joint.current?.setContactsEnabled(limb.key.startsWith('leg')))
+  const half = limb.len / 2 - limb.shape.r
+  const c = new Vector3(0, -limb.len / 2, 0).applyQuaternion(limb.turn)
   return (
     <RigidBody ref={out.body} colliders={false} position={[0, -2000, 0]} linearDamping={0.6} angularDamping={0.8} ccd>
       <group ref={out.draw} />
-      <CapsuleCollider args={[half, limb.shape.r]} position={[c.x, c.y, c.z]} rotation={new Euler().setFromQuaternion(limb.out)} mass={limb.shape.mass} friction={1} restitution={0} collisionGroups={LIMB_GROUPS} />
+      <CapsuleCollider args={[half, limb.shape.r]} position={[c.x, c.y, c.z]} rotation={new Euler().setFromQuaternion(limb.turn)} mass={limb.shape.mass} friction={1} restitution={0} collisionGroups={ITEM} />
     </RigidBody>
   )
 }
@@ -165,7 +178,8 @@ export function LiveDoll({ homeAt, spawn }: { homeAt: () => Matrix4 | null; spaw
         <group ref={torsoDraw} {...perch.hover.bind}>
           <SeatedDoll limbs={drive} />
         </group>
-        <CuboidCollider args={[...BODY.half]} position={[...BODY.at]} mass={BODY.mass} friction={1} collisionGroups={BODY_GROUPS} />
+        <CuboidCollider args={[...BODY.half]} position={[...BODY.at]} mass={BODY.mass} friction={1} collisionGroups={ITEM} />
+        <CuboidCollider args={[...SEATBOX.half]} position={[...SEATBOX.at]} mass={SEATBOX.mass} friction={1} collisionGroups={ITEM} />
       </Holdable>
       {LIMBS.map((L) => (
         <Limb key={L.key} torso={perch.body} limb={L} out={limbs[L.key]} />
