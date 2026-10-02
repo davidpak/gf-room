@@ -1,0 +1,283 @@
+import { useMemo, useRef, useState } from 'react'
+import { CatmullRomCurve3, Matrix4, Quaternion, Vector3, type Group } from 'three'
+import type { RapierRigidBody } from '@react-three/rapier'
+import { useDeskMotor } from '../../lib/motor'
+import { power } from '../../lib/power'
+import { Desk } from './Desk'
+import { DESK, STACK } from './spec'
+import { Lamp } from '../room/Lamp'
+import { SeatedDoll, SEATED } from '../doll/SeatedDoll'
+import { LiveCharger, type ChargerSetup, type ChargerState } from '../charger/ChargerPhysics'
+import { CHARGER, LAMP_BACK, cablePoints, lampOutlets } from '../charger/spec'
+import { LAMP } from '../lamp/spec'
+import { PLUGS, WallOutlet, cordRoute, plugBack } from '../power/PowerCord'
+import { LiveCord, type CordSetup, type Socket } from '../power/LiveCord'
+import { LampTrinkets } from '../clip/LiveClip'
+import { LiveMints } from '../mints/Mints'
+import { MINTS } from '../mints/spec'
+import { LiveTissues } from '../tissues/Tissues'
+import { TISSUES } from '../tissues/spec'
+import { LAPTOP_BOTTOM, LiveLaptop, laptopSockets } from '../laptop/Laptop'
+
+// Rina's lamp on the back-right corner, and David (crocheted) sitting against its base
+const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
+const LAMP_YAW = -0.6 // turned to face into the desk
+const DOLL_YAW = -1.3 // on the desk side of the lamp, facing the room
+const DOLL_R = 110 - SEATED.backZ - 4 // his back against the rim of the lamp's base
+
+/**
+ * The wall outlet behind the desk, at outlet height, on the right where the lamp and the desk's motor
+ * are (x in the desk's frame). The lamp plugs into the top socket, the desk into the bottom one.
+ */
+const OUTLET = { x: 450, y: 300 }
+/** Rina's Ice Breakers: front right of the desk, turned a little toward the room (desktop frame) */
+const MINTS_HOME = new Matrix4().makeRotationY(-0.4).setPosition(300, MINTS.puck.h / 2, 150)
+// the Kleenex on the right, in front of the lamp
+// her MacBook a little right of the middle (in the charger's reach), open, facing her chair
+const LAPTOP_HOME = new Matrix4().makeRotationY(0.05).setPosition(60, LAPTOP_BOTTOM, 50)
+const TISSUES_HOME = new Matrix4().makeRotationY(-0.25).setPosition(505, TISSUES.box.h / 2, 70)
+const LAMP_OUTLETS = lampOutlets()
+const LAMP_M = new Matrix4().makeRotationY(LAMP_YAW).setPosition(...LAMP_AT) // lamp frame -> desktop frame
+const CORD_R = PLUGS[2].cord
+const MOTOR_X = DESK.legX - DESK.outer.w / 2 - DESK.motor.r - 2 // as Desk draws the motor
+const MOTOR_Y = STACK.bracketBottom - DESK.motor.len - (DESK.topUnder + DESK.top.t) // its bottom, below the desktop
+/**
+ * The cords are just long enough: plugged in with the desk right up, with a little to spare, so they
+ * hang from the desk to the wall (a deeper sag when it's down) rather than coil on the floor. The
+ * desk's hangs round behind the right foot (x, z in the desk's frame), not over it.
+ */
+const LAMP_CORD = 1100
+const DESK_CORD = 950
+const DESK_PLAN: [number, number][] = [[340, -305]]
+/**
+ * The charger's cable on the desk: out of its top, over its face toward the lamp's left (away from
+ * the back corner), across the base and off it, then a loose loop round the far side of David out
+ * toward the middle of the desk. (x, z) steps in the lamp's frame, left being -x.
+ */
+const CHARGER_LOOP: [number, number][] = [[-14, 10], [-85, 10], [-165, 100], [-185, 220], [-145, 340], [-65, 400], [15, 420]]
+/**
+ * Plugged into her laptop: the head as above (off the lamp's base), then behind David and the laptop
+ * close behind the laptop, round its back left corner and into its back port from the left. (x, z)
+ * in the desktop's frame; the middle ones bow toward the wall as far as the cable's length needs.
+ */
+const TO_LAPTOP: [number, number][] = [[300, -205], [190, -130], [-10, -90], [-112, -72], [-162, -40]]
+const BOW = [0.2, 0.7, 1, 0.5, 0] // (how much each bows)
+const LAMP_EDGE = Math.sqrt(LAMP.base.r ** 2 - (LAMP.base.ring + 1.5) ** 2) // port to the base's edge, going left
+
+/**
+ * Rina's desk with everything on it, live: the lamp and David, her charger (in the lamp, its far end in
+ * her laptop), the mints, the tissues, the laptop, the lamp's and the desk's cords to the wall outlet.
+ *   at     where the desk stands (x, z: its middle; it faces +z)
+ *   wall   from the desk's back edge to the wall behind it, where the outlet is (no wall: it floats 80 back)
+ *   keys   the arrow and number keys drive the desk too (off where they're wanted for something else)
+ * The things that move (the charger, its cable, the cords, the mints...) live in the world's frame, not
+ * the desk's: their positions come from the desk's own frame (`top`, `lamp`), wherever it stands.
+ */
+export function DeskSetup({ at = [0, 0], wall = 80, keys = true }: { at?: [number, number]; wall?: number; keys?: boolean }) {
+  const motor = useDeskMotor(keys)
+  const [ax, az] = at
+  const spawn = (x: number, y: number, z: number): [number, number, number] => [ax + x, y, az + z]
+  const lamp = useRef<Group>(null)
+  const top = useRef<Group>(null) // the desktop's frame (rides up and down)
+  const lampSocket = useRef<Group>(null)
+  const deskSocket = useRef<Group>(null)
+  const [charger, setCharger] = useState<ChargerState>({ folded: false, plugged: true, pose: 1 })
+  const laptopBody = useRef<RapierRigidBody | null>(null)
+
+  // Rina's charger lives in the lamp's back outlet; it plugs into any of the three
+  const setup = useMemo<ChargerSetup>(() => {
+    const lampWorld = () => {
+      const l = lamp.current!
+      l.updateWorldMatrix(true, false)
+      return l.matrixWorld
+    }
+    return {
+      outlets: () => (lamp.current ? LAMP_OUTLETS.map((m) => ({ frame: lampWorld().clone().multiply(m), flip: false })) : []),
+      home: () => {
+        const m = lampWorld()
+        return { p: new Vector3(-190, CHARGER.body.h / 2, -40).applyMatrix4(m), q: new Quaternion().setFromRotationMatrix(m) }
+      },
+      cable: (S) => {
+        const m = lampWorld()
+        const ex = new Vector3().setFromMatrixColumn(m, 0).normalize()
+        const ez = new Vector3().setFromMatrixColumn(m, 2).normalize()
+        const floor = new Vector3().setFromMatrixPosition(m).y
+        const loose = cablePoints(S, 1, { ex, ez, floor, edge: LAMP_EDGE, loop: CHARGER_LOOP })
+        const t = top.current
+        const home = laptopAt()
+        if (!t || !home) return loose
+        // into the laptop's back port: the head off the lamp's base, then along the desk to the port
+        const head = loose.slice(0, 9)
+        const sock = laptopSockets(home)[0]
+        const out = new Vector3(1, 0, 0).applyQuaternion(sock.q) // (out of the port)
+        const r = CHARGER.cable.r
+        const end = sock.p.clone().addScaledVector(out, CHARGER.plug.mold[2] / 2) // the plug's cable end
+        const onDesk = (x: number, z: number) => new Vector3(x, r, z).applyMatrix4(t.matrixWorld)
+        const make = (bow: number) => [
+          ...head,
+          ...TO_LAPTOP.map(([x, z], i) => onDesk(x, z - bow * BOW[i])),
+          end.clone().addScaledVector(out, 40).setY(floor + r),
+          end.clone().addScaledVector(out, 16).setY(end.y - 1),
+          end,
+        ]
+        // bowed just enough that it's the cable's length (never shorter: it's never drawn taut)
+        let lo = 0
+        let hi = 120
+        for (let i = 0; i < 24; i++) {
+          const mid = (lo + hi) / 2
+          if (new CatmullRomCurve3(make(mid), false, 'centripetal').getLength() < CHARGER.cable.length) lo = mid
+          else hi = mid
+        }
+        return make((lo + hi) / 2)
+      },
+      start: LAMP_BACK,
+      startLabel: 'Plug back in',
+      moving: () => motor.velocity !== 0,
+      // its far end in her laptop's back port
+      sockets: () => {
+        const b = laptopBody.current
+        if (!b) return []
+        const t = b.translation()
+        const q = b.rotation()
+        const m = new Matrix4().compose(new Vector3(t.x, t.y, t.z), new Quaternion(q.x, q.y, q.z, q.w), new Vector3(1, 1, 1))
+        return laptopSockets(m).map((pose) => ({ pose, body: b }))
+      },
+      farStart: 0,
+    }
+  }, [motor])
+
+  /** the mints' spot, in the world (it rides the desk up and down) */
+  const mintsAt = () => {
+    const t = top.current
+    if (!t) return null
+    t.updateWorldMatrix(true, false)
+    return t.matrixWorld.clone().multiply(MINTS_HOME)
+  }
+
+  const laptopAt = () => {
+    const t = top.current
+    if (!t) return null
+    t.updateWorldMatrix(true, false)
+    return t.matrixWorld.clone().multiply(LAPTOP_HOME)
+  }
+
+  const tissuesAt = () => {
+    const t = top.current
+    if (!t) return null
+    t.updateWorldMatrix(true, false)
+    return t.matrixWorld.clone().multiply(TISSUES_HOME)
+  }
+
+  /** points in the desktop's frame, to the world */
+  const onTop = (pts: [number, number, number][]) => {
+    const t = top.current
+    if (!t) return []
+    t.updateWorldMatrix(true, false)
+    return pts.map((p) => new Vector3(...p).applyMatrix4(t.matrixWorld))
+  }
+  // the lamp's cord: out of the back of its base, across the desk and over its back edge
+  const lampCord = useMemo(() => {
+    const out = (d: number, y: number) => new Vector3(0, y, -d).applyMatrix4(LAMP_M)
+    const a = out(LAMP.base.r + 3, 3.5) // (just outside the base: the cord leaves its side)
+    const b = out(LAMP.base.r + 11, CORD_R + 0.5)
+    const c = out(LAMP.base.r + 21, CORD_R)
+    const back = -DESK.top.d / 2
+    const x = c.x + 6
+    // over the back edge round the desktop collider's square corner (its visible edge is rounded, but
+    // the collider's corner sticks out past that), wide enough that even one straight 30 mm link across
+    // the whole bend clears it: laid tighter, the links dig into the corner and spring out when let go
+    const Rc = 10
+    const arc = [90, 45, 0].map((deg) => [x, Rc * Math.sin((deg * Math.PI) / 180), back - Rc * Math.cos((deg * Math.PI) / 180)] as [number, number, number])
+    return (): Vector3[] =>
+      onTop([
+        [a.x, a.y, a.z],
+        [b.x, b.y, b.z],
+        [c.x, c.y, c.z],
+        [x, CORD_R + 1.5, back + 6],
+        ...arc,
+        [x, -45, back - Rc - 0.5],
+      ])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // the desk's cord: out of the bottom of the motor under the top, straight down
+  const deskCord = useMemo(() => {
+    const x = MOTOR_X
+    const y = MOTOR_Y
+    return (): Vector3[] =>
+      onTop([
+        [x, y + 2, DESK.beam.z],
+        [x, y - 10, DESK.beam.z],
+        [x, y - 30, DESK.beam.z],
+      ])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the two cords: real, unpluggable; the lamp and the desk only work while they're in the wall
+  const cords = useMemo(() => {
+    // (none while the outlet isn't there: mounting, unmounting)
+    const sockets = (): Socket[] =>
+      [lampSocket, deskSocket].flatMap((r, i) => {
+        if (!r.current) return []
+        r.current.updateWorldMatrix(true, false)
+        return [{ id: i ? 'bottom' : 'top', frame: r.current.matrixWorld.clone() }]
+      })
+    const backward = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI) // (the lamp's cord leaves along its -Z)
+    const down = new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), new Vector3(0, -1, 0))
+    const moving = () => motor.velocity !== 0
+    const lampCordSetup: CordSetup = {
+      id: 'lamp',
+      anchor: () => {
+        const l = lamp.current!
+        l.updateWorldMatrix(true, false)
+        return { p: new Vector3(0, 3.5, -(LAMP.base.r + 3)).applyMatrix4(l.matrixWorld), q: new Quaternion().setFromRotationMatrix(l.matrixWorld).multiply(backward) }
+      },
+      run: (socket, depth) => cordRoute({ from: lampCord(), socket, side: 1, back: plugBack(2), r: PLUGS[2].cord, depth }),
+      sockets,
+      start: 0,
+      length: LAMP_CORD,
+      prongs: 2,
+      onPower: (on) => power.set('lamp', on),
+      moving,
+    }
+    const deskCordSetup: CordSetup = {
+      id: 'desk',
+      anchor: () => {
+        const t = top.current!
+        t.updateWorldMatrix(true, false)
+        return { p: new Vector3(MOTOR_X, MOTOR_Y + 2, DESK.beam.z).applyMatrix4(t.matrixWorld), q: down }
+      },
+      run: (socket, depth) => cordRoute({ from: deskCord(), socket, side: -1, back: plugBack(3), r: PLUGS[3].cord, depth, plan: DESK_PLAN.map(([x, z]) => [ax + x, az + z]) }),
+      sockets,
+      start: 1,
+      length: DESK_CORD,
+      prongs: 3,
+      onPower: (on) => power.set('desk', on),
+      moving,
+    }
+    return { lamp: lampCordSetup, desk: deskCordSetup }
+  }, [motor]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      <group position={[ax, 0, az]}>
+        <Desk motor={motor}>
+          <group ref={top} />
+          <group ref={lamp} position={LAMP_AT} rotation={[0, LAMP_YAW, 0]}>
+            <Lamp />
+          </group>
+          <group position={[LAMP_AT[0] + Math.sin(DOLL_YAW) * DOLL_R, 0, LAMP_AT[2] + Math.cos(DOLL_YAW) * DOLL_R]} rotation={[0, DOLL_YAW, 0]}>
+            <SeatedDoll />
+          </group>
+        </Desk>
+      </group>
+      <LiveCharger state={charger} set={(p) => setCharger((s) => ({ ...s, ...p }))} setup={setup} />
+      {/* Rina's claw clips up the pole, the Wumpus on the amber one */}
+      <LampTrinkets lamp={lamp} />
+      <LiveMints homeAt={mintsAt} spawn={spawn(300, 800, 150)} />
+      <LiveTissues homeAt={tissuesAt} spawn={spawn(505, 900, 70)} />
+      <LiveLaptop homeAt={laptopAt} spawn={spawn(60, 900, 50)} bodyOut={laptopBody} />
+      <WallOutlet position={[ax + OUTLET.x, OUTLET.y, az - DESK.top.d / 2 - wall]} top={lampSocket} bottom={deskSocket} />
+      <LiveCord setup={cords.lamp} />
+      {/* under the desk it keeps inside the right foot, then round behind it to the wall */}
+      <LiveCord setup={cords.desk} />
+    </>
+  )
+}

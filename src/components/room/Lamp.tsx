@@ -197,7 +197,6 @@ export function Lamp({ solid = true }: { solid?: boolean }) {
   const glow = useRef({ x: on ? 1 : 0 })
   const spot = useRef<SpotLight>(null)
   const spill = useRef<PointLight>(null)
-  const plug = useRef<Group>(null)
   const solidAt = useRef<Group>(null)
 
   const mat = useMemo(
@@ -297,7 +296,6 @@ export function Lamp({ solid = true }: { solid?: boolean }) {
     }
     mat.lining.color.copy(LINING_OFF).lerp(LINING_ON, g.x).multiplyScalar(0.4 + 0.75 * g.x)
     mat.bulb.color.copy(BULB_OFF).lerp(BULB_ON, g.x).multiplyScalar(0.6 + 1.5 * g.x)
-    plug.current?.getWorldPosition(cozy.plug.position)
   })
 
   const click = (e: ThreeEvent<MouseEvent>) => {
@@ -329,8 +327,6 @@ export function Lamp({ solid = true }: { solid?: boolean }) {
         ))}
         {/* the small black rocker at the front, lying east-west: O on the left, I on the right */}
         <Rocker on={switched} mat={mat} />
-        {/* the back outlet, where the charger stands (the room's string lights take their power from here) */}
-        <group ref={plug} position={[0, B.top, -B.ring]} />
         <mesh geometry={geo.pole} material={mat.metal} castShadow />
         <mesh geometry={geo.collar} material={mat.metal} position={[0, LAMP.arm.collarY, 0]} castShadow />
         <mesh geometry={geo.arm} material={mat.metal} castShadow />
@@ -352,7 +348,6 @@ export function Lamp({ solid = true }: { solid?: boolean }) {
       <primitive object={target} />
       <spotLight
         ref={spot}
-        userData={{ bakeLampLight: true }}
         position={bulbAt}
         target={target}
         color={WARM}

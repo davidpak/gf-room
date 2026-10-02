@@ -1,13 +1,8 @@
 import { useSyncExternalStore } from 'react'
-import { Object3D } from 'three'
 
-/**
- * The room's two switches: the desk lamp, and the string lights (plugged into the outlet in the
- * lamp's base). Click either to toggle. Also holds the lamp's plug point, so the cords can find it
- * as the desk rises and falls.
- */
-type Cozy = { lamp: boolean; strings: boolean }
-let state: Cozy = { lamp: true, strings: true }
+/** The desk lamp's switch: click the lamp to toggle it. */
+type Cozy = { lamp: boolean }
+let state: Cozy = { lamp: true }
 const subs = new Set<() => void>()
 
 export const cozy = {
@@ -20,8 +15,6 @@ export const cozy = {
     subs.add(f)
     return () => void subs.delete(f)
   },
-  /** where cords meet the lamp base (updated by the lamp; world space) */
-  plug: new Object3D(),
 }
 
 export function useCozy() {

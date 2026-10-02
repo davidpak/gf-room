@@ -10,8 +10,6 @@ let state: Cut = { north: false, east: false, south: false, west: false, ceiling
 const subs = new Set<() => void>()
 
 export const cutaway = {
-  /** while true every wall shows, wherever the camera is (the lighting bake export needs the whole room) */
-  showAll: false,
   get: () => state,
   set(next: Cut) {
     if (next.north === state.north && next.east === state.east && next.south === state.south && next.west === state.west && next.ceiling === state.ceiling) return

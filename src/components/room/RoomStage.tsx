@@ -1,31 +1,23 @@
 import { Waiting } from '../../lib/ready'
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
-import { useThree } from '@react-three/fiber'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Canvas } from '../../lib/render/Canvas'
-import { CanvasTexture, MeshStandardMaterial, PCFShadowMap, SRGBColorSpace, Vector3 } from 'three'
+import { useThree } from '@react-three/fiber'
+import { MeshStandardMaterial, PCFShadowMap, Vector3 } from 'three'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
-import { useDeskMotor } from '../../lib/motor'
 import { World } from '../../lib/physics/World'
-import { RoomEffects } from './RoomEffects'
-import { RoomLights } from './RoomLights'
-import { Lamp } from './Lamp'
-import { StringLights } from './StringLights'
 import { Stylize } from '../../lib/stylize'
 import { CheckSheet } from '../check/CheckSheet'
+import { Effects } from '../stage/StageLights'
+import { ToyLights } from '../stage/ToyLights'
 import { Bed } from '../bed/Bed'
 import { BED } from '../bed/spec'
-import { Desk } from '../desk/Desk'
+import { DeskSetup } from '../desk/DeskSetup'
 import { DESK } from '../desk/spec'
 import { Closet } from '../closet/Closet'
 import { CLOSET } from '../closet/spec'
 import { FreeCamera, VIEW } from './FreeCamera'
-import { DustMotes } from './DustMotes'
 import { Ambience } from './Ambience'
-import { exportBake } from './bake/exportBake'
-import { Baked } from './bake/Baked'
-import { SeatedDoll, SEATED } from '../doll/SeatedDoll'
-import { cutaway, useCutaway } from './cutaway'
-import { SKY } from '../../lib/palette'
+import { useCutaway } from './cutaway'
 import { Shell } from './Shell'
 import { ROOM } from './spec'
 
@@ -37,11 +29,14 @@ import { ROOM } from './spec'
  *   closet  south-east, mirrored bypass doors facing the bed
  *   door    south wall near the west corner
  *
- *   doll    David, crocheted, sitting on the desk against the lamp
+ *   on it   everything from the desk's page, live (../desk/DeskSetup): the lamp, David crocheted against it,
+ *           her laptop and charger, the mints, the tissues, the cords to the outlet on the wall behind
  *   camera  free, like Blender's viewport (./FreeCamera); outside the room, the near walls and the
  *           ceiling cut away and the room floats like a diorama (./Shell, ./cutaway)
- *   click   the lamp, the string lights, the blinds (tilt), the door (swing), the drawers, the
- *           closet mirrors, the keypad, the pillows...
+ *   click   the lamp, the blinds (tilt), the door (swing), the drawers, the closet mirrors, the keypad,
+ *           the pillows, everything on the desk...
+ *   light   for now the gallery's plain toy light (../stage/ToyLights) and finishing (Effects): the room's
+ *           own lighting is to be done again from scratch
  */
 const { w, d, h, wall } = ROOM
 
@@ -76,32 +71,6 @@ function RoomColliders() {
   )
 }
 
-const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
-const LAMP_YAW = -0.6 // turned to face into the desk
-const DOLL_YAW = -1.3 // on the desk side of the lamp, facing the room
-const DOLL_R = 110 - SEATED.backZ - 4 // his back against the rim of the lamp's base
-
-function DeskWithMotor() {
-  const motor = useDeskMotor(false) // arrows/number keys drive the doll here; the keypad still works
-  return (
-    <Desk motor={motor}>
-      {/* the lamp on the back-right corner of the desk, reaching out over it */}
-      {/* live-lit (not baked): the lamp and the doll */}
-      <group position={LAMP_AT} rotation={[0, LAMP_YAW, 0]} userData={{ bakeLive: true }}>
-        <Lamp />
-      </group>
-      {/* David, crocheted, sitting against the lamp's base, turned a little toward the room */}
-      <group
-        position={[LAMP_AT[0] + Math.sin(DOLL_YAW) * DOLL_R, 0, LAMP_AT[2] + Math.cos(DOLL_YAW) * DOLL_R]}
-        rotation={[0, DOLL_YAW, 0]}
-        userData={{ bakeLive: true }}
-      >
-        <SeatedDoll />
-      </group>
-    </Desk>
-  )
-}
-
 function Furniture() {
   const { bedToWall, deskToWall } = ROOM.gap
   // bed: model's long axis is X with the head at +X, drawers at +Z.
@@ -116,11 +85,10 @@ function Furniture() {
       <group position={[bedX, 0, bedZ]} rotation={[0, Math.PI / 2, 0]}>
         <Bed mirrored />
       </group>
-      <group position={[deskX, 0, deskZ]}>
-        <Suspense fallback={<Waiting />}>
-          <DeskWithMotor />
-        </Suspense>
-      </group>
+      <Suspense fallback={<Waiting />}>
+        {/* (the keys stay the camera's) */}
+        <DeskSetup at={[deskX, deskZ]} wall={deskToWall} keys={false} />
+      </Suspense>
     </>
   )
 }
@@ -140,74 +108,24 @@ function Ready({ onReady }: { onReady?: () => void }) {
   return null
 }
 
-const DUST: [number, number, number] = [-700, 1100, -1350]
-
-/** Dev only: window.__bakeExport() writes the room out for the Blender lighting bake (./bake). */
-function BakeExportHook() {
-  const scene = useThree((st) => st.scene)
-  const advance = useThree((st) => st.advance)
-  useEffect(() => {
-    if (!import.meta.env.DEV) return
-    ;(window as unknown as { __bakeExport: () => Promise<unknown> }).__bakeExport = async () => {
-      cutaway.showAll = true // every wall and the ceiling in place
-      advance(performance.now())
-      await new Promise((r) => setTimeout(r, 100)) // let React drop the closet's own back
-      advance(performance.now())
-      try {
-        return await exportBake(scene)
-      } finally {
-        cutaway.showAll = false
-      }
-    }
-  }, [scene, advance])
-  return null
-}
-
-/** Blue hour around the diorama: a soft vertical gradient behind everything. */
-function Backdrop() {
-  const scene = useThree((st) => st.scene)
-  useLayoutEffect(() => {
-    const c = document.createElement('canvas')
-    c.width = 4
-    c.height = 256
-    const g = c.getContext('2d')!
-    const grad = g.createLinearGradient(0, 0, 0, 256)
-    grad.addColorStop(0, SKY.bgTop)
-    grad.addColorStop(1, SKY.bgLow)
-    g.fillStyle = grad
-    g.fillRect(0, 0, 4, 256)
-    const tex = new CanvasTexture(c)
-    tex.colorSpace = SRGBColorSpace
-    const prev = scene.background
-    scene.background = tex
-    return () => {
-      scene.background = prev
-      tex.dispose()
-    }
-  }, [scene])
-  return null
-}
-
 /** `play`: the main view, with the free camera. */
 function Scene({ play = false, onReady }: { play?: boolean; onReady?: () => void }) {
+  const get = useThree((st) => st.get)
+  if (import.meta.env.DEV) Object.assign(window, { __r3f: get }) // (for screenshots from the console)
   return (
     <>
+      {/* thin cables (4 mm) on the desk keep their shadows: a big map, small biases (as the desk's page) */}
+      <ToyLights extent={2100} mapSize={4096} normalBias={0.5} bias={-0.00008} />
       <Stylize />
-      {/* everything, lights included, arrives together once the physics engine has loaded */}
-      <World>
-        <RoomLights />
-        <StringLights />
+      {/* everything arrives together once the physics engine has loaded; 120 Hz, as the desk's page (the cables) */}
+      <World timeStep={1 / 120}>
         <Shell />
         <RoomCloset />
         <RoomColliders />
         <Furniture />
-        {/* dust drifting in the lamp light, over the desk */}
-        <DustMotes center={DUST} radius={800} />
         <Ready onReady={onReady} />
       </World>
       {play && <FreeCamera />}
-      {play && <Backdrop />}
-      <BakeExportHook />
     </>
   )
 }
@@ -216,18 +134,15 @@ function Scene({ play = false, onReady }: { play?: boolean; onReady?: () => void
 const HERO: [number, number, number] = [-1350, 2200, 1650]
 const TARGET: [number, number, number] = [300, 500, -900]
 
-/**
- * The room as a little diorama with a free camera (./FreeCamera). It fades up from a dusky plum
- * once everything has loaded, like the lights coming on.
- */
+/** The room as a little diorama with a free camera (./FreeCamera). It fades up once everything has loaded. */
 export function RoomStage() {
   const [ready, setReady] = useState(false)
   const onReady = useCallback(() => setReady(true), [])
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      <Canvas flat shadows={{ type: PCFShadowMap }} dpr={1.5} camera={{ position: [...VIEW.position], fov: VIEW.fov, near: 10, far: 60000 }} gl={{ antialias: false }}>
+      <Canvas shadows={{ type: PCFShadowMap }} dpr={1.5} camera={{ position: [...VIEW.position], fov: VIEW.fov, near: 10, far: 60000 }} gl={{ antialias: false }}>
         <Scene play onReady={onReady} />
-        <RoomEffects />
+        <Effects aoRadius={40} />
       </Canvas>
       <div
         aria-hidden

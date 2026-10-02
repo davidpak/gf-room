@@ -5,8 +5,8 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 /**
- * Dev only: lets the page write the lighting-bake export to disk (blender/bake/in/*), where the
- * Blender bake script (blender/bake_room.py) picks it up. POST /__bake/<file name> with the body.
+ * Dev only: lets the page write a file to disk (blender/bake/in/*, ignored by git): snapshots of the
+ * canvas, to look at while working. POST /__bake/<file name> with the body.
  */
 function bakeUpload(): Plugin {
   return {

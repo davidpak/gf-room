@@ -1,7 +1,7 @@
 import { useMemo, useRef, type RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
-import { ExtrudeGeometry, MeshBasicMaterial, MeshStandardMaterial, Path, Shape, Vector2, type Group, type Material, type Mesh } from 'three'
+import { ExtrudeGeometry, MeshStandardMaterial, Path, Shape, Vector2, type Group, type Mesh } from 'three'
 import { cutaway } from './cutaway'
 import { createPlankMaterial } from '../../lib/plankMaterial'
 import { CLOSET } from '../closet/spec'
@@ -17,14 +17,12 @@ import { ROOM } from './spec'
  *
  * A dollhouse: any wall the camera is outside of is cut away, and so is the ceiling when the
  * camera is above it, so from outside the room reads as a little diorama you look into, and from
- * inside it is a closed room. The north wall keeps blocking the window light even when it is cut
- * away (it goes invisible but still casts), so the light never floods in.
+ * inside it is a closed room.
  */
 const { w, d, h, wall: T } = ROOM
 const BB = ROOM.baseboard
 const shadow = { castShadow: true, receiveShadow: true }
-// the room's own surfaces catch shadows but don't cast them (cheaper); the north wall does, so the
-// dusk light only comes in through the window
+// the room's own surfaces catch shadows but don't cast them (cheaper)
 const surface = { receiveShadow: true }
 // the closet (SE) protrudes into the room; its west side panel ends the south wall
 const CLOSET_X0 = w / 2 - CLOSET.opening.w - CLOSET.wall
@@ -88,13 +86,10 @@ export function Shell() {
     soffit: useRef<Group>(null),
   }
   const northPaint = useRef<Mesh>(null)
-  const hidden = useMemo(() => new MeshBasicMaterial({ colorWrite: false, depthWrite: false }), [])
-  const paint = useRef<Material | null>(null)
 
   useFrame(({ camera }) => {
     const c = camera.position
-    const all = cutaway.showAll
-    const cut = all ? { north: false, east: false, south: false, west: false, ceiling: false } : {
+    const cut = {
       north: c.z < -d / 2 - MARGIN,
       east: c.x > w / 2 + MARGIN,
       south: c.z > d / 2 + MARGIN,
@@ -109,15 +104,7 @@ export function Shell() {
     if (sides.ceiling.current) sides.ceiling.current.visible = !k.ceiling
     if (sides.soffit.current) sides.soffit.current.visible = !k.ceiling && !k.west
     if (sides.north.current) sides.north.current.visible = !k.north
-    // the north wall itself: invisible, but still in the shadow pass, so the window light stays framed
-    const m = northPaint.current
-    if (m) {
-      // remember whatever it wears now (the paint, or its baked version) before hiding it
-      if (k.north && m.material !== hidden) {
-        paint.current = m.material as Material
-        m.material = hidden
-      } else if (!k.north && m.material === hidden && paint.current) m.material = paint.current
-    }
+    if (northPaint.current) northPaint.current.visible = !k.north
   })
 
   return (
@@ -191,13 +178,11 @@ function NorthWall({ group, paint: paintRef }: { group: RefObject<Group | null>;
   const geo = useMemo(() => extrudeWall(inset(-w / 2 - T, 0, w / 2 + T, h), [inset(W.x0, W.sill, W.x1, W.head, -1)]), [W])
   return (
     <group>
-      {/* the wall slab stays mounted when cut away (it keeps framing the window light) */}
+      {/* (the window stays when the wall is cut away: it is furniture) */}
       <mesh ref={paintRef} geometry={geo} position={[0, 0, -d / 2 - T]} material={paint} {...shadow} />
       <group ref={group}>
         <Baseboard from={-w / 2} to={w / 2} at={-d / 2 + BB.t / 2} axis="x" mat={trim} />
-        <Outlet pos={[-700, 300, -d / 2]} mat={trim} />
       </group>
-      {/* the window and its blinds stay: they are furniture, and the blinds stripe the light */}
       <Window />
     </group>
   )
