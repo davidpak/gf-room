@@ -72,9 +72,9 @@ let SHAPES: { body: { shell: BufferGeometry; base: BufferGeometry }; panel: Buff
 const shapes = () =>
   (SHAPES ??= {
     body: bodyGeometry(),
-    panel: plate(roundedRect(C.panel.w, C.panel.len, C.panel.w / 2), C.panel.w, C.panel.len, C.panel.t, 0.8, C.panel.proud),
+    panel: plate(roundedRect(C.panel.across, C.panel.along, C.panel.along / 2), C.panel.across, C.panel.along, C.panel.t, 0.8, C.panel.proud), // (lying side to side)
     lens: plate(roundedRect(C.lens.w, C.lens.h, C.lens.r), C.lens.w, C.lens.h, C.lens.t, 0.6, C.lens.proud),
-    buttons: C.buttons.d.map((d, i) => (i === 0 ? buttonGeometry(d).scale(1.5, 1, 1) : buttonGeometry(d))), // (the first a pill, across)
+    buttons: C.buttons.d.map((d, i) => buttonGeometry(d).scale(C.buttons.long[i], 1, 1)), // (the first a pill, long side to side)
     // its solid: the profile's corners either side (the rounding's a hair inside them)
     hull: new Float32Array(profile().points.flatMap(([z, y]) => [-C.w / 2, y, z, C.w / 2, y, z])),
   })
@@ -197,11 +197,11 @@ export function ClockModel({ dim = false, alarm = false, onButton }: { dim?: boo
     <group>
       <mesh geometry={s.body.shell} material={mat.body} castShadow receiveShadow />
       <mesh geometry={s.body.base} material={mat.body} castShadow receiveShadow />
-      {/* along the top: the panel, its buttons (their own frame: +y out of the top, +z toward the front) */}
+      {/* across the top: the panel, its buttons in a row side to side (their frame: +y out of the top, +z toward the front) */}
       <group position={[0, ty, tz]} rotation={[T.tilt, 0, 0]}>
         <mesh geometry={s.panel} material={mat.panel} receiveShadow />
-        {C.buttons.at.map((z, i) => (
-          <group key={i} position={[0, C.panel.proud, z]}>
+        {C.buttons.at.map((x, i) => (
+          <group key={i} position={[x, C.panel.proud, 0]}>
             <group ref={(g) => void (btn.current[i] = g)}>
               <mesh geometry={s.buttons[i]} material={i === 0 ? mat.pill : mat.button} castShadow receiveShadow onClick={click(i)} />
             </group>

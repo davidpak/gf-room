@@ -92,9 +92,9 @@ export function ClockCheck() {
           kind: 'text',
           label: 'spec (mm) and its check',
           text: `body     ${CLOCK.len} long × ${CLOCK.w} wide × ${CLOCK.h} tall at the back; the wedge from ${CLOCK.top.y} down to ${CLOCK.toe.y}
-panel    ${CLOCK.panel.len} × ${CLOCK.panel.w}, buttons ${CLOCK.buttons.d.join(' / ')} across
-lens     ${CLOCK.lens.w} × ${CLOCK.lens.h}, digits ${CLOCK.digits.h} tall (0.9")
-(measured off her photo against the mints, 70 across; width and angles estimated)
+panel    ${CLOCK.panel.across} side to side × ${CLOCK.panel.along}, buttons ${CLOCK.buttons.d.join(' / ')} in a row across
+lens     ${CLOCK.lens.w} × ${CLOCK.lens.h}, digits ${CLOCK.digits.h} tall (0.7")
+(from her photo; sized down by eye after David's look: the first, 165 long, was far too big)
 
 ${results.map((r) => `${r.ok ? '✓' : '✗'} ${r.what}: ${r.value}`).join('\n')}`,
         },
