@@ -3,8 +3,8 @@
  *
  * Sources
  *   [P]  her photo (public/reference/alarm-clock.png): seen from its left side, its front to the right. A loaf of
- *        cream plastic, tall and round at the back, the top sloping a little down toward the front, then the front
- *        cut back in a wedge, the display on the wedge (red digits); a grey stadium-shaped panel across the top with
+ *        cream plastic, like two shapes: a box with a flat top, then the front cut back in a wedge, the display on
+ *        the wedge (red digits); a grey panel covering most of the flat top, lying side to side, with
  *        four buttons in a row side to side (a dark pill, two small light rounds, a bigger light round), the top
  *        shell sitting over a slightly smaller base (the seam round the lower side). Measured against the Ice
  *        Breakers puck in front of it (70 across, a little nearer): about 2.3 puck widths long, its back a half of
@@ -17,20 +17,21 @@
  * begins, back along the top to the round back.
  */
 export const CLOCK = {
-  len: 115, // [P] back to front (David: the first try, 165, was far too big and long: the puck's nearer than it looks)
-  w: 105, // [E] across
-  h: 64, // [P] at the back
-  top: { z: 18, y: 52 }, // [P] where the top ends and the wedge begins
-  toe: { y: 12 }, // [P] the little upright lip at the front's foot, below the wedge
-  round: { back: 24, top: 11, toe: 4, foot: 3 }, // [P][E] corners: the round back, the wedge's brow, its toe, the feet
-  edge: 7, // [E] the long edges down each side, rounded
-  panel: { across: 64, along: 22, t: 2.4, proud: 1 }, // [P] the grey stadium lying across the top's straight stretch
+  // (David: the first try, 165 long, was far too big; the second, 115, still too big: this is 70% of that)
+  len: 80, // [P] back to front
+  w: 74, // [E] across
+  h: 45, // [P] the box's flat top
+  top: { z: 12, y: 45 }, // [P] where the flat top ends and the wedge begins
+  toe: { y: 8 }, // [P] the little upright lip at the front's foot, below the wedge
+  round: { back: 10, top: 6, toe: 3, foot: 2 }, // [P][E] corners: the box's back, the wedge's brow, its toe, the feet
+  edge: 5, // [E] the long edges down each side, rounded
+  panel: { across: 56, along: 30, r: 9, t: 2, proud: 0.8 }, // [P] the grey panel over most of the flat top, side to side
   // [P] in a row side to side, left to right as you face it: the dark pill (long side to side), two small, the big one
-  buttons: { d: [9, 8, 8, 12], long: [1.5, 1, 1, 1], at: [-20, -5, 6, 19], h: 2.6, travel: 1.4 },
-  seam: { y: 7, inset: 1.2 }, // [P] the base below the shell, a hair smaller all round (below the toe: square corners)
-  lens: { w: 80, h: 32, t: 2.2, proud: 0.8, r: 4 }, // [E] the smoked window on the wedge
-  digits: { h: 18, w: 10, gap: 3, colon: 7, stroke: 2.2 }, // [E] 0.7" seven-segment digits
-  mass: 0.25, // [E] kg
+  buttons: { d: [7, 6, 6, 9], long: [1.5, 1, 1, 1], at: [-16, -4, 6, 17], h: 2, travel: 1 },
+  seam: { y: 4.5, inset: 1 }, // [P] the base below the shell, a hair smaller all round (below the toe: square corners)
+  lens: { w: 56, h: 26, t: 1.8, proud: 0.6, r: 3 }, // [E] the smoked window on the wedge
+  digits: { h: 13, w: 7.5, gap: 2, colon: 5, stroke: 1.6 }, // [E] 0.5" seven-segment digits
+  mass: 0.15, // [E] kg
   colors: { body: '#efe6cc', panel: '#8d8b9b', pill: '#5a586a', button: '#efeadf', lens: '#1c0e12', lit: '#ff3322', unlit: '#3a1719' },
 }
 
@@ -89,16 +90,16 @@ export function checkClock(): Check[] {
   const T = TOP()
   const W = WEDGE()
   c('small: about as long as it’s wide, its back over half its length tall [P]', `${C.len} × ${C.w} × ${C.h}`, Math.abs(C.len / C.w - 1.1) < 0.15 && C.h / C.len > 0.5 && C.h / C.len < 0.6)
-  c('the seam low round the side, under the wedge’s toe [P]', `y ${C.seam.y}, the toe ${C.toe.y}`, C.seam.y < C.toe.y - 3 && C.seam.y > 4)
-  c('the top slopes a little down to the front [P]', `${((Math.atan2(C.h - C.top.y, C.top.z + C.len / 2) * 180) / Math.PI).toFixed(1)}°`, C.top.y < C.h && C.h - C.top.y < 25)
+  c('the seam low round the side, under the wedge’s toe [P]', `y ${C.seam.y}, the toe ${C.toe.y}`, C.seam.y < C.toe.y - 3 && C.seam.y > 3)
+  c('two shapes: the box’s top flat, then the wedge [P]', `the top at ${C.h} back to front, the wedge from z ${C.top.z}`, C.top.y === C.h && C.top.z > 0 && C.top.z < C.len / 2 - 15)
   const lean = 90 - (W.tilt * 180) / Math.PI
   c('the display leans back, facing up and out [P][E]', `${lean.toFixed(0)}° back from upright`, W.tilt > 0.5 && W.tilt < 1.1)
-  c('the panel lies across, on the top’s straight stretch', `${C.panel.along} on ${T.len.toFixed(1)}`, C.panel.along <= T.len - 4 && C.panel.across > C.panel.along)
-  c('the panel inside the side edges', `${C.panel.across} on ${C.w - 2 * C.edge}`, C.panel.across < C.w - 2 * C.edge - 10)
+  c('the panel covers most of the flat top, lying across', `${C.panel.along} of ${T.len.toFixed(1)}, ${C.panel.across} of ${C.w - 2 * C.edge}`, C.panel.along <= T.len - 3 && C.panel.along >= T.len * 0.7 && C.panel.across >= (C.w - 2 * C.edge) * 0.8 && C.panel.across > C.panel.along)
+  c('the panel inside the side edges', `${C.panel.across} on ${C.w - 2 * C.edge}`, C.panel.across <= C.w - 2 * C.edge - 6)
   const B = C.buttons
   // (a stadium: a round button on its middle line is in it while it's clear of the rounded ends)
   const half = (i: number) => (B.d[i] * B.long[i]) / 2
-  const inPanel = B.at.every((x, i) => Math.abs(x) + half(i) <= C.panel.across / 2 - 3 && B.d[i] < C.panel.along - 6)
+  const inPanel = B.at.every((x, i) => Math.abs(x) + half(i) <= C.panel.across / 2 - 3 && B.d[i] < C.panel.along - 8)
   c('the four buttons in the panel', inPanel ? 'inside' : 'over its edge', inPanel)
   let apart = true
   for (let i = 1; i < B.at.length; i++) if (B.at[i] - B.at[i - 1] < half(i) + half(i - 1) + 3) apart = false

@@ -48,7 +48,7 @@ function Scene() {
   )
 }
 
-const HERO: [number, number, number] = [-200, 230, 380]
+const HERO: [number, number, number] = [-140, 160, 260]
 const TARGET: [number, number, number] = [0, 40, 0]
 
 export function ClockStage() {
@@ -84,17 +84,17 @@ export function ClockCheck() {
       scene={() => <One />}
       views={[
         { kind: 'image', label: 'her photo (its left side, the front to the right)', src: '/reference/alarm-clock.png' },
-        { kind: 'ortho', label: 'left side, as in the photo', from: new Vector3(-1000, CLOCK.h / 2, 0), at: c, zoom: 2.2 },
-        { kind: 'hero', label: 'as in the photo, a little above (drag)', position: [-330, 170, 60], target: [0, 35, 0], fov: 32 },
-        { kind: 'ortho', label: 'front: the display', from: new Vector3(0, 400, 600), at: c, zoom: 2.2 },
-        { kind: 'ortho', label: 'top', from: new Vector3(0, 1000, 0), at: new Vector3(0, 0, 0), up: new Vector3(0, 0, -1), zoom: 2.2 },
+        { kind: 'ortho', label: 'left side, as in the photo', from: new Vector3(-1000, CLOCK.h / 2, 0), at: c, zoom: 3.4 },
+        { kind: 'hero', label: 'as in the photo, a little above (drag)', position: [-230, 120, 40], target: [0, 25, 0], fov: 32 },
+        { kind: 'ortho', label: 'front: the display', from: new Vector3(0, 400, 600), at: c, zoom: 3.4 },
+        { kind: 'ortho', label: 'top', from: new Vector3(0, 1000, 0), at: new Vector3(0, 0, 0), up: new Vector3(0, 0, -1), zoom: 3.4 },
         {
           kind: 'text',
           label: 'spec (mm) and its check',
           text: `body     ${CLOCK.len} long × ${CLOCK.w} wide × ${CLOCK.h} tall at the back; the wedge from ${CLOCK.top.y} down to ${CLOCK.toe.y}
 panel    ${CLOCK.panel.across} side to side × ${CLOCK.panel.along}, buttons ${CLOCK.buttons.d.join(' / ')} in a row across
-lens     ${CLOCK.lens.w} × ${CLOCK.lens.h}, digits ${CLOCK.digits.h} tall (0.7")
-(from her photo; sized down by eye after David's look: the first, 165 long, was far too big)
+lens     ${CLOCK.lens.w} × ${CLOCK.lens.h}, digits ${CLOCK.digits.h} tall (0.5")
+(from her photo; sized by eye with David: 165 long was far too big, 115 still too big, this is 70% of that)
 
 ${results.map((r) => `${r.ok ? '✓' : '✗'} ${r.what}: ${r.value}`).join('\n')}`,
         },

@@ -20,7 +20,7 @@ import { CLOCK, TOP, WEDGE, profile } from './spec'
  * Frame: ./spec (its footprint's middle, its bottom on y 0, the display toward +z).
  */
 const C = CLOCK
-const PX = 6 // the lens's pixels a mm
+const PX = 10 // the lens's pixels a mm
 
 // ---- the shapes (made once)
 /** a side profile (z, y) made solid, w wide, its long edges rounded e */
@@ -72,8 +72,8 @@ let SHAPES: { body: { shell: BufferGeometry; base: BufferGeometry }; panel: Buff
 const shapes = () =>
   (SHAPES ??= {
     body: bodyGeometry(),
-    panel: plate(roundedRect(C.panel.across, C.panel.along, C.panel.along / 2), C.panel.across, C.panel.along, C.panel.t, 0.8, C.panel.proud), // (lying side to side)
-    lens: plate(roundedRect(C.lens.w, C.lens.h, C.lens.r), C.lens.w, C.lens.h, C.lens.t, 0.6, C.lens.proud),
+    panel: plate(roundedRect(C.panel.across, C.panel.along, C.panel.r), C.panel.across, C.panel.along, C.panel.t, 0.6, C.panel.proud), // (lying side to side)
+    lens: plate(roundedRect(C.lens.w, C.lens.h, C.lens.r), C.lens.w, C.lens.h, C.lens.t, 0.5, C.lens.proud),
     buttons: C.buttons.d.map((d, i) => buttonGeometry(d).scale(C.buttons.long[i], 1, 1)), // (the first a pill, long side to side)
     // its solid: the profile's corners either side (the rounding's a hair inside them)
     hull: new Float32Array(profile().points.flatMap(([z, y]) => [-C.w / 2, y, z, C.w / 2, y, z])),
