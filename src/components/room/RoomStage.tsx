@@ -19,6 +19,9 @@ import { Ambience } from './Ambience'
 import { useCutaway } from './cutaway'
 import { Shell } from './Shell'
 import { ROOM } from './spec'
+import { Poster, PosterCard } from '../poster/Poster'
+import { useNotes } from '../poster/messages'
+import { POSTER_AT } from '../poster/spec'
 
 /**
  * Rina's room at true size (./spec.ts for the layout and every dimension):
@@ -67,6 +70,16 @@ function RoomColliders() {
       <CuboidCollider args={[wall / 2, h / 2, d / 2]} position={[w / 2 + wall / 2, h / 2, 0]} />
       <CuboidCollider args={[wall / 2, h / 2, d / 2]} position={[-w / 2 - wall / 2, h / 2, 0]} />
     </RigidBody>
+  )
+}
+
+/** the "Rina" poster over the desk, her friends' notes round her name (../poster) */
+function RoomPoster() {
+  const notes = useNotes()
+  return (
+    <group position={[POSTER_AT.x, POSTER_AT.y, POSTER_AT.z]}>
+      <Poster notes={notes} />
+    </group>
   )
 }
 
@@ -120,6 +133,7 @@ function Scene({ play = false, onReady }: { play?: boolean; onReady?: () => void
         <RoomCloset />
         <RoomColliders />
         <Furniture />
+        <RoomPoster />
         <Ready onReady={onReady} />
       </World>
       {play && <FirstPerson />}
@@ -153,6 +167,7 @@ export function RoomStage() {
         }}
       />
       <Ambience />
+      <PosterCard />
     </div>
   )
 }

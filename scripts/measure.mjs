@@ -26,7 +26,7 @@ function quit(code = 0) {
     ws?.close()
   } catch {}
   // (every process started with this run's profile: Edge's launcher hands off and leaves, so there's no tree to kill)
-  const tag = prof.split(/[\/]/).pop()
+  const tag = prof.split(/[\\/]/).pop()
   spawnSync('powershell', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*${tag}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`], { stdio: 'ignore' })
   try {
     rmSync(prof, { recursive: true, force: true })

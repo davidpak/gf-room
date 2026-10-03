@@ -1,0 +1,36 @@
+/* a note from the poster, up close: a slip of the poster's paper, written large in the same hand */
+.poster-card {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(28, 22, 41, 0.45);
+  cursor: pointer;
+  animation: poster-card-in 0.25s ease;
+}
+.poster-card > div {
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 28px 32px 22px;
+  background: #f6f0e2;
+  color: #2b2a33;
+  border-radius: 6px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  transform: rotate(-1.2deg);
+  font: 600 30px/1.25 'Caveat', 'Gaegu', cursive;
+}
+.poster-card p {
+  margin: 0;
+}
+.poster-card-name {
+  margin-top: 12px !important;
+  text-align: right;
+  font-weight: 500;
+  font-size: 26px;
+}
+@keyframes poster-card-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
