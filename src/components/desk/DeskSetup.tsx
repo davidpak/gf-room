@@ -7,6 +7,7 @@ import { Desk } from './Desk'
 import { DESK, STACK } from './spec'
 import { Lamp } from '../room/Lamp'
 import { LiveDoll } from '../doll/LiveDoll'
+import { LiveClock } from '../clock/Clock'
 import { LiveCharger, type ChargerSetup, type ChargerState } from '../charger/ChargerPhysics'
 import { CHARGER, LAMP_BACK, cablePoints, lampOutlets } from '../charger/spec'
 import { LAMP } from '../lamp/spec'
@@ -39,6 +40,8 @@ const MINTS_HOME = new Matrix4().makeRotationY(-0.4).setPosition(300, MINTS.puck
 // the Kleenex on the left, in front of David
 // her MacBook a little right of the middle (in the charger's reach), open, facing her chair
 const LAPTOP_HOME = new Matrix4().makeRotationY(0.05).setPosition(60, LAPTOP_BOTTOM, 50)
+/** her alarm clock: the desk's right end, in front of the lamp, facing the bed (east, +x); 12 in from the edge */
+const CLOCK_HOME = new Matrix4().makeRotationY(Math.PI / 2).setPosition(505, 0, 30)
 const TISSUES_HOME = new Matrix4().makeRotationY(0.2).setPosition(-480, TISSUES.box.h / 2, 95)
 const LAMP_OUTLETS = lampOutlets()
 const LAMP_M = new Matrix4().makeRotationY(LAMP_YAW).setPosition(...LAMP_AT) // lamp frame -> desktop frame
@@ -172,6 +175,13 @@ export function DeskSetup({ at = [0, 0], wall = 80, keys = true }: { at?: [numbe
     return t.matrixWorld.clone().multiply(DOLL_HOME)
   }
 
+  const clockAt = () => {
+    const t = top.current
+    if (!t) return null
+    t.updateWorldMatrix(true, false)
+    return t.matrixWorld.clone().multiply(CLOCK_HOME)
+  }
+
   const tissuesAt = () => {
     const t = top.current
     if (!t) return null
@@ -281,6 +291,7 @@ export function DeskSetup({ at = [0, 0], wall = 80, keys = true }: { at?: [numbe
       <LampTrinkets lamp={lamp} />
       <LiveDoll homeAt={dollAt} spawn={spawn(DOLL_HOME.elements[12], 900, DOLL_HOME.elements[14])} />
       <LiveMints homeAt={mintsAt} spawn={spawn(300, 800, 150)} />
+      <LiveClock homeAt={clockAt} spawn={spawn(505, 900, 30)} />
       <LiveTissues homeAt={tissuesAt} spawn={spawn(-480, 900, 95)} />
       <LiveLaptop homeAt={laptopAt} spawn={spawn(60, 900, 50)} bodyOut={laptopBody} />
       <WallOutlet position={[ax + OUTLET.x, OUTLET.y, az - DESK.top.d / 2 - wall]} top={lampSocket} bottom={deskSocket} />

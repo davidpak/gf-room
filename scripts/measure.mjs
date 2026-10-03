@@ -4,10 +4,11 @@
 //   the loader's marks (page-*, ready:*: where load time goes), rAF frame times, draw numbers, a CPU+GPU frame cost.
 // env: PROF=1 profile the load (ALL=1: library code too) · FRAMES=1 with PROF: profile 4 s of frames instead
 //      PRE="<expr>" run before the frames (toggle things, time parts) · INJECT="<js>" run before the page's own code
+//      SHOT=out.png [SCALE=0.5] [WAIT=ms]: a screenshot after load instead (PRE runs first: move the camera)
 //      SAMPLE=1 log window.__waits every 2 s while loading · SHADOWCOUNT=1 shadow redraws a second
 // Use a build (npm run build, preview :4173, &dev for window.__r3f) for real numbers; dev is several times slower.
 import { spawn } from 'node:child_process'
-import { mkdtempSync } from 'node:fs'
+import fs, { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -88,6 +89,17 @@ async function dumpProfile() {
 console.log('marks:', phase, ` (wall ${Date.now() - t0} ms)`)
 console.log('gpu:', await ev(`(() => { const c = document.createElement('canvas').getContext('webgl2'); const d = c.getExtension('WEBGL_debug_renderer_info'); return c.getParameter(d.UNMASKED_RENDERER_WEBGL) })()`))
 await sleep(1500)
+if (process.env.SHOT) {
+  // a picture of the page as it is (SHOT=path.png; SCALE=0.5 makes it smaller), then done
+  if (process.env.PRE) console.log('pre', await ev(process.env.PRE))
+  await sleep(Number(process.env.WAIT ?? 800))
+  const { result } = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 2560, height: 1440, scale: Number(process.env.SCALE ?? 0.5) } })
+  fs.writeFileSync(process.env.SHOT, Buffer.from(result.data, 'base64'))
+  console.log('shot', process.env.SHOT)
+  ws.close()
+  edge.kill()
+  process.exit(0)
+}
 if (process.env.PRE) console.log('pre', await ev(process.env.PRE))
 await sleep(500)
 if (process.env.FRAMES) { await send('Profiler.enable'); await send('Profiler.setSamplingInterval', { interval: 200 }); await send('Profiler.start'); await sleep(4000); await dumpProfile() }

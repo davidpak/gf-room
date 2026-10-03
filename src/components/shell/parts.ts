@@ -24,6 +24,7 @@ export const PARTS = {
   wumpus: { title: 'Wumpus stress ball', hint: 'left-drag to carry it (it gets a squeeze) · drop it and it squishes · let go near the lamp and it hops back onto the claw clip · right-drag to turn · press the wheel and drag to look', stage: page(() => import('../wumpus/WumpusStage'), 'WumpusStage'), check: page(() => import('../wumpus/WumpusStage'), 'WumpusCheck') },
   mints: { title: 'Ice Breakers spearmint', hint: 'click a tab to flip it open (one / many) · left-drag to carry, right-drag or Q/E R/F Z/C to tip it and pour · pick up a mint · press the wheel and drag to look', stage: page(() => import('../mints/MintsStage'), 'MintsStage'), check: page(() => import('../mints/MintsStage'), 'MintsCheck') },
   tissues: { title: 'Kleenex', hint: 'click the tissue to pull one · left-drag to carry, right-drag to turn · press the wheel and drag to look', stage: page(() => import('../tissues/TissuesStage'), 'TissuesStage'), check: page(() => import('../tissues/TissuesStage'), 'TissuesCheck') },
+  clock: { title: 'Alarm clock', hint: 'click a button to press it (the first sets the alarm, the second dims the digits) · left-drag to carry, right-drag to turn · press the wheel and drag to look', stage: page(() => import('../clock/ClockStage'), 'ClockStage'), check: page(() => import('../clock/ClockStage'), 'ClockCheck') },
   civic: { title: '2016 Honda Civic LX', hint: 'click a door or the trunk to open it · drag to look round · scroll to zoom', stage: page(() => import('../civic/CivicStage'), 'CivicStage') },
   guitar: { title: 'Martin D-28', hint: 'hold the left button and sweep across the soundhole to strum · click a string or press 1–6 to pick it · click the fingerboard to hold a string at that fret (again to let go) · drag elsewhere to look round · scroll to zoom · &view=play: held up to play', stage: page(() => import('../guitar/GuitarStage'), 'GuitarStage') },
   picnic: { title: 'A picnic', hint: 'click the basket to look in · click what’s in it to lift it out · &show=food or &show=ducks · drag to look round · scroll to zoom', stage: page(() => import('../picnic/PicnicStage'), 'PicnicStage') },
@@ -46,7 +47,7 @@ export type PartKey = keyof typeof PARTS
 export const GROUPS: { name: string; parts: PartKey[] }[] = [
   { name: 'Places', parts: ['room', 'quad'] },
   { name: 'The room', parts: ['bed', 'closet', 'lamp', 'desk', 'doll'] },
-  { name: 'On the desk', parts: ['laptop', 'rinaos', 'charger', 'keypad', 'wumpus', 'mints', 'tissues'] },
+  { name: 'On the desk', parts: ['laptop', 'rinaos', 'charger', 'keypad', 'wumpus', 'mints', 'tissues', 'clock'] },
   { name: 'On the Quad', parts: ['civic', 'guitar', 'picnic', 'glider', 'scooter', 'easel', 'plane', 'turntable', 'records'] },
   { name: 'Tools', parts: ['prompt', 'spotify'] },
 ]
