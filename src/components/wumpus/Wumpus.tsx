@@ -7,6 +7,7 @@ import { usePerch } from '../../lib/physics/usePerch'
 import { GROUP, groups } from '../../lib/physics/rope'
 import { thump } from '../../lib/sound/thump'
 import { Prompts } from '../prompt/Prompts'
+import { Static } from '../../lib/render/Static'
 import { EAR, EAR_AT, HEAD, MUZZLE, MUZZLE_AT, WUMPUS, eyeAt, leafFrame, nostrilAt, radial, shapePoints, type Blob } from './spec'
 
 /**
@@ -57,7 +58,15 @@ function leafGeometry() {
 /** a pose that turns +Z to `normal`, at p */
 const facing = (p: Vector3, normal: Vector3) => ({ position: p.toArray() as [number, number, number], quaternion: new Quaternion().setFromUnitVectors(Z, normal).toArray() as [number, number, number, number] })
 
+/** the Wumpus, drawn: merged (one draw a material) */
 export function WumpusModel() {
+  return (
+    <Static>
+      <WumpusParts />
+    </Static>
+  )
+}
+function WumpusParts() {
   const mat = useMemo(
     () => ({
       body: new MeshStandardMaterial({ color: C.body, roughness: 1 }),

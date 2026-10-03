@@ -81,11 +81,14 @@ const FIELD_HEIGHTS = (() => {
 })()
 const CLOTH_LOW = (THROW.t + 4 - 3.8) * K // (its swell's lowest)
 
-/** a loose thing of the corner's: its model at the toy's scale, a simple body */
+/** a loose thing of the corner's: its model at the toy's scale (merged: one draw a material, not one a piece), a
+ *  simple body */
 function Thing({ id, at, car, feelR, feelPts, lift = 0, children, body }: { id: string; at: { x: number; y: number; z: number; rot: number }; car: { current: CarState }; feelR: number; feelPts?: [number, number][]; lift?: number; children: ReactNode; body: ReactNode }) {
   return (
     <LiveProp id={`art${id}`} label="" set="art" at={at} car={car} lift={lift} feelAlong={[0]} feelPts={feelPts} feelR={feelR}>
-      <group scale={K}>{children}</group>
+      <group scale={K}>
+        <Static>{children}</Static>
+      </group>
       {body}
     </LiveProp>
   )

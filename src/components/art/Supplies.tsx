@@ -236,7 +236,7 @@ export function Sketchbook() {
       ))}
       {/* the leaf turning over */}
       {turn && (
-        <group ref={leafRef} position={[0, top + 0.6, 0]} rotation={[0, 0, turn > 0 ? 0 : Math.PI]}>
+        <group ref={leafRef} position={[0, top + 0.6, 0]} rotation={[0, 0, turn > 0 ? 0 : Math.PI]} userData={{ live: true }}>
           <mesh geometry={g.leaf} material={pageMat(leafFront)} />
           <mesh geometry={g.back} material={pageBack(leafBack)} />
         </group>

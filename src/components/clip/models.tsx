@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
 import { CylinderGeometry, ExtrudeGeometry, MeshStandardMaterial, Path, Shape, type Group } from 'three'
 import { roundedPolygon } from '../../lib/shapes'
+import { Static } from '../../lib/render/Static'
 import { OPEN, type ClipSpec } from './spec'
 
 /**
@@ -21,8 +22,10 @@ function Jaw({ c, side, open, children }: { c: ClipSpec; side: 1 | -1; open: Ope
     if (pivot.current) pivot.current.rotation.y = side * OPEN * open.current
   })
   return (
-    <group ref={pivot} position={[c.hinge.x, 0, 0]}>
-      <group position={[-c.hinge.x, 0, 0]}>{children}</group>
+    <group ref={pivot} position={[c.hinge.x, 0, 0]} userData={{ live: true }}>
+      <group position={[-c.hinge.x, 0, 0]}>
+        <Static>{children}</Static>
+      </group>
     </group>
   )
 }
@@ -124,5 +127,10 @@ function Amber({ c, open }: { c: ClipSpec; open: Open }) {
 
 /** a clip's look, by kind */
 export function ClipModel({ c, open }: { c: ClipSpec; open: Open }) {
-  return <Amber c={c} open={open} />
+  // (merged: one draw a material; the jaws, swinging, each merged on their own)
+  return (
+    <Static>
+      <Amber c={c} open={open} />
+    </Static>
+  )
 }

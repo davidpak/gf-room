@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { Canvas as FiberCanvas, useThree, type CanvasProps } from '@react-three/fiber'
 import type { Camera, Light, LightShadow, Mesh, Object3D, Scene, WebGLRenderer } from 'three'
 import { useProgress } from '@react-three/drei'
@@ -11,11 +11,34 @@ import { ready, stillWaiting } from '../ready'
  * nothing shows half-made or hitches when it's first looked at.
  *
  *   ?perf   the r3f-perf overlay (FPS, GPU time, draw calls); the dev menu toggles it
- *   ?hitch  the hitch recorder (./Hitches: what each late frame was doing); the dev menu toggles it
+ *   `       (the backquote key, on any page) the hitch recorder (./Hitches: what each late frame was doing), on and
+ *           off; it stays as left (?hitch turns it on too)
  */
 const DEV_PARAM = typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev')
 const SHOW_PERF = typeof location !== 'undefined' && new URLSearchParams(location.search).has('perf')
-const SHOW_HITCH = typeof location !== 'undefined' && new URLSearchParams(location.search).has('hitch')
+/** the hitch recorder, shown or not: ` toggles it, remembered (this browser) */
+const hitch = (() => {
+  let on = false
+  try {
+    on = new URLSearchParams(location.search).has('hitch') || localStorage.getItem('hitch') === '1'
+  } catch {
+    /* (no storage: off) */
+  }
+  const subs = new Set<() => void>()
+  if (typeof window !== 'undefined')
+    window.addEventListener('keydown', (e) => {
+      const t = e.target as HTMLElement | null
+      if (e.code !== 'Backquote' || e.repeat || t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) return
+      on = !on
+      try {
+        localStorage.setItem('hitch', on ? '1' : '0')
+      } catch {
+        /* (no storage) */
+      }
+      subs.forEach((f) => f())
+    })
+  return { get: () => on, subscribe: (f: () => void) => (subs.add(f), () => void subs.delete(f)) }
+})()
 /** (fetched only when it's asked for) */
 const Perf = lazy(() => import('r3f-perf').then((m) => ({ default: m.Perf })))
 const Hitches = lazy(() => import('./Hitches').then((m) => ({ default: m.Hitches })))
@@ -135,6 +158,7 @@ export function Canvas({ children, ...props }: CanvasProps & { children?: ReactN
     }
   }, [])
   const done = useCallback(() => handle.current?.done(), [])
+  const showHitch = useSyncExternalStore(hitch.subscribe, hitch.get)
   return (
     <FiberCanvas {...props}>
       <Progress />
@@ -147,7 +171,7 @@ export function Canvas({ children, ...props }: CanvasProps & { children?: ReactN
           <Perf position="top-left" />
         </Suspense>
       )}
-      {SHOW_HITCH && (
+      {showHitch && (
         <Suspense fallback={null}>
           <Hitches timeGpu={!SHOW_PERF} />
         </Suspense>

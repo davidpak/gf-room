@@ -1,10 +1,12 @@
 import { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import { ShadowOnDemand } from './ShadowOnDemand'
+import { DetailCull } from './DetailCull'
 
 /**
  * Keeps the frame rate up:
  *   shadows on demand    shadow maps are only redrawn when something moved (./ShadowOnDemand)
+ *   detail cull          little things seen little cast no shadow, or aren't drawn (./DetailCull)
  *   (no adaptive resolution: changing the pixel ratio mid-session rebuilds every effect buffer and
  *    flashes a frame; stages use a fixed, modest ratio instead)
  *   ?perf                the r3f-perf overlay: ./Canvas
@@ -20,6 +22,7 @@ export function Quality() {
   return (
     <>
       <ShadowOnDemand />
+      <DetailCull />
     </>
   )
 }

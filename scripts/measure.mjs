@@ -7,8 +7,8 @@
 //      SHOT=out.png [SCALE=0.5] [WAIT=ms]: a screenshot after load instead (PRE runs first: move the camera)
 //      SAMPLE=1 log window.__waits every 2 s while loading · SHADOWCOUNT=1 shadow redraws a second
 // Use a build (npm run build, preview :4173, &dev for window.__r3f) for real numbers; dev is several times slower.
-import { spawn } from 'node:child_process'
-import fs, { mkdtempSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import fs, { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -20,6 +20,25 @@ const edge = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe
   '--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${prof}`, '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist',
   '--window-size=2560,1440', '--force-device-scale-factor=1.5', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', 'about:blank',
 ], { stdio: 'ignore' })
+/** the whole of Edge gone (its own kill leaves its children running: they piled up, hundreds, rendering away) */
+function quit(code = 0) {
+  try {
+    ws?.close()
+  } catch {}
+  // (every process started with this run's profile: Edge's launcher hands off and leaves, so there's no tree to kill)
+  const tag = prof.split(/[\/]/).pop()
+  spawnSync('powershell', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*${tag}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`], { stdio: 'ignore' })
+  try {
+    rmSync(prof, { recursive: true, force: true })
+  } catch {}
+  process.exit(code)
+}
+process.on('SIGINT', () => quit(1))
+process.on('SIGTERM', () => quit(1))
+process.on('uncaughtException', (e) => {
+  console.error(e)
+  quit(1)
+})
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 let ws
 for (let i = 0; i < 50; i++) {
@@ -96,9 +115,7 @@ if (process.env.SHOT) {
   const { result } = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 2560, height: 1440, scale: Number(process.env.SCALE ?? 0.5) } })
   fs.writeFileSync(process.env.SHOT, Buffer.from(result.data, 'base64'))
   console.log('shot', process.env.SHOT)
-  ws.close()
-  edge.kill()
-  process.exit(0)
+  quit(0)
 }
 if (process.env.PRE) console.log('pre', await ev(process.env.PRE))
 await sleep(500)
@@ -120,6 +137,4 @@ console.log(await ev(`new Promise(res => {
 console.log('cpu', await ev(`(() => { const s = __r3f(); const N = 40; const t0 = performance.now(); for (let i = 0; i < N; i++) s.advance(performance.now()); s.gl.getContext().finish(); return ((performance.now() - t0) / N).toFixed(2) + ' ms/frame incl. gpu finish' })()`))
 if (process.env.SHADOWCOUNT) console.log('shadow redraws/s', await ev('new Promise(r => { const gl = __r3f().gl; let n = 0; const sm = gl.shadowMap; let v = sm.needsUpdate; Object.defineProperty(sm, "needsUpdate", { get: () => v, set: (x) => { if (x) n++; v = x }, configurable: true }); setTimeout(() => r(n / 3), 3000) })'))
 if (process.argv[4]) console.log('extra', await ev(process.argv[4]))
-ws.close()
-edge.kill()
-process.exit(0)
+quit(0)

@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, type ReactNode, type Ref } from 'reac
 import { BufferAttribute, BufferGeometry, CatmullRomCurve3, TubeGeometry, Vector3, type Group, type Material } from 'three'
 import { embroidery, lathe, radiusAt, TILE, yarnMaterial, type Stitcher } from '../../lib/crochet'
 import { DOLL } from './spec'
+import { Static } from '../../lib/render/Static'
 
 /**
  * David as a crochet doll (./spec.ts, public/reference/doll-*.png, hoodie-*.jpg): cream yarn
@@ -33,12 +34,15 @@ const shadow = { castShadow: true, receiveShadow: true }
  */
 export type DollRig = Record<'root' | 'pelvis' | 'torso' | 'head' | 'armL' | 'armR' | 'legL' | 'legR', Group>
 
-/** A joint: children are modelled in doll coordinates; the group `ref` rotates them about `at`. */
+/** A joint: children are modelled in doll coordinates; the group `ref` rotates them about `at`. Its pieces are
+ *  merged (one draw a material; a joint inside it is left to itself, live, and merges its own) */
 function Pivot({ at, ref, children }: { at: [number, number, number]; ref?: Ref<Group>; children: ReactNode }) {
   return (
     <group position={at}>
-      <group ref={ref}>
-        <group position={[-at[0], -at[1], -at[2]]}>{children}</group>
+      <group ref={ref} userData={{ live: true }}>
+        <group position={[-at[0], -at[1], -at[2]]}>
+          <Static>{children}</Static>
+        </group>
       </group>
     </group>
   )

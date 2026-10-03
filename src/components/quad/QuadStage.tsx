@@ -27,6 +27,7 @@ import { getLook, lookBack, useLook, useLookKey } from './look'
 import { grabRules } from '../../lib/physics/Hand'
 import './quad.css'
 import { SET } from './set'
+import { DetailCull } from '../../lib/render/DetailCull'
 
 /**
  * The Quad's north-west quarter (./set), in a warm spring evening (Bruno Simon's folio-2025 is the
@@ -153,6 +154,7 @@ export function QuadStage() {
     <>
       <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={CAMERA} onPointerMissed={lookBack}>
         <Scene car={car} />
+        <DetailCull />
       </Canvas>
       <LookControls />
       <RideHint />

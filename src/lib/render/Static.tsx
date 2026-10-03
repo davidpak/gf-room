@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Box3, BufferAttribute, Matrix4, Mesh, Object3D, Sphere, type BufferGeometry, type Group, type Material, type Raycaster } from 'three'
+import { Box3, BufferAttribute, BufferGeometry, Matrix4, Mesh, Object3D, Sphere, type Group, type Material, type Raycaster } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { indexForPointer } from './bvh'
 
@@ -12,8 +12,10 @@ import { indexForPointer } from './bvh'
  * don't draw (HIDDEN, which the pointer still sees). When a piece of it comes or goes (eaten off the board), or
  * is hidden, it's merged again.
  *
- * Left as they are: instanced and skinned meshes, morphing ones, see-through ones (they're sorted one by one),
- * ones with several materials, and anything under a group marked `userData.live` (it moves inside itself).
+ * Left as they are: instanced and skinned meshes, morphing ones, see-through ones (they're sorted one by one), and
+ * anything under a group marked `userData.live` (it moves inside itself). A mesh with a material for each face (a
+ * book's cover and spine and pages) is taken apart by them: each part merged with the rest of its material (each
+ * of its materials was a draw of its own).
  * Don't wrap anything that animates its parts (a lid, a page, a string): it would look frozen.
  */
 export const HIDDEN = 7
@@ -30,10 +32,9 @@ const same = (a: Sig, b: Sig) => a.length === b.length && a.every((x, i) => x.ke
 function mergeable(o: Object3D): o is Mesh {
   const m = o as Mesh
   if (!m.isMesh || (m as { isInstancedMesh?: boolean }).isInstancedMesh || (m as { isSkinnedMesh?: boolean }).isSkinnedMesh) return false
-  if (Array.isArray(m.material)) return false
-  const mat = m.material as Material
-  if (mat.transparent || m.morphTargetInfluences?.length || m.geometry.morphAttributes.position) return false
-  return true
+  if (m.morphTargetInfluences?.length || m.geometry.morphAttributes.position) return false
+  if (Array.isArray(m.material)) return m.geometry.groups.length > 0 && m.material.every((x) => !x.transparent)
+  return !(m.material as Material).transparent
 }
 /** the meshes under root to merge (visible all the way up, not under a live group), and a signature of them:
  *  which they are, their geometry and material, where they sit in root (so a piece swapped, reshaped or moved is
@@ -59,7 +60,8 @@ function collect(from: Object3D, root: Object3D, merged: Set<Object3D>) {
     const e = _m.multiplyMatrices(_inv, m.matrixWorld).elements
     let h = 0
     for (let i = 0; i < 16; i++) h += e[i] * (i + 1.37)
-    return { key: `${m.id}:${m.geometry.id}:${(m.material as Material).uuid}`, h }
+    const mats = Array.isArray(m.material) ? m.material.map((x) => x.uuid).join(',') : (m.material as Material).uuid
+    return { key: `${m.id}:${m.geometry.id}:${mats}`, h }
   })
   return { meshes: out, sig, others }
 }
@@ -71,9 +73,6 @@ function build(root: Group, meshes: Mesh[]) {
   for (const m of meshes) {
     const g = m.geometry
     const attrs = Object.keys(g.attributes).sort().join('|')
-    const key = `${(m.material as Material).uuid}|${m.castShadow}|${m.receiveShadow}|${m.renderOrder}|${attrs}`
-    let k = groups.get(key)
-    if (!k) groups.set(key, (k = { mat: m.material as Material, cast: m.castShadow, recv: m.receiveShadow, order: m.renderOrder, geos: [] }))
     // its geometry baked into the wrapper's frame (indexed, so they all merge; turned the right way if it's mirrored)
     _m.multiplyMatrices(_inv, m.matrixWorld)
     const c = g.clone()
@@ -89,8 +88,29 @@ function build(root: Group, meshes: Mesh[]) {
       const ix = c.index!.array
       for (let i = 0; i < ix.length; i += 3) [ix[i + 1], ix[i + 2]] = [ix[i + 2], ix[i + 1]]
     }
-    c.clearGroups()
-    k.geos.push(c)
+    // one part a material: the whole of it, or (a material a face) each group's stretch of its triangles
+    const parts: [Material, BufferGeometry][] = []
+    if (Array.isArray(m.material)) {
+      const ix = c.index!.array
+      for (const gr of c.groups) {
+        const mat = m.material[gr.materialIndex ?? 0]
+        if (!mat) continue
+        const end = Math.min(ix.length, gr.start + gr.count)
+        const part = new BufferGeometry()
+        for (const [name, a] of Object.entries(c.attributes)) part.setAttribute(name, a)
+        part.setIndex(new BufferAttribute(ix.slice(gr.start, end), 1))
+        parts.push([mat, part])
+      }
+    } else {
+      c.clearGroups()
+      parts.push([m.material as Material, c])
+    }
+    for (const [mat, part] of parts) {
+      const key = `${mat.uuid}|${m.castShadow}|${m.receiveShadow}|${m.renderOrder}|${attrs}`
+      let k = groups.get(key)
+      if (!k) groups.set(key, (k = { mat, cast: m.castShadow, recv: m.receiveShadow, order: m.renderOrder, geos: [] }))
+      k.geos.push(part)
+    }
   }
   const out: Mesh[] = []
   for (const k of groups.values()) {
