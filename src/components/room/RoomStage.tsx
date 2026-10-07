@@ -7,7 +7,8 @@ import { World } from '../../lib/physics/World'
 import { Stylize } from '../../lib/stylize'
 import { CheckSheet } from '../check/CheckSheet'
 import { Effects } from '../stage/StageLights'
-import { ToyLights } from '../stage/ToyLights'
+import { RoomLights } from './RoomLights'
+import { Motes } from '../poster/Motes'
 import { Bed } from '../bed/Bed'
 import { BED } from '../bed/spec'
 import { DeskSetup } from '../desk/DeskSetup'
@@ -18,7 +19,7 @@ import { FirstPerson, START } from './FirstPerson'
 import { Ambience } from './Ambience'
 import { useCutaway } from './cutaway'
 import { Shell } from './Shell'
-import { ROOM } from './spec'
+import { LIGHT, ROOM } from './spec'
 import { Poster, PosterHint } from '../poster/Poster'
 import { useNotes } from '../poster/messages'
 import { POSTER_AT } from '../poster/spec'
@@ -37,8 +38,9 @@ import { POSTER_AT } from '../poster/spec'
  *           cutaway in ./Shell still works for the check sheet's views from outside)
  *   click   the lamp, the blinds (tilt), the door (swing), the drawers, the closet mirrors, the keypad,
  *           the pillows, everything on the desk...
- *   light   for now the gallery's plain toy light (../stage/ToyLights) and finishing (Effects): the room's
- *           own lighting is to be done again from scratch
+ *   light   an evening in (./RoomLights, ./spec LIGHT): warm and dim, the lamp the brightest thing, fairy
+ *           lights up the window, night outside, dust drifting in the lamplight; soft tone mapping so the
+ *           pools of light roll off warmly, the bulbs blooming
  */
 const { w, d, h, wall } = ROOM
 
@@ -57,6 +59,17 @@ function RoomCloset() {
       <mesh position={[0, h - 15, -CLOSET.depth / 2 - 25]} material={lid}>
         <boxGeometry args={[CLOSET.opening.w + 2 * CLOSET.wall, 30, CLOSET.depth + 50]} />
       </mesh>
+    </group>
+  )
+}
+
+/** dust in the air over the desk, in the lamp's light (as the poster's motes) */
+function LampDust() {
+  const [bw, bh, bd] = LIGHT.dust.box
+  const deskX = -w / 2 + DESK.top.w / 2 + ROOM.gap.deskToWall
+  return (
+    <group position={[deskX + 250, DESK.topUnder + DESK.top.t + bh / 2 + 80, -d / 2 + 40]}>
+      <Motes count={LIGHT.dust.count} box={[bw, bh, bd]} />
     </group>
   )
 }
@@ -125,7 +138,7 @@ function Scene({ play = false, onReady }: { play?: boolean; onReady?: () => void
   return (
     <>
       {/* thin cables (4 mm) on the desk keep their shadows: a big map, small biases (as the desk's page) */}
-      <ToyLights extent={2100} mapSize={4096} normalBias={0.5} bias={-0.00008} />
+      <RoomLights />
       <Stylize />
       {/* everything arrives together once the physics engine has loaded; 120 Hz, as the desk's page (the cables) */}
       <World timeStep={1 / 120}>
@@ -134,6 +147,7 @@ function Scene({ play = false, onReady }: { play?: boolean; onReady?: () => void
         <RoomColliders />
         <Furniture />
         <RoomPoster />
+        <LampDust />
         <Ready onReady={onReady} />
       </World>
       {play && <FirstPerson />}
@@ -153,7 +167,7 @@ export function RoomStage() {
     <div style={{ position: 'absolute', inset: 0 }}>
       <Canvas shadows={{ type: PCFShadowMap }} dpr={[1, 1.25]} camera={{ position: [...START.position], fov: START.fov, near: 10, far: 15000 }} gl={{ antialias: false }}>
         <Scene play onReady={onReady} />
-        <Effects aoRadius={40} />
+        <Effects aoRadius={40} tone aoColor="#3a2433" />
       </Canvas>
       <div
         aria-hidden

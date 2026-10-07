@@ -4,7 +4,7 @@ import { RoundedBox } from '@react-three/drei'
 import { BoxGeometry, BufferAttribute, Color, MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, type InstancedMesh, type Mesh } from 'three'
 import { stepSpring, type Spring } from '../../lib/spring'
 import { ROOM } from './spec'
-import { SKY } from '../../lib/palette'
+import { LIGHT } from './spec'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
 
 /**
@@ -137,7 +137,7 @@ function Frame({ trim }: { trim: MeshStandardMaterial }) {
   )
 }
 
-/** Dusk sky behind the glass: deep blue above, pink, then a warm glow at the horizon. */
+/** The night behind the glass: deep blue above, a warm city glow low down; dim (./spec LIGHT.sky). */
 function Sky() {
   const { geo, mat } = useMemo(() => {
     // exactly the opening (plus a hair), right at the outside face of the wall: every view through
@@ -145,10 +145,10 @@ function Sky() {
     const g = new PlaneGeometry(W.x1 - W.x0 + 20, W.head - W.sill + 20, 1, 12)
     const pos = g.getAttribute('position')
     const col = new Float32Array(pos.count * 3)
-    // blue hour, pushed above white so the window glows softly between the slats
-    const top = new Color(SKY.top).multiplyScalar(1.6)
-    const mid = new Color(SKY.mid).multiplyScalar(1.7)
-    const low = new Color(SKY.low).multiplyScalar(1.5)
+    const S = LIGHT.sky
+    const top = new Color(S.top).multiplyScalar(S.k)
+    const mid = new Color(S.mid).multiplyScalar(S.k)
+    const low = new Color(S.low).multiplyScalar(S.k)
     const c = new Color()
     const H = W.head - W.sill + 20
     for (let i = 0; i < pos.count; i++) {

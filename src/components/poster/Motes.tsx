@@ -29,16 +29,18 @@ function speckTexture() {
   return new CanvasTexture(c)
 }
 
-export function Motes() {
+/** `box`: the air (w, h, deep: from z 0 out), its middle at the origin across and up; the poster's by default */
+export function Motes({ count = M.count, box = [P.w + 160, P.h + 120, M.deep] }: { count?: number; box?: [number, number, number] }) {
   const { geo, mat } = useMemo(() => {
     // where each starts (its home it wanders round), its own pace and phase, its size
     let seed = 7
     const rand = () => ((seed = Math.imul(seed ^ (seed >>> 15), 2246822507) ^ Math.imul(seed ^ (seed >>> 13), 3266489909)) >>> 0) / 4294967296
-    const n = M.count
+    const n = count
+    const [bw, bh, bd] = box
     const pos = new Float32Array(n * 3)
     const seedA = new Float32Array(n * 4)
     for (let i = 0; i < n; i++) {
-      pos.set([(rand() - 0.5) * (P.w + 160), (rand() - 0.5) * (P.h + 120), 25 + rand() * (M.deep - 25)], i * 3)
+      pos.set([(rand() - 0.5) * bw, (rand() - 0.5) * bh, 25 + rand() * (bd - 25)], i * 3)
       seedA.set([rand() * 100, 0.6 + rand() * 0.8, M.size[0] + rand() * (M.size[1] - M.size[0]), rand()], i * 4)
     }
     const g = new BufferGeometry()
@@ -58,7 +60,7 @@ export function Motes() {
           // wandering round its home (slow, a few cm), and a slow rise or sink through the air, round again
           p.x += sin(t * 0.13) * 40.0 + sin(t * 0.31 + 1.7) * 14.0;
           p.z += sin(t * 0.17 + 0.6) * 30.0;
-          float h = ${(P.h + 120).toFixed(1)};
+          float h = ${bh.toFixed(1)};
           p.y = mod(p.y + h / 2.0 + (aSeed.w - 0.45) * uTime * ${M.drift.toFixed(2)} + sin(t * 0.21) * 20.0, h) - h / 2.0;
           // catching the light as it turns: mostly dim, now and then bright
           float turn = 0.5 + 0.5 * sin(t * 0.9 + aSeed.w * 6.28);
@@ -82,7 +84,7 @@ export function Motes() {
       blending: AdditiveBlending,
     })
     return { geo: g, mat: m }
-  }, [])
+  }, [count, box[0], box[1], box[2]]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => (geo.dispose(), mat.dispose()), [geo, mat])
   useFrame(({ clock, camera, size, gl }) => {
     mat.uniforms.uTime.value = clock.elapsedTime

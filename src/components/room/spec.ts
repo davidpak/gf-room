@@ -63,3 +63,37 @@ export const ROOM = {
 
   gap: { bedToWall: 60, deskToWall: 20 },
 }
+
+/**
+ * The room's light: an evening in, reading notes from your friends. [P] her night photos (room-desk-night.jpg,
+ * room-desk-wide.png): amber all over, the yellow lamp the brightest thing, a strand of warm fairy lights up the
+ * window's left edge and across its top, the blinds dark blue behind. [E] the strengths, by eye. The lamp's own
+ * light is in ./Lamp (its spot and spill); everything else is here (./RoomLights).
+ */
+export const LIGHT = {
+  dark: '#17131f', // past the room (the diorama's surround)
+  // what fills the shade: dusky plum from above, warm amber bounce from below (the floor and desk in lamplight)
+  shade: { sky: '#6c6384', ground: '#9a7356', k: 0.95 },
+  // the room's soft warm light, from above (the lamp and strings bounced off the ceiling): soft shadows for contact
+  warm: { color: '#ffcf9f', k: 0.42 },
+  // the night at the window: a cool faint light through the blinds
+  moon: { color: '#7f8fff', k: 0.16 },
+  // outside: deep night blue, a warm city glow low down (dim: the room is the bright thing)
+  sky: { top: '#10121f', mid: '#1b1d33', low: '#3d2c38', k: 0.6 },
+  // the fairy lights (her photo: ~70 mini bulbs on a white wire, ~8 cm apart)
+  strings: {
+    bulb: { r: 5, len: 11, every: 85 }, // mm
+    color: '#ffc67c',
+    glow: 3.4, // above white: they bloom
+    off: 95, // mm out from the window casing's edge
+    over: 115, // mm above the window head (its top run)
+    sag: 35, // mm the wire hangs between hooks
+    hooks: 420, // mm apart
+    wire: 1.3, // mm
+    lights: 3, // real lights along it, warming the wall and blinds round it
+    k: 85, // each (decay 1, as the lamp's)
+    reach: 1500, // mm
+  },
+  // dust in the lamp's light over the desk (as the poster's motes)
+  dust: { count: 40, box: [1300, 1100, 650] as [number, number, number] },
+}

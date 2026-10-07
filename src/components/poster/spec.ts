@@ -61,7 +61,7 @@ export const POSTER = {
   },
   /** a soft glow: the board a touch brighter than her wall in the dim room, a faint light on the wall round it; barely
    *  there (David: "way too bright, again subtlety") [E] */
-  glow: { board: 0.05, reach: 70, wall: 0.07, color: '#fff0d8' },
+  glow: { board: 0.025, reach: 70, wall: 0.04, color: '#fff0d8' },
   /** dust in the air in front of it, drifting, now and then catching the light: a few, small, slow, faint (alive the
    *  way the Quad's petals are) [E: dust motes ~0.1 mm, seen as specks a few mm across in a beam] */
   motes: { count: 46, size: [2.4, 5], deep: 420, drift: 5, opacity: 0.4, color: '#fff3dc' },
