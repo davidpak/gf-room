@@ -59,8 +59,12 @@ export const POSTER = {
     colors: ['#c7a8dc', '#ee93a6', '#f6bd3c', '#ef7a4a', '#4dbcc0', '#8ccb8a'], // [P] her letters'
     steel: '#b9bcc4',
   },
-  /** a soft glow: the board a little brighter than her wall in the dim room, and a soft light on the wall round it [E] */
-  glow: { board: 0.16, reach: 90, wall: 0.28, color: '#fff0d8' },
+  /** a soft glow: the board a touch brighter than her wall in the dim room, a faint light on the wall round it; barely
+   *  there (David: "way too bright, again subtlety") [E] */
+  glow: { board: 0.05, reach: 70, wall: 0.07, color: '#fff0d8' },
+  /** dust in the air in front of it, drifting, now and then catching the light: a few, small, slow, faint (alive the
+   *  way the Quad's petals are) [E: dust motes ~0.1 mm, seen as specks a few mm across in a beam] */
+  motes: { count: 46, size: [2.4, 5], deep: 420, drift: 5, opacity: 0.4, color: '#fff3dc' },
   /** a note clicked: the camera glides in square to it (as the Quad's photos), the note and this much more round it
    *  filling the view; ← → the next one; Esc back [E] */
   focus: { room: 1.3, glide: 0.9 },
@@ -89,6 +93,8 @@ export function checkPoster(): Check[] {
   const S = P.slips
   c('the slips stir by a few mm at most (subtle, as the Quad’s petals) [E]', `rest ${S.curl}, sway ${S.sway}, draft ${S.breeze.lift}, pointed at ${S.lifted} mm`, S.curl + S.sway + S.breeze.lift <= 2.5 && S.lifted <= 5)
   c('a draft now and then, not all the time [E]', `every ${S.breeze.every} s, crossing in ${S.breeze.cross} s`, S.breeze.every >= 2 * S.breeze.cross)
+  c('its glow barely there [E]', `board ${P.glow.board}, wall ${P.glow.wall}`, P.glow.board <= 0.08 && P.glow.wall <= 0.1)
+  c('a few faint motes, slow [E]', `${P.motes.count} at most ${P.motes.opacity} strong, ${P.motes.drift} mm/s`, P.motes.count <= 60 && P.motes.opacity <= 0.4 && P.motes.drift <= 8)
   const pin = P.pins
   const pushR = Math.max(...pin.push.map(([r]) => r))
   const pushH = Math.max(...pin.push.map(([, z]) => z))

@@ -6,6 +6,7 @@ import { worldInput } from '../../lib/inputLock'
 import { POSTER } from './spec'
 import { LETTERS } from './letters'
 import type { Note } from './messages'
+import { Motes } from './Motes'
 
 /**
  * The "Rina" poster (./spec), painted into its own texture, as hers is made: white poster board, her name across it
@@ -23,7 +24,8 @@ import type { Note } from './messages'
  *                  pointed at lifts toward you. Small and slow: alive as the Quad's petals are, nothing laid over it
  *   pinned         each slip held up by a pin of its own through its top (./spec pins): a push pin, a map pin or a
  *                  thumb tack, in one of her letters' colours
- *   glow           the board a little brighter than the wall, a soft light on the wall round it (./spec glow)
+ *   glow           the board a touch brighter than the wall, a faint light on the wall round it (./spec glow)
+ *   the air        a few dust motes drifting in front of it, now and then catching the light (./Motes)
  *   reading        click a slip (or the sticky): the camera glides in square to it, as to a photo on the Quad; ← →
  *                  the next one along; Esc (or a click off it) glides back
  *
@@ -971,6 +973,7 @@ export function Poster({ notes }: { notes: Note[] }) {
         {placed.length > 0 && <mesh geometry={slipsGeo} material={paper.m} receiveShadow />}
       </group>
       <Pins placed={placed} />
+      <Motes />
       {today >= 0 && (
         <mesh geometry={sticky.geo} material={sticky.mat} position={[STICKY_AT.x, STICKY_AT.y, 0]} rotation={[0, 0, STICKY_AT.rot]} castShadow receiveShadow onClick={openToday} />
       )}

@@ -13,7 +13,9 @@ import { useEffect, useState } from 'react'
  * "encourage", "note", "say" or "write"; else the column with the longest answers), "show" if it's there. The last
  * good list is kept (this browser), so the poster has its notes even offline, or while Google is slow.
  */
-export const SHEET_CSV = '' // (David: the published CSV address goes here)
+// the form's responses sheet, as CSV (Google's query endpoint: it answers once the sheet's readable by link or
+// published; the tab is the responses' gid)
+export const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/1Wkf1iTta1HZBK1M2R6k5CAFxyJzs4py1aj3rHrva93I/gviz/tq?tqx=out:csv&gid=141110143'
 
 export type Note = { id: string; name: string; text: string }
 
