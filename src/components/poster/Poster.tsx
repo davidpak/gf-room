@@ -3,7 +3,7 @@ import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import './poster.css'
 import { CanvasTexture, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace } from 'three'
 import { POSTER } from './spec'
-import { LETTERS, NAMES } from './letters'
+import { LETTERS } from './letters'
 import type { Note } from './messages'
 
 /**
@@ -57,7 +57,7 @@ const hash = (s: string) => {
 /** a little random that's the same every time for the same seed */
 const rng = (seed: number) => () => ((seed = Math.imul(seed ^ (seed >>> 15), 2246822507) ^ Math.imul(seed ^ (seed >>> 13), 3266489909)) >>> 0) / 4294967296
 
-// ---- her letters: where they go on the sheet (texture pixels: the letters' frame scaled by k, moved by tx, ty)
+// ---- her letters: where they go on the sheet (texture pixels), and as paths
 const LET = (() => {
   const L = P.letters
   const bw = (L.x1 - L.x0) * W
@@ -66,15 +66,8 @@ const LET = (() => {
   const k = Math.min(bw / (x1 - x0), bh / (y1 - y0))
   return { k, tx: L.x0 * W + (bw - (x1 - x0) * k) / 2 - x0 * k, ty: L.y0 * H + (bh - (y1 - y0) * k) / 2 - y0 * k }
 })()
+const NAMES = ['R', 'i', 'n', 'a'] as const
 const MARKER = (P.marker * PX) / LET.k // her marker, in the letters' frame
-const strokes = (n: (typeof NAMES)[number]) => LETTERS[n].strokes.map((s) => ({ path: new Path2D(s.d), w: s.w }))
-/** a letter's strokes drawn `more` wider than its colouring (0: its colouring; 2 × marker: its marker's outer edge) */
-function stroke(g: CanvasRenderingContext2D, n: (typeof NAMES)[number], more: number) {
-  for (const s of strokes(n)) {
-    g.lineWidth = s.w + more
-    g.stroke(s.path)
-  }
-}
 
 // ---- the board and the letters (drawn once, kept)
 function drawBoard(): HTMLCanvasElement {
@@ -94,93 +87,98 @@ function drawBoard(): HTMLCanvasElement {
   return c
 }
 
-/** her "Rina" (./letters), a letter at a time as she drew them (each one's marker over the one before where they
- *  meet):
+/** her "Rina", as she made it:
  *
- *   her marker    round the letter, one even width
- *   her colours   the letter coloured through her colours (./spec), crayon-soft: pressed harder in places and
- *                 lighter in others, a fine grain of strokes on her slant, the paper's tooth showing through as specks
+ *   her marker    round each letter, an even line about as wide as hers, gone over a second time a hair off
+ *                 (as a hand does), the colouring covering its inner half
+ *   her colours   each letter coloured top to bottom through her colours (./spec), crayon-soft: pressed harder in
+ *                 places, lighter in others; a fine grain of strokes on her slant, the paper's tooth showing through
+ *                 as specks; deeper along the marker, where a hand colouring up to a line presses
  */
 function drawLetters(g: CanvasRenderingContext2D) {
-  // each letter's colouring is painted on its own sheet first (its grain kept to it), then laid in its marker
-  const t = document.createElement('canvas')
-  t.width = W
-  t.height = H
-  const tg = t.getContext('2d')!
+  const paths = Object.fromEntries(NAMES.map((n) => [n, new Path2D(LETTERS.parts[n])])) as Record<(typeof NAMES)[number], Path2D>
+  const all = new Path2D()
+  for (const n of NAMES) all.addPath(paths[n])
+  const [x0, y0, x1, y1] = LETTERS.box
+  g.save()
+  g.setTransform(LET.k, 0, 0, LET.k, LET.tx, LET.ty)
+  g.lineJoin = g.lineCap = 'round'
+  // her marker (the ink bleeds a touch into the board: a soft edge first)
+  g.strokeStyle = P.colors.ink
+  g.globalAlpha = 0.25
+  g.lineWidth = MARKER * 2 + 3
+  g.stroke(all)
+  g.globalAlpha = 1
+  g.lineWidth = MARKER * 2
+  g.stroke(all)
+  g.save()
+  g.translate(1.2, -0.8)
+  g.globalAlpha = 0.7
+  g.lineWidth = MARKER * 1.85
+  g.stroke(all)
+  g.restore()
+  g.globalAlpha = 1
+  // her colours: each letter through its stops
+  for (const n of NAMES) {
+    const [bx0, by0, bx1, by1] = LETTERS.boxes[n]
+    const { stops, dir } = P.coloring[n]
+    const at = (u: number, v: number) => [bx0 + u * (bx1 - bx0), by0 + v * (by1 - by0)] as const
+    const grad = g.createLinearGradient(...at(dir[0], dir[1]), ...at(dir[2], dir[3]))
+    stops.forEach((s, k) => grad.addColorStop(k / (stops.length - 1), s))
+    g.fillStyle = grad
+    g.fill(paths[n])
+  }
+  g.save()
+  g.clip(all)
   const r = rng(11)
   // pressed harder here, lighter there: soft patches (a coarse noise, blown up smooth)
   const nc = document.createElement('canvas')
-  nc.width = 64
-  nc.height = 40
+  nc.width = 48
+  nc.height = 36
   const ng = nc.getContext('2d')!
   for (let y = 0; y < nc.height; y++)
     for (let x = 0; x < nc.width; x++) {
       const v = r()
-      ng.fillStyle = v < 0.5 ? `rgba(255,255,255,${(0.5 - v) * 0.4})` : `rgba(60,20,40,${(v - 0.5) * 0.1})`
+      ng.fillStyle = v < 0.5 ? `rgba(255,255,255,${(0.5 - v) * 0.42})` : `rgba(60,20,40,${(v - 0.5) * 0.12})`
       ng.fillRect(x, y, 1, 1)
     }
-  const at = (x: number, y: number) => [LET.tx + x * LET.k, LET.ty + y * LET.k] as const
-  for (const n of NAMES) {
-    const [bx0, by0, bx1, by1] = LETTERS[n].box
-    const { stops, dir } = P.coloring[n]
-    // the colouring, on its sheet
-    tg.setTransform(1, 0, 0, 1, 0, 0)
-    tg.globalCompositeOperation = 'source-over'
-    tg.clearRect(0, 0, W, H)
-    tg.setTransform(LET.k, 0, 0, LET.k, LET.tx, LET.ty)
-    tg.lineJoin = tg.lineCap = 'round'
-    const u = (a: number, b: number) => [bx0 + a * (bx1 - bx0), by0 + b * (by1 - by0)] as const
-    const grad = tg.createLinearGradient(...u(dir[0], dir[1]), ...u(dir[2], dir[3]))
-    stops.forEach((s, k) => grad.addColorStop(k / (stops.length - 1), s))
-    tg.strokeStyle = grad
-    stroke(tg, n, 0)
-    // its texture, only where it's coloured
-    tg.setTransform(1, 0, 0, 1, 0, 0)
-    tg.globalCompositeOperation = 'source-atop'
-    const [px0, py0] = at(bx0, by0)
-    const [px1, py1] = at(bx1, by1)
-    tg.imageSmoothingEnabled = true
-    tg.imageSmoothingQuality = 'high'
-    tg.drawImage(nc, px0 - 20, py0 - 20, px1 - px0 + 40, py1 - py0 + 40)
-    const SLANT = -1.05
-    for (const [count, color, alpha, width] of [
-      [2600, '255,255,255', 0.11, 1.3],
-      [2600, '255,255,255', 0.06, 2],
-      [2200, '50,20,40', 0.07, 1.4],
-      [1600, '50,20,40', 0.05, 2.2],
-    ] as const) {
-      const p = new Path2D()
-      for (let i = 0; i < count; i++) {
-        const x = px0 + r() * (px1 - px0)
-        const y = py0 + r() * (py1 - py0)
-        const a = SLANT + (r() - 0.5) * 0.3
-        const len = 5 + r() * 12
-        p.moveTo(x, y)
-        p.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len)
-      }
-      tg.strokeStyle = `rgba(${color},${alpha})`
-      tg.lineWidth = width
-      tg.stroke(p)
+  g.imageSmoothingEnabled = true
+  g.imageSmoothingQuality = 'high'
+  g.drawImage(nc, x0, y0, x1 - x0, y1 - y0)
+  // the grain: short strokes on her slant, light ones (the paper between them) and darker ones (a firmer stroke)
+  const SLANT = -1.05
+  for (const [n, color, alpha, width] of [
+    [9000, '255,255,255', 0.22, 1.4],
+    [9000, '255,255,255', 0.14, 2.2],
+    [8000, '50,20,40', 0.07, 1.6],
+    [6000, '50,20,40', 0.05, 2.6],
+  ] as const) {
+    const p = new Path2D()
+    for (let i = 0; i < n; i++) {
+      const x = x0 + r() * (x1 - x0)
+      const y = y0 + r() * (y1 - y0)
+      const a = SLANT + (r() - 0.5) * 0.3
+      const len = 7 + r() * 16
+      p.moveTo(x, y)
+      p.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len)
     }
-    tg.fillStyle = P.colors.paper
-    for (let i = 0; i < 700; i++) {
-      tg.globalAlpha = 0.1 + r() * 0.2
-      const s = 0.8 + r() * 1.4
-      tg.fillRect(px0 + r() * (px1 - px0), py0 + r() * (py1 - py0), s, s)
-    }
-    tg.globalAlpha = 1
-    // her marker round it on the board (a soft edge where the ink bled a touch), then the colouring in it
-    g.save()
-    g.setTransform(LET.k, 0, 0, LET.k, LET.tx, LET.ty)
-    g.lineJoin = g.lineCap = 'round'
-    g.strokeStyle = P.colors.ink
-    g.globalAlpha = 0.3
-    stroke(g, n, MARKER * 2 + 0.6)
-    g.globalAlpha = 1
-    stroke(g, n, MARKER * 2)
-    g.restore()
-    g.drawImage(t, 0, 0)
+    g.strokeStyle = `rgba(${color},${alpha})`
+    g.lineWidth = width
+    g.stroke(p)
   }
+  // deeper along the marker (inside it: the outer half's under the clip's edge, and the marker over it)
+  g.strokeStyle = 'rgba(70,25,35,0.10)'
+  g.lineWidth = 16
+  g.stroke(all)
+  // the paper's tooth: specks the crayon skipped
+  g.fillStyle = P.colors.paper
+  for (let i = 0; i < 7000; i++) {
+    g.globalAlpha = 0.3 + r() * 0.5
+    const s = 0.8 + r() * 1.6
+    g.fillRect(x0 + r() * (x1 - x0), y0 + r() * (y1 - y0), s, s)
+  }
+  g.restore()
+  g.restore()
 }
 
 // ---- the notes: where there's room for them, where each goes, and typing them
@@ -199,8 +197,7 @@ const room = (): Room[] => (ROOM ??= (() => {
   mc.height = Math.ceil(H / S)
   const mg = mc.getContext('2d', { willReadFrequently: true })!
   mg.setTransform(LET.k / S, 0, 0, LET.k / S, LET.tx / S, LET.ty / S)
-  mg.lineJoin = mg.lineCap = 'round'
-  for (const n of NAMES) stroke(mg, n, MARKER * 2)
+  for (const n of NAMES) mg.fill(new Path2D(LETTERS.parts[n]))
   const px = mg.getImageData(0, 0, mc.width, mc.height).data
   const span = (xa: number, xb: number) => {
     let top = Infinity

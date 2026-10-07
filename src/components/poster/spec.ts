@@ -22,8 +22,8 @@ export const POSTER = {
   t: 0.6, // card
   curl: 5, // [P] how far its corners lift off the wall, at most
   // where the letters go, as shares of the sheet (from its left, from its top) [P]
-  letters: { x0: 0.24, x1: 0.74, y0: 0.33, y1: 0.67 },
-  marker: 3.6, // mm: her marker's line, outside the colouring [P: ~1.5% of the letters' height]
+  letters: { x0: 0.24, x1: 0.74, y0: 0.31, y1: 0.69 },
+  marker: 3.8, // mm: her marker's line, outside the colouring [P: ~1.5% of the letters' height]
   colors: {
     paper: '#f7f4ec',
     slip: '#fdfbf6', // the printer paper the notes are typed on
