@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { CatmullRomCurve3, Matrix4, Quaternion, Vector3, type Group } from 'three'
 import type { RapierRigidBody } from '@react-three/rapier'
 import { useDeskMotor } from '../../lib/motor'
@@ -19,6 +19,9 @@ import { MINTS } from '../mints/spec'
 import { LiveTissues } from '../tissues/Tissues'
 import { TISSUES } from '../tissues/spec'
 import { LAPTOP_BOTTOM, LiveLaptop, laptopSockets } from '../laptop/Laptop'
+import { LiveCandle } from '../candle/Candle'
+import { LiveCocoaBox, LiveDaughterCard, LiveFrame } from '../keepsakes/Keepsakes'
+import { LiveJewelryStand } from '../vanity/Vanity'
 
 // Rina's lamp on the back-right corner
 const LAMP_AT: [number, number, number] = [DESK.top.w / 2 - 125, 0, -DESK.top.d / 2 + 125]
@@ -43,6 +46,27 @@ const LAPTOP_HOME = new Matrix4().makeRotationY(0.05).setPosition(60, LAPTOP_BOT
 /** her alarm clock: the desk's right end, in front of the lamp, facing the bed (east, +x); 12 in from the edge */
 const CLOCK_HOME = new Matrix4().makeRotationY(Math.PI / 2).setPosition(505, 0, 30)
 const TISSUES_HOME = new Matrix4().makeRotationY(0.2).setPosition(-480, TISSUES.box.h / 2, 95)
+/**
+ * Her things with a story (room-desk-wall.jpg, room-desk-night.jpg), few and chosen, not a clutter: where each
+ * sits on the desktop (x, z: its footprint's middle; yaw: turned from facing the chair, +z), each its own holdable
+ * thing with a "Return" prompt, like the clock.
+ *   back left          her jewellery stand, pearls and gold chains hanging
+ *   left of the laptop the photo of her and her sister in its gold frame, her mum's "My Daughter is Amazing"
+ *                      card standing in front of it
+ *   right, behind      the polar bear cocoa box
+ *   by the lamp        the holiday candle, lit
+ * (Built and kept for later, off the desk for now: the monitor, the iPad, the mugs, the bowl, the pen cup, the
+ * mirror, the Mickey card, the little things.)
+ */
+type Thing = { key: string; Live: (p: { homeAt: () => Matrix4 | null; spawn: [number, number, number] }) => ReactNode; at: [number, number]; yaw: number }
+const THINGS: Thing[] = [
+  { key: 'jewelry', Live: LiveJewelryStand, at: [-285, -252], yaw: 0.22 },
+  { key: 'frame', Live: LiveFrame, at: [-95, -222], yaw: 0.12 },
+  { key: 'card', Live: LiveDaughterCard, at: [-268, -122], yaw: 0.38 },
+  { key: 'cocoa', Live: LiveCocoaBox, at: [292, -262], yaw: -0.45 },
+  { key: 'candle', Live: LiveCandle, at: [305, -60], yaw: -0.35 },
+]
+const thingHome = (t: Thing) => new Matrix4().makeRotationY(t.yaw).setPosition(t.at[0], 0, t.at[1])
 const LAMP_OUTLETS = lampOutlets()
 const LAMP_M = new Matrix4().makeRotationY(LAMP_YAW).setPosition(...LAMP_AT) // lamp frame -> desktop frame
 const CORD_R = PLUGS[2].cord
@@ -189,6 +213,15 @@ export function DeskSetup({ at = [0, 0], wall = 80, keys = true }: { at?: [numbe
     return t.matrixWorld.clone().multiply(TISSUES_HOME)
   }
 
+  /** where one of her things sits, in the world (it rides the desk up and down) */
+  const onDesk = (m: Matrix4) => () => {
+    const t = top.current
+    if (!t) return null
+    t.updateWorldMatrix(true, false)
+    return t.matrixWorld.clone().multiply(m)
+  }
+  const things = useMemo(() => THINGS.map((t) => ({ ...t, homeAt: onDesk(thingHome(t)) })), []) // eslint-disable-line react-hooks/exhaustive-deps
+
   /** points in the desktop's frame, to the world */
   const onTop = (pts: [number, number, number][]) => {
     const t = top.current
@@ -294,6 +327,9 @@ export function DeskSetup({ at = [0, 0], wall = 80, keys = true }: { at?: [numbe
       <LiveClock homeAt={clockAt} spawn={spawn(505, 900, 30)} />
       <LiveTissues homeAt={tissuesAt} spawn={spawn(-480, 900, 95)} />
       <LiveLaptop homeAt={laptopAt} spawn={spawn(60, 900, 50)} bodyOut={laptopBody} />
+      {things.map(({ key, Live, homeAt, at: [x, z] }) => (
+        <Live key={key} homeAt={homeAt} spawn={spawn(x, 900, z)} />
+      ))}
       <WallOutlet position={[ax + OUTLET.x, OUTLET.y, az - DESK.top.d / 2 - wall]} top={lampSocket} bottom={deskSocket} />
       <LiveCord setup={cords.lamp} />
       {/* under the desk it keeps inside the right foot, then round behind it to the wall */}

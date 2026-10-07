@@ -15,7 +15,7 @@ import { join } from 'node:path'
 
 const url = process.argv[2]
 const secs = Number(process.argv[3] ?? 6)
-const port = 9333
+const port = Number(process.env.PORT ?? 9333) // (PORT: a debugging port of its own, so several can run at once)
 const prof = mkdtempSync(join(tmpdir(), 'edge-'))
 const edge = spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', [
   '--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${prof}`, '--use-angle=d3d11', '--enable-gpu', '--ignore-gpu-blocklist',

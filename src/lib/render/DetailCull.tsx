@@ -93,6 +93,8 @@ export function DetailCull() {
     let shadowsChanged = false
     for (let i = f % 6; i < L.length; i += 6) {
       const m = L[i]
+      // (a geometry swapped in since the list was made hasn't measured itself yet)
+      if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere()
       _s.copy(m.geometry.boundingSphere!).applyMatrix4(m.matrixWorld)
       const d = _v.copy(_s.center).applyMatrix4(cam.matrixWorldInverse).z
       // (behind the camera, or at it: as if big; the frustum culls it anyway)

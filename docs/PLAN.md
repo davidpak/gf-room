@@ -87,6 +87,8 @@ What's on her desk and the wall round it in `public/reference/room-desk-wall.jpg
 18. **A bowl.** Blue-and-white swirl ceramic, chopsticks resting in it.
 19. **The white sound machine** by the lamp.
 
+**Done 2026-10-07:** on the desk, few and chosen (David: character, not clutter): the lit candle, the gold-framed photo of her and her sister, the "My Daughter is Amazing" card, the cocoa box, the jewellery stand. Built, each on its own page, kept off the desk for later: the monitor, iPad, mugs and tumbler, bowl, pen cup (with her eyelash curler), sound machine, vanity mirror, Mickey card, candle lid, lotion, Vaseline, hair tie, watch, lanyard.
+
 Suggested order: the candle (it's light), the sticky notes (the biggest piece: the notes), photos and booth strips, the calendar, the monitor and iPad, then the small things.
 
 ## Later
