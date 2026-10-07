@@ -12,7 +12,7 @@ import { ROOM } from './spec'
  *   right drag      step along the floor (sideways, forward and back)
  *   wheel           a step forward / back
  *   W A S D, arrows walk
- *   shift / ctrl    up / down (from near the floor to just under the ceiling, the bulkhead's lower over the desk)
+ *   shift / C       up / down (from near the floor to just under the ceiling, the bulkhead's lower over the desk)
  *   F               back to where you came in
  *
  * The left button is the hand's (carry, click). Moves and turns ease toward where they're going, so it's
@@ -146,7 +146,7 @@ export function FirstPerson() {
       if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.isContentEditable) return
       const k = st.keys
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') k.up = on ? 1 : 0
-      else if (e.code === 'ControlLeft' || e.code === 'ControlRight') k.down = on ? 1 : 0
+      else if (e.code === 'KeyC') k.down = on ? 1 : 0
       else if (e.code === 'KeyF' && on && controls.enabled && !worldInput.locked) {
         st.goal.p.set(...START.position)
         Object.assign(st.goal, lookOf(st.goal.p, new Vector3(...START.target)))
