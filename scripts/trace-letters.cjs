@@ -1,5 +1,5 @@
-// Her "Rina" traced off the photo of her desk (public/reference/room-desk-poster.jpg) into src/components/poster/letters.ts
-// and public/textures/rina-letters.png. Needs (not kept in the project): npm i --no-save potrace jimp@0.22
+// Her "Rina" traced off the photo of her desk (public/reference/room-desk-poster.jpg) into scripts/rina-trace.json (then
+// scripts/draw-letters.cjs draws it clean into src/components/poster/letters.ts). Needs (not kept in the project): npm i --no-save potrace jimp@0.22
 // Run: node scripts/trace-letters.cjs. The marker: dark and grey (her colours are as dark but coloured), pencil grain
 // opened away; what's coloured in: the enclosed parts holding the SEEDS (read off the photo by eye).
 const Jimp = require('jimp')
@@ -129,97 +129,8 @@ const traceMask = (mask, W, H, opts) =>
   let bx0 = W, by0 = H, bx1 = 0, by1 = 0
   for (let i = 0; i < W * H; i++) if (fill[i]) { const x = i % W, y = (i / W) | 0; bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y) }
   const bounds = [bx0 - INK, by0 - INK, bx1 + INK, by1 + INK]
-  // her colours: white-balanced (the paper to her paper's #f6f0e2), then each part's fitted with a smooth surface (a
-  // quadratic in x and y): the gradient she coloured, without the pencil's patchiness or the lamp's shading
-  const target = [0xf6, 0xf0, 0xe2]
-  const gain = target.map((t, k) => t / paper[k])
-  const basis = (x, y) => [1, x, y, x * x, x * y, y * y]
-  const fits = new Map()
-  for (const l of fillLabels) fits.set(l, { A: Array.from({ length: 6 }, () => new Float64Array(6)), b: [0, 1, 2].map(() => new Float64Array(6)), n: 0 })
-  for (let i = 0; i < W * H; i += 3) {
-    const f = fits.get(R.lab[i])
-    if (!f) continue
-    const bb = basis((i % W) / W, ((i / W) | 0) / H)
-    const c = px(i).map((v, k) => Math.min(255, v * gain[k]))
-    for (let u = 0; u < 6; u++) {
-      for (let v = 0; v < 6; v++) f.A[u][v] += bb[u] * bb[v]
-      for (let k = 0; k < 3; k++) f.b[k][u] += bb[u] * c[k]
-    }
-    f.n++
-  }
-  const solve = (A, y) => {
-    const n = y.length
-    const M = A.map((r, i) => [...r, y[i]])
-    for (let c = 0; c < n; c++) {
-      let piv = c
-      for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r
-      ;[M[c], M[piv]] = [M[piv], M[c]]
-      for (let r = 0; r < n; r++) {
-        if (r === c || !M[c][c]) continue
-        const k = M[r][c] / M[c][c]
-        for (let j = c; j <= n; j++) M[r][j] -= k * M[c][j]
-      }
-    }
-    return M.map((r, i) => r[n] / (r[i] || 1))
-  }
-  for (const f of fits.values()) f.coef = [0, 1, 2].map((k) => solve(f.A.map((r) => Array.from(r)), Array.from(f.b[k])))
-  // the picture: each cell its part's colour (cells outside a part take the nearest part's, so a clipped edge is clean)
-  const S = 8
-  const cw = Math.ceil(W / S)
-  const ch = Math.ceil(H / S)
-  const owner = new Int32Array(cw * ch).fill(-1)
-  for (let y = 0; y < ch; y++)
-    for (let x = 0; x < cw; x++) {
-      const i = Math.min(H - 1, y * S + (S >> 1)) * W + Math.min(W - 1, x * S + (S >> 1))
-      if (fits.has(R.lab[i])) owner[y * cw + x] = R.lab[i]
-    }
-  for (let pass = 0; pass < 60; pass++) {
-    const next = owner.slice()
-    let any = false
-    for (let y = 0; y < ch; y++)
-      for (let x = 0; x < cw; x++) {
-        if (owner[y * cw + x] >= 0) continue
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const xx = x + dx
-          const yy = y + dy
-          if (xx < 0 || yy < 0 || xx >= cw || yy >= ch || owner[yy * cw + xx] < 0) continue
-          next[y * cw + x] = owner[yy * cw + xx]
-          any = true
-          break
-        }
-      }
-    owner.set(next)
-    if (!any) break
-  }
-  const pic = new Jimp(cw, ch)
-  for (let y = 0; y < ch; y++)
-    for (let x = 0; x < cw; x++) {
-      const f = fits.get(owner[y * cw + x])
-      const i = (y * cw + x) * 4
-      const bb = basis(((x + 0.5) * S) / W, ((y + 0.5) * S) / H)
-      for (let k = 0; k < 3; k++) pic.bitmap.data[i + k] = f ? Math.max(0, Math.min(255, f.coef[k].reduce((a, c, j) => a + c * bb[j], 0))) : 255
-      pic.bitmap.data[i + 3] = 255
-    }
-  await pic.writeAsync(OUT + 'public/textures/rina-letters.png')
-  fs.writeFileSync(
-    OUT + 'src/components/poster/letters.ts',
-    `/**
- * Her "Rina", traced off the photo of her desk (public/reference/room-desk-poster.jpg, the letters at x ${box.x}, y ${box.y},
- * ${box.w} × ${box.h} px) by scripts/trace-letters.cjs: \`fill\` the parts she coloured in, SVG path data in a ${W} × ${H}
- * frame; her marker goes round them \`ink\` wide (out from their edge); her colours are public/textures/rina-letters.png
- * (${cw} × ${ch}, the same frame: white-balanced to the poster's paper, each part's colouring a smooth fit of hers).
- */
-export const LETTERS = {
-  w: ${W},
-  h: ${H},
-  ink: ${INK},
-  /** the letters' own bounds in that frame (x0, y0, x1, y1), their marker too */
-  box: ${JSON.stringify(bounds)} as [number, number, number, number],
-  colors: '/textures/rina-letters.png',
-  fill: ${JSON.stringify(fillPath)},
-}
-`,
-  )
+  // the trace, for scripts/draw-letters.cjs to draw clean (its colours are ./spec's, picked off the photo by eye)
+  fs.writeFileSync(OUT + 'scripts/rina-trace.json', JSON.stringify({ w: W, h: H, crop: { x: box.x, y: box.y, scale: UP }, bounds, fill: fillPath }))
   const prev = new Jimp(W, H, 0xffffffff); for (let i = 0; i < W * H; i++) prev.bitmap.data.writeUInt32BE(thick[i] ? (outline[i] ? 0x000000ff : 0x8888ffff) : fill[i] ? 0xff8080ff : edge.has(R.lab[i]) ? 0xffffffff : 0xccccccff, i * 4); await prev.scale(0.5).writeAsync('rina-letters-mask.png') // (to look at: the marker, the fills, the holes)
-  console.log('fill', fillPath.length, 'chars; colours', cw, 'x', ch, 'parts', fits.size)
+  console.log('fill', fillPath.length, 'chars: now node scripts/draw-letters.cjs')
 })()

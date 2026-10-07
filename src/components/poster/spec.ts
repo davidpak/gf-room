@@ -1,14 +1,15 @@
 /**
- * The "Rina" poster over her desk: a sheet of poster board, her name across it in big hand-drawn bubble letters
- * (a thick black outline, filled in coloured pencil: the R pink to red, the i orange to yellow, the n orange to
- * red, the a teal to green to yellow), and all round them the notes her friends wrote her. Ours are her friends'
- * words of encouragement from David's Google Form (./messages), written in round the letters. mm.
+ * The "Rina" poster over her desk: a sheet of white poster board, her name across it in big hand-drawn bubble letters
+ * (a black marker outline, coloured in: the R lilac to pink to salmon, the i orange to yellow, the n red to orange,
+ * the a teal to green to yellow), and all round them, as on hers, notes from the people in her class: typed, a slip
+ * each, signed "—name", in columns filling every bit of the board the letters leave. Ours are her friends' words from
+ * David's Google Form (./messages). mm.
  *
  * Sources
  *   [P]  the photos: public/reference/room-desk-poster.jpg (straight on, over the desk, under the calligraphy, left
  *        of the lamp), room-desk-wide.png (where it is on the wall), and David's close photo of it: the letters
- *        fill about 85% of its width and 70% of its height, a band of notes above them and below, a column of notes
- *        down the right; the sheet's nearly square in her photo (470 × 440 px), about 28 × 25 in
+ *        fill about 85% of its width and 70% of its height, typed notes in columns above them and below, and down
+ *        the right; the sheet's nearly square in her photo (470 × 440 px), about 28 × 25 in
  *   [E]  its size (poster board cut to about that); where on the wall, by eye
  *
  * Its frame: its middle at the origin, its face toward +z, flat in x (across) and y (up).
@@ -20,22 +21,28 @@ export const POSTER = {
   t: 0.6, // card
   curl: 5, // [P] how far its corners lift off the wall, at most
   // where the letters go, as shares of the sheet (from its left, from its top) [P]
-  letters: { x0: 0.05, x1: 0.9, y0: 0.2, y1: 0.88, outline: 0.012 },
+  letters: { x0: 0.04, x1: 0.89, y0: 0.2, y1: 0.88 },
+  marker: 6, // mm: her marker's line, as much as shows outside the colouring [P: ~1.4% of the letters' height]
   colors: {
-    paper: '#f6f0e2',
-    ink: '#1d1a22',
-    // [P] each letter's colouring, top to bottom
-    R: ['#f2a3b4', '#e8667a', '#d9483f'],
-    i: ['#f6b23c', '#f2cf4a', '#f7e27a'],
-    n: ['#f19a3e', '#ec6a3a', '#e2553f'],
-    a: ['#5bc6c0', '#7fcf8e', '#e9dc5a'],
+    paper: '#f7f4ec',
+    slip: '#fdfbf6', // the printer paper the notes are typed on
+    ink: '#1d1719',
+    type: '#1f1e24',
   },
-  // the notes' places round the letters (shares of the sheet: x0, y0, x1, y1), filled in order [P]
-  bands: [
-    [0.03, 0.02, 0.97, 0.195], // above the letters, across
-    [0.905, 0.2, 0.99, 0.88], // down the right
-    [0.03, 0.885, 0.97, 0.985], // below
-  ] as [number, number, number, number][],
+  /** [P] each letter's colouring: stops along it, `dir` the way it runs (x, y in its own box, 0..1 from → to) */
+  coloring: {
+    R: { stops: ['#c7a8dc', '#e3a1c4', '#ee93a6', '#f08a80'], dir: [0.2, 0, 0.75, 1] },
+    i: { stops: ['#f3a43a', '#f6bd3c', '#f8d64c'], dir: [0.5, 0, 0.5, 1] },
+    n: { stops: ['#e2433b', '#ea5c36', '#f08236', '#f6a43c'], dir: [0.4, 0, 0.6, 1] },
+    a: { stops: ['#3eaed0', '#4dbcc0', '#8ccb8a', '#d9d854', '#f6d943'], dir: [0.45, 0.05, 0.3, 0.95] },
+  } as Record<'R' | 'i' | 'n' | 'a', { stops: string[]; dir: [number, number, number, number] }>,
+  // the notes: typed in columns round the letters (as hers) [P]
+  notes: {
+    margin: 9, // mm round the sheet's edge
+    clear: 6, // mm kept off the letters' marker
+    col: 112, // mm: a column at most (hers are about a sixth of the board)
+    gap: 4, // mm between columns
+  },
 }
 
 /** on her north wall: over the desk, a little left of its middle, under the calligraphy [P][E] (room frame) */
@@ -49,14 +56,8 @@ export function checkPoster(): Check[] {
   c('nearly square, as in her photo (470 × 440 px) [P]', `${P.w.toFixed(0)} × ${P.h.toFixed(0)} (${(P.w / P.h).toFixed(2)})`, Math.abs(P.w / P.h - 470 / 440) < 0.08)
   const L = P.letters
   c('the letters fill about 85% of its width, 70% of its height [P]', `${((L.x1 - L.x0) * 100).toFixed(0)}% × ${((L.y1 - L.y0) * 100).toFixed(0)}%`, Math.abs(L.x1 - L.x0 - 0.85) < 0.05 && Math.abs(L.y1 - L.y0 - 0.7) < 0.05)
-  // the notes' bands clear of the letters and each other
-  const overlap = (a: number[], b: number[]) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
-  const box = [L.x0, L.y0, L.x1, L.y1]
-  c('the notes’ places clear of the letters', P.bands.every((b) => !overlap(b, box)) ? 'clear' : 'over them', P.bands.every((b) => !overlap(b, box)))
-  let apart = true
-  for (let i = 0; i < P.bands.length; i++) for (let j = i + 1; j < P.bands.length; j++) if (overlap(P.bands[i], P.bands[j])) apart = false
-  c('the notes’ places apart', apart ? 'apart' : 'overlapping', apart)
-  c('on the sheet', P.bands.every((b) => b[0] >= 0 && b[2] <= 1 && b[1] >= 0 && b[3] <= 1) ? 'inside' : 'off it', P.bands.every((b) => b[0] >= 0 && b[2] <= 1 && b[1] >= 0 && b[3] <= 1))
+  c('room for notes above them, below and down the right [P]', `${(L.y0 * P.h).toFixed(0)} above, ${((1 - L.y1) * P.h).toFixed(0)} below, ${((1 - L.x1) * P.w).toFixed(0)} right`, L.y0 * P.h > 100 && (1 - L.y1) * P.h > 60 && (1 - L.x1) * P.w > 60)
+  c('her marker about 1.4% of the letters’ height [P]', `${P.marker} mm (${((P.marker / ((L.y1 - L.y0) * P.h)) * 100).toFixed(1)}%)`, Math.abs(P.marker / ((L.y1 - L.y0) * P.h) - 0.014) < 0.004)
   // on the wall: over the desk (its top 600 deep from x -1580 to -381), under the bulkhead (2250), clear of the window (x -350)
   const top = POSTER_AT.y + P.h / 2
   const right = POSTER_AT.x + P.w / 2

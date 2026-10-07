@@ -1,45 +1,63 @@
-/* a note from the poster, up close: a slip of the poster's paper, written large in the same hand */
+/* a note from the poster, up close: its slip of printer paper, typed as on the poster, taped up over the page */
 .poster-card {
   position: fixed;
   inset: 0;
   z-index: 40;
   display: grid;
   place-items: center;
-  background: rgba(28, 22, 41, 0.45);
+  background: rgba(28, 22, 41, 0.5);
   cursor: pointer;
   animation: poster-card-in 0.25s ease;
 }
 .poster-card > div {
-  max-width: min(560px, calc(100vw - 32px));
-  padding: 28px 32px 22px;
-  background: #f6f0e2;
-  color: #2b2a33;
-  border-radius: 6px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
-  transform: rotate(-1.2deg);
-  font: 600 30px/1.25 'Caveat', 'Gaegu', cursive;
+  position: relative;
+  max-width: min(600px, calc(100vw - 32px));
+  padding: 34px 38px 26px;
+  background: #fdfbf6;
+  color: #1f1e24;
+  border-radius: 2px;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.04),
+    0 22px 50px rgba(0, 0, 0, 0.35);
+  font: 22px/1.55 Arial, 'Helvetica Neue', Helvetica, sans-serif;
+  animation: poster-card-slip 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+/* the tape it's held up by */
+.poster-card > div::before {
+  content: '';
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  width: 110px;
+  height: 28px;
+  margin-left: -55px;
+  background: rgba(255, 244, 200, 0.75);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transform: rotate(-3deg);
 }
 .poster-card p {
   margin: 0;
 }
 .poster-card-name {
-  margin-top: 12px !important;
+  margin-top: 14px !important;
   text-align: right;
-  font-weight: 500;
-  font-size: 26px;
+  font-weight: 700;
+}
+.poster-card-count {
+  margin-top: 18px !important;
+  text-align: center;
+  font: 600 14px 'Nunito', sans-serif;
+  color: rgba(31, 30, 36, 0.4);
 }
 @keyframes poster-card-in {
   from {
     opacity: 0;
-    transform: scale(0.96);
   }
 }
-.poster-card > div p {
-  line-height: 1.25;
-}
-.poster-card-count {
-  margin-top: 14px !important;
-  text-align: center;
-  font: 600 16px 'Nunito', sans-serif;
-  color: rgba(43, 42, 51, 0.45);
+@keyframes poster-card-slip {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+    scale: 0.96;
+  }
 }

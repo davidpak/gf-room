@@ -7,16 +7,17 @@ import { LETTERS } from './letters'
 import type { Note } from './messages'
 
 /**
- * The "Rina" poster (./spec), painted into its own texture: the poster board, her name as she drew it (./letters,
- * traced off her poster), and her friends' notes (./messages) written in round it.
+ * The "Rina" poster (./spec), painted into its own texture, as hers is made: white poster board, her name across it
+ * (./letters: her own letters off the photo, drawn clean) in black marker coloured in with her colours, and all
+ * round it her friends' notes (./messages), typed, a slip of printer paper each, signed, glued on in columns
+ * wherever the letters leave room.
  *
- *   their hands    each friend's note in a hand of its own (one of eight handwritings) and a pen of its own; the
- *                  writing shrinks till every note fits round her name (to 50 and more), as the real one's did
- *   new notes      write themselves in, a letter at a time, the first time she sees them (this browser keeps which
- *                  she has)
- *   today's note   one friend's note a day comes off the poster onto a sticky note over its corner, big enough to
- *                  read from her chair: a different friend every day, round them all; a new one goes first
- *   reading        click the poster (or the sticky): the notes come up as cards, today's first; ← → (or a click on
+ *   the notes      the type is as big as lets every note on (to 50 and more); each slip as wide as its words
+ *   new notes      type themselves in the first time she sees them (this browser keeps which she has); what came
+ *                  since her first look has its name highlighted, a few days
+ *   today's note   one friend's note a day comes off the poster onto a sticky note over its corner, in a hand, big
+ *                  enough to read from her chair: a different friend every day, round them all; a new one goes first
+ *   reading        click a slip (or the sticky): the notes come up as slips, that one first; ← → (or a click on
  *                  either side) to go through them, Esc to put them away
  *
  * The sheet curls a little off the wall at its corners. Frame: ./spec (its middle, its face toward +z).
@@ -25,11 +26,11 @@ const P = POSTER
 const W = 2400 // the texture's pixels across
 const H = Math.round((W * P.h) / P.w)
 const PX = W / P.w // a mm, in pixels
-// mm: handwriting sizes tried, biggest first; its lines; a column; between notes; a column's margin
-const NOTE = { sizes: [7, 6.4, 5.8, 5.2, 4.7, 4.2, 3.8, 3.4], line: 1.2, col: 88, gap: 5, pad: 3 }
-const PENS = ['#2b2a33', '#25447a', '#3b2f5e', '#4a4a54', '#5a2f3c', '#1f4f4a']
-/** the friends' hands: a handwriting each (k: its size against the others', so they read alike) */
-export const HANDS = [
+// mm: type sizes tried (biggest first, down to her poster's); its lines; a slip's margin; between slips
+const TYPE = { max: 9, min: 2.6, step: 0.2, line: 1.28, pad: 0.55, gap: 0.8 }
+const typeFont = (px: number) => `${px}px Arial, "Helvetica Neue", Helvetica, sans-serif`
+/** the friends' hands, for today's sticky (k: its size against the others', so they read alike) */
+const HANDS = [
   { font: '600 {}px "Caveat"', k: 1.12 },
   { font: '700 {}px "Gaegu"', k: 1.05 },
   { font: '{}px "Indie Flower"', k: 0.9 },
@@ -39,12 +40,14 @@ export const HANDS = [
   { font: '{}px "Nanum Pen Script"', k: 1.3 },
   { font: '{}px "Gochi Hand"', k: 0.92 },
 ]
+const PENS = ['#2b2a33', '#25447a', '#3b2f5e', '#4a4a54', '#5a2f3c', '#1f4f4a']
 const who = (n: Note) => n.name.toLowerCase() || n.id
-export const handOf = (n: Note) => HANDS[hash(who(n)) % HANDS.length]
-export const fontOf = (n: Note, px: number) => handOf(n).font.replace('{}', String(px * handOf(n).k))
-export const penOf = (n: Note) => PENS[hash(who(n)) % PENS.length]
-const SPEED = 45 // letters a second, writing in
-const WRITE_IN = 3 // new notes written in at most (the rest of a big lot are just there)
+const handOf = (n: Note) => HANDS[hash(who(n)) % HANDS.length]
+const fontOf = (n: Note, px: number) => handOf(n).font.replace('{}', String(px * handOf(n).k))
+const penOf = (n: Note) => PENS[hash(who(n)) % PENS.length]
+const SPEED = 60 // letters a second, typing in
+const WRITE_IN = 3 // new notes typed in at most (the rest of a big lot are just there)
+const NEW_FOR = 4 * 86_400_000 // how long a new note's name stays highlighted
 
 const hash = (s: string) => {
   let h = 2166136261
@@ -54,123 +57,186 @@ const hash = (s: string) => {
 /** a little random that's the same every time for the same seed */
 const rng = (seed: number) => () => ((seed = Math.imul(seed ^ (seed >>> 15), 2246822507) ^ Math.imul(seed ^ (seed >>> 13), 3266489909)) >>> 0) / 4294967296
 
+// ---- her letters: where they go on the sheet (texture pixels), and as paths
+const LET = (() => {
+  const L = P.letters
+  const bw = (L.x1 - L.x0) * W
+  const bh = (L.y1 - L.y0) * H
+  const [x0, y0, x1, y1] = LETTERS.box
+  const k = Math.min(bw / (x1 - x0), bh / (y1 - y0))
+  return { k, tx: L.x0 * W + (bw - (x1 - x0) * k) / 2 - x0 * k, ty: L.y0 * H + (bh - (y1 - y0) * k) / 2 - y0 * k }
+})()
+const NAMES = ['R', 'i', 'n', 'a'] as const
+const MARKER = (P.marker * PX) / LET.k // her marker, in the letters' frame
+
 // ---- the board and the letters (drawn once, kept)
-function drawBoard(colors: HTMLImageElement | null): HTMLCanvasElement {
+function drawBoard(): HTMLCanvasElement {
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
   const g = c.getContext('2d')!
   g.fillStyle = P.colors.paper
   g.fillRect(0, 0, W, H)
-  // the card's grain: faint flecks
+  // the board's grain: faint flecks
   const r = rng(7)
   for (let i = 0; i < 9000; i++) {
-    g.fillStyle = r() < 0.5 ? 'rgba(120,100,70,0.05)' : 'rgba(255,255,255,0.06)'
+    g.fillStyle = r() < 0.5 ? 'rgba(120,100,70,0.04)' : 'rgba(255,255,255,0.08)'
     g.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2)
   }
-  if (colors) drawLetters(g, colors)
+  drawLetters(g)
   return c
 }
 
-/** her "Rina" (./letters: traced off her poster), fitted to the letters' box, drawn as she did it:
+/** her "Rina", as she made it:
  *
- *   her marker   round her shapes, as wide as hers, under the colouring (which covers its inner half)
- *   her pencil   coloured in by hand, not filled: a light first layer of her colours, then thousands of strokes on
- *                her slant, each in the colour where it lands (her gradient, ./letters' colours), a little lighter or
- *                darker, a little curved, pressed harder or softer, layered so the colours meet in strokes, not a
- *                blend; the paper's tooth left showing as specks (pencil skips over its pits)
+ *   her marker    round each letter, an even line about as wide as hers, gone over a second time a hair off
+ *                 (as a hand does), the colouring covering its inner half
+ *   her colours   each letter coloured top to bottom through her colours (./spec), crayon-soft: pressed harder in
+ *                 places, lighter in others; a fine grain of strokes on her slant, the paper's tooth showing through
+ *                 as specks; deeper along the marker, where a hand colouring up to a line presses
  */
-function drawLetters(g: CanvasRenderingContext2D, colors: HTMLImageElement) {
-  const L = P.letters
-  const bx = L.x0 * W
-  const by = L.y0 * H
-  const bw = (L.x1 - L.x0) * W
-  const bh = (L.y1 - L.y0) * H
-  // (her letters' own bounds into the box, as big as they go)
+function drawLetters(g: CanvasRenderingContext2D) {
+  const paths = Object.fromEntries(NAMES.map((n) => [n, new Path2D(LETTERS.parts[n])])) as Record<(typeof NAMES)[number], Path2D>
+  const all = new Path2D()
+  for (const n of NAMES) all.addPath(paths[n])
   const [x0, y0, x1, y1] = LETTERS.box
-  const k = Math.min(bw / (x1 - x0), bh / (y1 - y0))
   g.save()
-  g.translate(bx + (bw - (x1 - x0) * k) / 2 - x0 * k, by + (bh - (y1 - y0) * k) / 2 - y0 * k)
-  g.scale(k, k)
-  const fill = new Path2D(LETTERS.fill)
-  // her marker
-  g.save()
+  g.setTransform(LET.k, 0, 0, LET.k, LET.tx, LET.ty)
   g.lineJoin = g.lineCap = 'round'
+  // her marker (the ink bleeds a touch into the board: a soft edge first)
   g.strokeStyle = P.colors.ink
-  g.lineWidth = LETTERS.ink * 2
-  g.stroke(fill)
+  g.globalAlpha = 0.25
+  g.lineWidth = MARKER * 2 + 3
+  g.stroke(all)
+  g.globalAlpha = 1
+  g.lineWidth = MARKER * 2
+  g.stroke(all)
+  g.save()
+  g.translate(1.2, -0.8)
+  g.globalAlpha = 0.7
+  g.lineWidth = MARKER * 1.85
+  g.stroke(all)
   g.restore()
-  // her colours, to sample (each stroke takes the colour where it lands)
-  const cw = colors.naturalWidth
-  const ch = colors.naturalHeight
-  const pc = document.createElement('canvas')
-  pc.width = cw
-  pc.height = ch
-  const pg = pc.getContext('2d')!
-  pg.drawImage(colors, 0, 0)
-  const pix = pg.getImageData(0, 0, cw, ch).data
-  const sx = cw / LETTERS.w
-  const sy = ch / LETTERS.h
-  const colourAt = (x: number, y: number) => {
-    const i = (Math.min(ch - 1, Math.max(0, (y * sy) | 0)) * cw + Math.min(cw - 1, Math.max(0, (x * sx) | 0))) * 4
-    return [pix[i], pix[i + 1], pix[i + 2]]
+  g.globalAlpha = 1
+  // her colours: each letter through its stops
+  for (const n of NAMES) {
+    const [bx0, by0, bx1, by1] = LETTERS.boxes[n]
+    const { stops, dir } = P.coloring[n]
+    const at = (u: number, v: number) => [bx0 + u * (bx1 - bx0), by0 + v * (by1 - by0)] as const
+    const grad = g.createLinearGradient(...at(dir[0], dir[1]), ...at(dir[2], dir[3]))
+    stops.forEach((s, k) => grad.addColorStop(k / (stops.length - 1), s))
+    g.fillStyle = grad
+    g.fill(paths[n])
   }
   g.save()
-  g.clip(fill)
-  // (the paper first, over the marker's inner half: the pencil's see-through, and would show it as a dark band)
-  g.fillStyle = P.colors.paper
-  g.fill(fill)
-  // the first light layer: her colours, thin, the paper still showing
-  g.globalAlpha = 0.45
-  g.imageSmoothingQuality = 'high'
-  g.drawImage(colors, 0, 0, LETTERS.w, LETTERS.h)
-  g.globalAlpha = 1
-  // then the pencil, a layer at a time, each firmer than the last, its slant a touch different (a hand shifts)
-  g.lineCap = 'round'
+  g.clip(all)
   const r = rng(11)
-  const SLANT = -1.0 // radians: her strokes run up to the right
-  // (a stroke starts inside the letter it colours, so it takes that letter's colour: tested where it lands on the canvas)
-  const m = g.getTransform()
-  const inside = (x: number, y: number) => g.isPointInPath(fill, m.a * x + m.e, m.d * y + m.f)
-  for (const [n, press, turn] of [
-    [14000, 0.26, 0],
-    [14000, 0.34, 0.1],
-    [9000, 0.42, -0.08],
+  // pressed harder here, lighter there: soft patches (a coarse noise, blown up smooth)
+  const nc = document.createElement('canvas')
+  nc.width = 48
+  nc.height = 36
+  const ng = nc.getContext('2d')!
+  for (let y = 0; y < nc.height; y++)
+    for (let x = 0; x < nc.width; x++) {
+      const v = r()
+      ng.fillStyle = v < 0.5 ? `rgba(255,255,255,${(0.5 - v) * 0.42})` : `rgba(60,20,40,${(v - 0.5) * 0.12})`
+      ng.fillRect(x, y, 1, 1)
+    }
+  g.imageSmoothingEnabled = true
+  g.imageSmoothingQuality = 'high'
+  g.drawImage(nc, x0, y0, x1 - x0, y1 - y0)
+  // the grain: short strokes on her slant, light ones (the paper between them) and darker ones (a firmer stroke)
+  const SLANT = -1.05
+  for (const [n, color, alpha, width] of [
+    [9000, '255,255,255', 0.22, 1.4],
+    [9000, '255,255,255', 0.14, 2.2],
+    [8000, '50,20,40', 0.07, 1.6],
+    [6000, '50,20,40', 0.05, 2.6],
   ] as const) {
+    const p = new Path2D()
     for (let i = 0; i < n; i++) {
       const x = x0 + r() * (x1 - x0)
       const y = y0 + r() * (y1 - y0)
-      if (!inside(x, y)) continue
-      // her colour here, or now and then a neighbour's (where colours meet they overlap in strokes)
-      const off = r() < 0.2 ? (r() - 0.5) * 70 : 0
-      const c = colourAt(x, inside(x, y + off) ? y + off : y)
-      const shade = 0.88 + r() * 0.2
-      const a = SLANT + turn + (r() - 0.5) * 0.25
-      const len = 26 + r() * 46
-      const dx = Math.cos(a) * len
-      const dy = Math.sin(a) * len
-      const bend = (r() - 0.5) * len * 0.15
-      g.strokeStyle = `rgba(${(c[0] * shade) | 0},${(c[1] * shade) | 0},${(c[2] * shade) | 0},${press * (0.6 + r() * 0.6)})`
-      g.lineWidth = 1.6 + r() * 2.2
-      g.beginPath()
-      g.moveTo(x - dx / 2, y - dy / 2)
-      g.quadraticCurveTo(x - (dy / len) * bend, y + (dx / len) * bend, x + dx / 2, y + dy / 2)
-      g.stroke()
+      const a = SLANT + (r() - 0.5) * 0.3
+      const len = 7 + r() * 16
+      p.moveTo(x, y)
+      p.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len)
     }
+    g.strokeStyle = `rgba(${color},${alpha})`
+    g.lineWidth = width
+    g.stroke(p)
   }
-  // the paper's tooth: specks the pencil skipped
+  // deeper along the marker (inside it: the outer half's under the clip's edge, and the marker over it)
+  g.strokeStyle = 'rgba(70,25,35,0.10)'
+  g.lineWidth = 16
+  g.stroke(all)
+  // the paper's tooth: specks the crayon skipped
   g.fillStyle = P.colors.paper
-  for (let i = 0; i < 9000; i++) {
-    g.globalAlpha = 0.15 + r() * 0.35
-    g.fillRect(x0 + r() * (x1 - x0), y0 + r() * (y1 - y0), 1 + r() * 1.6, 1 + r() * 1.6)
+  for (let i = 0; i < 7000; i++) {
+    g.globalAlpha = 0.3 + r() * 0.5
+    const s = 0.8 + r() * 1.6
+    g.fillRect(x0 + r() * (x1 - x0), y0 + r() * (y1 - y0), s, s)
   }
   g.restore()
   g.restore()
 }
 
-// ---- the notes: where each goes, and drawing them
-type Placed = { note: Note; x: number; y: number; w: number; h: number; lines: string[]; pen: string; tilt: number; size: number }
-/** wrap a note's words to a column; its lines */
+// ---- the notes: where there's room for them, where each goes, and typing them
+/** the board's room for notes, as hers: columns above the letters and below them, and one down the right; each
+ *  column's room the full height, less where the letters are in it (found off the letters themselves) */
+type Room = { x: number; y: number; w: number; h: number }
+let ROOM: Room[] | null = null
+const room = (): Room[] => (ROOM ??= (() => {
+  const N = P.notes
+  const m = N.margin * PX
+  const clear = (N.clear + P.marker) * PX
+  // the letters as a coarse mask, to find what each column's clear of
+  const S = 4 // texture pixels to a mask pixel
+  const mc = document.createElement('canvas')
+  mc.width = Math.ceil(W / S)
+  mc.height = Math.ceil(H / S)
+  const mg = mc.getContext('2d', { willReadFrequently: true })!
+  mg.setTransform(LET.k / S, 0, 0, LET.k / S, LET.tx / S, LET.ty / S)
+  for (const n of NAMES) mg.fill(new Path2D(LETTERS.parts[n]))
+  const px = mg.getImageData(0, 0, mc.width, mc.height).data
+  const span = (xa: number, xb: number) => {
+    let top = Infinity
+    let bottom = -Infinity
+    for (let y = 0; y < mc.height; y++)
+      for (let x = Math.max(0, Math.floor(xa / S)); x < Math.min(mc.width, Math.ceil(xb / S)); x++)
+        if (px[(y * mc.width + x) * 4 + 3] > 0) {
+          top = Math.min(top, y * S)
+          bottom = Math.max(bottom, (y + 1) * S)
+        }
+    return { top, bottom }
+  }
+  const out: Room[] = []
+  const below: Room[] = []
+  // down the right, beside the letters
+  const right = LET.tx + LETTERS.box[2] * LET.k + clear
+  // across, over the letters: columns as near the size as fits
+  const across = right - clear - m
+  const cols = Math.max(1, Math.round(across / (N.col * PX)))
+  const cw = (across - (cols - 1) * N.gap * PX) / cols
+  for (let c = 0; c < cols; c++) {
+    const x = m + c * (cw + N.gap * PX)
+    const { top, bottom } = span(x - clear, x + cw + clear)
+    if (top === Infinity) out.push({ x, y: m, w: cw, h: H - 2 * m })
+    else {
+      if (top - clear - m > 12 * PX) out.push({ x, y: m, w: cw, h: top - clear - m })
+      // (along the bottom: short of today's sticky, stuck over the corner)
+      const w = Math.min(cw, (P.w / 2 + STICKY_AT.x - STICKY.size / 2 - 4) * PX - N.clear * PX - x)
+      if (H - m - bottom - clear > 12 * PX && w > 30 * PX) below.push({ x, y: bottom + clear, w, h: H - m - bottom - clear })
+    }
+  }
+  // (down to today's sticky, stuck over the corner)
+  const sticky = H / 2 - (STICKY_AT.y + STICKY.size / 2) * PX - N.clear * PX
+  if (W - m - right > 30 * PX) out.push({ x: right, y: m, w: W - m - right, h: sticky - m })
+  return [...out, ...below] // (as you'd read them: along the top, down the right, along the bottom)
+})())
+
+type Placed = { note: Note; x: number; y: number; w: number; h: number; lines: string[]; size: number; tilt: number; room: number }
+/** a note's words wrapped to `width`, its signature kept to its last word ("—Name" never splits) */
 function wrap(g: CanvasRenderingContext2D, text: string, width: number) {
   const out: string[] = []
   let line = ''
@@ -184,70 +250,100 @@ function wrap(g: CanvasRenderingContext2D, text: string, width: number) {
   if (line) out.push(line)
   return out
 }
-/** the notes laid out in the bands round the letters, column by column, in order, at `mm` handwriting */
-function layoutAt(g: CanvasRenderingContext2D, notes: Note[], mm: number): Placed[] {
+const typed = (n: Note) => (n.name ? `${n.text} —${n.name.replace(/ /g, ' ')}` : n.text)
+/** the notes on slips in the room, in order, at `mm` type, each column filled only to `fill` of it (a slip may start
+ *  above that line and run on past it); null if they don't all fit */
+function layoutAt(g: CanvasRenderingContext2D, notes: Note[], mm: number, fill = 1): Placed[] | null {
   const F = mm * PX
-  const lh = F * NOTE.line
+  const lh = F * TYPE.line
+  const pad = TYPE.pad * F
+  const gap = TYPE.gap * F
+  g.font = typeFont(F)
   const out: Placed[] = []
   let n = 0
-  for (const [x0, y0, x1, y1] of P.bands) {
-    const bw = (x1 - x0) * W
-    const cols = Math.max(1, Math.floor(bw / (NOTE.col * PX)))
-    const cw = bw / cols
-    for (let c = 0; c < cols && n < notes.length; c++) {
-      let y = y0 * H + NOTE.pad * PX
-      const x = x0 * W + c * cw + NOTE.pad * PX
-      while (n < notes.length) {
-        const note = notes[n]
-        g.font = fontOf(note, F)
-        const lines = wrap(g, note.text, cw - 2 * NOTE.pad * PX)
-        const h = (lines.length + (note.name ? 1 : 0)) * lh
-        if (y + h > y1 * H - NOTE.pad * PX) break
-        const r = rng(hash(note.id))
-        out.push({ note, x, y, w: cw - 2 * NOTE.pad * PX, h, lines, pen: penOf(note), tilt: (r() - 0.5) * 0.02, size: F })
-        y += h + NOTE.gap * PX * (mm / 6)
-        n++
+  for (const [ri, space] of room().entries()) {
+    let y = space.y
+    while (n < notes.length) {
+      const note = notes[n]
+      const lines = wrap(g, typed(note), space.w - 2 * pad)
+      const h = lines.length * lh + 2 * pad - (lh - F) // (no line gap under the last)
+      if (y + h > space.y + space.h || y > space.y + space.h * fill) break
+      const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 2 * pad
+      const r = rng(hash(note.id))
+      out.push({ note, x: space.x + (r() * (space.w - w)) / 3, y, w, h, lines, size: F, tilt: (r() - 0.5) * 0.012, room: ri })
+      y += h + gap
+      n++
+    }
+    if (n === notes.length) return out
+  }
+  return n === notes.length ? out : null
+}
+/** the biggest type that lets them reach round the whole board (along the top, down the right, along the bottom,
+ *  as hers), every column filled about as far as the others: a few notes don't all crowd the top (the biggest type
+ *  that fits at all might only fit them there); what doesn't fit even at the smallest is left off, and said */
+function layout(g: CanvasRenderingContext2D, notes: Note[]): Placed[] {
+  const want = Math.min(room().length, notes.length) - 1 // columns to reach (one may be skipped)
+  let biggest: Placed[] | null = null
+  for (let mm = TYPE.max; mm >= TYPE.min; mm -= TYPE.step) {
+    const all = layoutAt(g, notes, mm)
+    if (!all) continue
+    biggest ??= all
+    for (let fill = 0.05; fill < 1.01; fill += 0.03) {
+      const out = layoutAt(g, notes, mm, fill)
+      if (out) {
+        if (new Set(out.map((p) => p.room)).size >= want) return out
+        break // (the least fill at this size, and it doesn't reach: smaller type)
       }
     }
   }
-  return out
-}
-/** the biggest handwriting they all fit at (what doesn't fit even at the smallest is left off, and said) */
-function layout(g: CanvasRenderingContext2D, notes: Note[]): Placed[] {
-  let out: Placed[] = []
-  for (const mm of NOTE.sizes) {
-    out = layoutAt(g, notes, mm)
-    if (out.length === notes.length) return out
+  if (biggest) return biggest
+  // (too many: as many as fit at the smallest)
+  for (let k = notes.length - 1; k > 0; k--) {
+    const out = layoutAt(g, notes.slice(0, k), TYPE.min)
+    if (out) {
+      console.info(`poster: ${notes.length - k} notes didn't fit`)
+      return out
+    }
   }
-  console.info(`poster: ${notes.length - out.length} notes didn't fit`)
-  return out
+  return []
 }
-/** the notes, written: `shown` letters of each (for writing them in) */
-function drawNotes(g: CanvasRenderingContext2D, placed: Placed[], shown: (i: number) => number) {
+/** the slips, and their notes typed: `shown` letters of each (for typing them in); `fresh`: names to highlight */
+function drawNotes(g: CanvasRenderingContext2D, placed: Placed[], shown: (i: number) => number, fresh: Set<string>) {
   g.textBaseline = 'top'
+  g.textAlign = 'left'
   placed.forEach((p, i) => {
-    let left = shown(i)
-    if (left <= 0) return
-    const lh = p.size * NOTE.line
+    const left0 = shown(i)
+    if (left0 <= 0) return
+    const pad = TYPE.pad * p.size
+    const lh = p.size * TYPE.line
     g.save()
     g.translate(p.x, p.y)
     g.rotate(p.tilt)
-    g.fillStyle = p.pen
-    g.font = fontOf(p.note, p.size)
+    // the slip: printer paper, glued flat (a hair of shadow along its lower right edge)
+    g.fillStyle = 'rgba(80,60,40,0.10)'
+    g.fillRect(1.5, 2, p.w, p.h)
+    g.fillStyle = P.colors.slip
+    g.fillRect(0, 0, p.w, p.h)
+    g.font = typeFont(p.size)
+    // her friend's name, highlighted while it's new (under the type, as a highlighter goes)
+    const last = p.lines[p.lines.length - 1]
+    const sig = last.lastIndexOf('—')
+    if (fresh.has(p.note.id) && sig >= 0 && left0 === Infinity) {
+      const x = pad + g.measureText(last.slice(0, sig)).width
+      g.fillStyle = 'rgba(255,230,60,0.6)'
+      g.fillRect(x - p.size * 0.15, pad + (p.lines.length - 1) * lh - p.size * 0.12, g.measureText(last.slice(sig)).width + p.size * 0.3, p.size * 1.2)
+    }
+    g.fillStyle = P.colors.type
+    let left = left0
     p.lines.forEach((line, k) => {
       if (left <= 0) return
-      g.fillText(line.slice(0, left), 0, k * lh)
+      g.fillText(line.slice(0, left), pad, pad + k * lh)
       left -= line.length + 1
     })
-    if (p.note.name && left > 0) {
-      g.font = fontOf(p.note, p.size * 0.9)
-      g.textAlign = 'right'
-      g.fillText(`—${p.note.name}`.slice(0, left + 1), p.w, p.lines.length * lh)
-    }
     g.restore()
   })
 }
-const length = (p: Placed) => p.lines.reduce((a, l) => a + l.length + 1, 0) + (p.note.name ? p.note.name.length + 1 : 0)
+const length = (p: Placed) => p.lines.reduce((a, l) => a + l.length + 1, 0)
 
 // ---- today's note: one a day, round them all; a new one first
 const FIRST = 'poster.first' // when each was first seen (this browser)
@@ -366,18 +462,22 @@ export function Poster({ notes }: { notes: Note[] }) {
     g.computeVertexNormals()
     return g
   }, [])
-  // the board and her letters once her colours and every hand's font are in
+  // the board and her letters (once every hand's font is in, for today's sticky)
   const [board, setBoard] = useState<HTMLCanvasElement | null>(null)
   useEffect(() => {
     let live = true
-    const colors = new Image()
-    colors.src = LETTERS.colors
-    Promise.all([colors.decode(), ...FONTS.map((f) => document.fonts.load(f))])
-      .then(() => live && setBoard(drawBoard(colors)))
-      .catch(() => live && setBoard(drawBoard(colors.complete ? colors : null)))
+    Promise.all(FONTS.map((f) => document.fonts.load(f)))
+      .catch(() => {})
+      .then(() => live && setBoard(drawBoard()))
     return () => void (live = false)
   }, [])
   const placed = useMemo(() => (board ? layout(tex.g, notes) : []), [board, notes, tex])
+  // what came since her first look, a few days: its name highlighted
+  const fresh = useMemo(() => {
+    const m = firstSeen(notes)
+    const first = Math.min(...Object.values(m))
+    return new Set(notes.filter((n) => m[n.id] > first + 3_600_000 && Date.now() - m[n.id] < NEW_FOR).map((n) => n.id))
+  }, [notes])
   // writing in: the notes she hasn't seen, one after another
   const write = useRef({ t: 0, fresh: [] as number[], done: true })
   useEffect(() => {
@@ -393,7 +493,7 @@ export function Poster({ notes }: { notes: Note[] }) {
       } catch {
         /* (no storage) */
       }
-  }, [placed]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [placed, fresh]) // eslint-disable-line react-hooks/exhaustive-deps
   /** the texture at `t` seconds into writing in */
   const paint = (t: number) => {
     if (!board) return
@@ -406,7 +506,7 @@ export function Poster({ notes }: { notes: Note[] }) {
       shown.set(i, n)
       budget -= length(placed[i])
     }
-    drawNotes(tex.g, placed, (i) => (shown.has(i) ? shown.get(i)! : Infinity))
+    drawNotes(tex.g, placed, (i) => (shown.has(i) ? shown.get(i)! : Infinity), fresh)
     tex.t.needsUpdate = true
   }
   const last = useRef(0)
@@ -459,7 +559,7 @@ export function Poster({ notes }: { notes: Note[] }) {
     const uv = e.uv
     const x = (uv?.x ?? 0) * W
     const y = (1 - (uv?.y ?? 0)) * H
-    const hit = placed.find((p) => x >= p.x - 6 && x <= p.x + p.w + 6 && y >= p.y - 6 && y <= p.y + p.h + 6)
+    const hit = placed.find((p) => x >= p.x - 4 && x <= p.x + p.w + 4 && y >= p.y - 4 && y <= p.y + p.h + 4)
     cards.open(notes, hit ? notes.indexOf(hit.note) : Math.max(0, today))
   }
   const openToday = (e: ThreeEvent<MouseEvent>) => {
@@ -493,8 +593,8 @@ const cards = (() => {
   }
 })()
 
-/** the notes as cards over the page, each in its friend's hand, big enough to read: ← → (or a click on either side
- *  of the card) through them, Esc or a click off it to put them away (on the page, outside the canvas) */
+/** the notes up close, over the page: the slip off the poster, typed big enough to read, taped up; ← → (or a click on
+ *  either side of it) through them, Esc or a click off it to put them away (on the page, outside the canvas) */
 export function PosterCard() {
   const st = useSyncExternalStore(cards.subscribe, cards.get)
   useEffect(() => {
@@ -512,12 +612,11 @@ export function PosterCard() {
   }, [st])
   if (!st) return null
   const n = st.notes[st.i]
-  const font = fontOf(n, 30)
   return (
     <div className="poster-card" onClick={() => cards.close()}>
       <div
         key={n.id}
-        style={{ font, color: penOf(n), transform: `rotate(${((hash(n.id) % 5) - 2) * 0.6}deg)` }}
+        style={{ transform: `rotate(${((hash(n.id) % 5) - 2) * 0.5}deg)` }}
         onClick={(e) => {
           e.stopPropagation()
           const r = e.currentTarget.getBoundingClientRect()
