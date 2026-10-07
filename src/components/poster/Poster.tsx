@@ -212,14 +212,19 @@ const room = (): Room[] => (ROOM ??= (() => {
   }
   const out: Room[] = []
   const below: Room[] = []
-  // down the right, beside the letters
+  // a column down either side of the letters, the whole height (if there's room for one)
+  const SIDE = 30 * PX
+  const left = LET.tx + LETTERS.box[0] * LET.k - clear
   const right = LET.tx + LETTERS.box[2] * LET.k + clear
-  // across, over the letters: columns as near the size as fits
-  const across = right - clear - m
+  const hasLeft = left - m > SIDE
+  const hasRight = W - m - right > SIDE
+  // and between them, columns above the letters and below, as near the size as fits
+  const x0 = hasLeft ? left + N.gap * PX : m
+  const across = (hasRight ? right - N.gap * PX : W - m) - x0
   const cols = Math.max(1, Math.round(across / (N.col * PX)))
   const cw = (across - (cols - 1) * N.gap * PX) / cols
   for (let c = 0; c < cols; c++) {
-    const x = m + c * (cw + N.gap * PX)
+    const x = x0 + c * (cw + N.gap * PX)
     const { top, bottom } = span(x - clear, x + cw + clear)
     if (top === Infinity) out.push({ x, y: m, w: cw, h: H - 2 * m })
     else {
@@ -231,8 +236,9 @@ const room = (): Room[] => (ROOM ??= (() => {
   }
   // (down to today's sticky, stuck over the corner)
   const sticky = H / 2 - (STICKY_AT.y + STICKY.size / 2) * PX - N.clear * PX
-  if (W - m - right > 30 * PX) out.push({ x: right, y: m, w: W - m - right, h: sticky - m })
-  return [...out, ...below] // (as you'd read them: along the top, down the right, along the bottom)
+  if (hasRight) out.push({ x: right, y: m, w: W - m - right, h: sticky - m })
+  // (as you'd read them going round: along the top, down the right, along the bottom, up the left)
+  return [...out, ...below, ...(hasLeft ? [{ x: m, y: m, w: left - m, h: H - 2 * m }] : [])]
 })())
 
 type Placed = { note: Note; x: number; y: number; w: number; h: number; lines: string[]; size: number; tilt: number; room: number }

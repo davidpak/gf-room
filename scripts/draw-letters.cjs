@@ -113,8 +113,19 @@ function unslit(c) {
       out.push(q)
       continue
     }
-    // (a little either side of the pinch dropped: the slit's two sides)
-    todo.push(q.slice(best.i + 3, best.j - 2), [...q.slice(best.j + 3), ...q.slice(0, Math.max(0, best.i - 2))])
+    // the whole slit dropped, both its sides, as far as they run close (else a notch is left where it was), and a
+    // little more, for the ends to round off
+    const at = (k) => q[((k % q.length) + q.length) % q.length]
+    const close = (u, v) => Math.hypot(at(u)[0] - at(v)[0], at(u)[1] - at(v)[1]) < PINCH * 1.8
+    let out0 = 0
+    let in0 = 0
+    while (out0 < 80 && close(best.i - out0 - 1, best.j + out0 + 1)) out0++
+    while (in0 < 80 && best.i + in0 + 1 < best.j - in0 - 1 && close(best.i + in0 + 1, best.j - in0 - 1)) in0++
+    const ia = best.i - out0 - 4
+    const ib = best.i + in0 + 4
+    const ja = best.j - in0 - 4
+    const jb = best.j + out0 + 4
+    todo.push(q.slice(ib, ja + 1), [...q.slice(jb), ...q.slice(0, Math.max(0, ia + 1))])
   }
   return out.filter((q) => q.length > 30)
 }

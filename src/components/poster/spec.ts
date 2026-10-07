@@ -10,19 +10,20 @@
  *        of the lamp), room-desk-wide.png (where it is on the wall), and David's close photo of it: the letters
  *        fill about 85% of its width and 70% of its height, typed notes in columns above them and below, and down
  *        the right; the sheet's nearly square in her photo (470 × 440 px), about 28 × 25 in
- *   [E]  its size (poster board cut to about that); where on the wall, by eye
+ *   [E]  its size: a bit bigger than hers, her name a bit smaller on it (about two thirds its width), for more of
+ *        her friends' notes all round it; where on the wall, by eye
  *
  * Its frame: its middle at the origin, its face toward +z, flat in x (across) and y (up).
  */
 const IN = 25.4
 export const POSTER = {
-  w: 28 * IN, // [E] 711
-  h: 25 * IN, // [P][E] 635: nearly square, as in her photo
+  w: 30 * IN, // [E] 762
+  h: 28 * IN, // [P][E] 711: nearly square, as in her photo
   t: 0.6, // card
   curl: 5, // [P] how far its corners lift off the wall, at most
   // where the letters go, as shares of the sheet (from its left, from its top) [P]
-  letters: { x0: 0.04, x1: 0.89, y0: 0.2, y1: 0.88 },
-  marker: 6, // mm: her marker's line, as much as shows outside the colouring [P: ~1.4% of the letters' height]
+  letters: { x0: 0.13, x1: 0.78, y0: 0.25, y1: 0.76 },
+  marker: 5, // mm: her marker's line, as much as shows outside the colouring [P: ~1.4% of the letters' height]
   colors: {
     paper: '#f7f4ec',
     slip: '#fdfbf6', // the printer paper the notes are typed on
@@ -55,8 +56,8 @@ export function checkPoster(): Check[] {
   const P = POSTER
   c('nearly square, as in her photo (470 × 440 px) [P]', `${P.w.toFixed(0)} × ${P.h.toFixed(0)} (${(P.w / P.h).toFixed(2)})`, Math.abs(P.w / P.h - 470 / 440) < 0.08)
   const L = P.letters
-  c('the letters fill about 85% of its width, 70% of its height [P]', `${((L.x1 - L.x0) * 100).toFixed(0)}% × ${((L.y1 - L.y0) * 100).toFixed(0)}%`, Math.abs(L.x1 - L.x0 - 0.85) < 0.05 && Math.abs(L.y1 - L.y0 - 0.7) < 0.05)
-  c('room for notes above them, below and down the right [P]', `${(L.y0 * P.h).toFixed(0)} above, ${((1 - L.y1) * P.h).toFixed(0)} below, ${((1 - L.x1) * P.w).toFixed(0)} right`, L.y0 * P.h > 100 && (1 - L.y1) * P.h > 60 && (1 - L.x1) * P.w > 60)
+  c('her name about two thirds of its width [E]', `${((L.x1 - L.x0) * 100).toFixed(0)}% × ${((L.y1 - L.y0) * 100).toFixed(0)}%`, Math.abs(L.x1 - L.x0 - 0.66) < 0.06)
+  c('room for notes all round it [P]', `${(L.y0 * P.h).toFixed(0)} above, ${((1 - L.y1) * P.h).toFixed(0)} below, ${(L.x0 * P.w).toFixed(0)} left, ${((1 - L.x1) * P.w).toFixed(0)} right`, L.y0 * P.h > 120 && (1 - L.y1) * P.h > 120 && L.x0 * P.w > 70 && (1 - L.x1) * P.w > 120)
   c('her marker about 1.4% of the letters’ height [P]', `${P.marker} mm (${((P.marker / ((L.y1 - L.y0) * P.h)) * 100).toFixed(1)}%)`, Math.abs(P.marker / ((L.y1 - L.y0) * P.h) - 0.014) < 0.004)
   // on the wall: over the desk (its top 600 deep from x -1580 to -381), under the bulkhead (2250), clear of the window (x -350)
   const top = POSTER_AT.y + P.h / 2
