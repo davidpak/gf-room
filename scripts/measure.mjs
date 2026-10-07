@@ -5,7 +5,7 @@
 // env: PROF=1 profile the load (ALL=1: library code too) · FRAMES=1 with PROF: profile 4 s of frames instead
 //      PRE="<expr>" run before the frames (toggle things, time parts) · INJECT="<js>" run before the page's own code
 //      SHOT=out.png [SCALE=0.5] [WAIT=ms]: a screenshot after load instead (PRE runs first: move the camera)
-//      CLICKXY=x,y a real click (CSS px) before the SHOT
+//      CLICKXY=x,y a real click (CSS px) before the SHOT · MOVEXY=x,y the pointer left there
 //      SAMPLE=1 log window.__waits every 2 s while loading · SHADOWCOUNT=1 shadow redraws a second
 // Use a build (npm run build, preview :4173, &dev for window.__r3f) for real numbers; dev is several times slower.
 import { spawn, spawnSync } from 'node:child_process'
@@ -128,6 +128,12 @@ if (process.env.CLICKSEL) {
     await sleep(400)
     console.log('click', process.env.CLICKSEL, '->', await ev(process.env.CHECK ?? 'true'))
   }
+}
+if (process.env.MOVEXY) {
+  // the pointer moved to x,y (CSS px) and left there, before a SHOT (to point at something)
+  const [x, y] = process.env.MOVEXY.split(',').map(Number)
+  for (let k = 0; k <= 4; k++) await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: x - 40 + k * 10, y })
+  await sleep(600)
 }
 if (process.env.CLICKXY) {
   // a real click at x,y (CSS px), before a SHOT (to open something)
