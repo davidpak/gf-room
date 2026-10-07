@@ -15,7 +15,7 @@ import { POSTER, checkPoster } from './spec'
  */
 const DEMO = typeof location !== 'undefined' && new URLSearchParams(location.search).has('demo')
 const LOREM = 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud'.split(' ')
-const demoNotes: Note[] = Array.from({ length: 30 }, (_, i) => ({
+const demoNotes: Note[] = Array.from({ length: 50 }, (_, i) => ({
   id: `demo${i}`,
   name: LOREM[(i * 7) % LOREM.length],
   text: LOREM.slice(0, 12 + ((i * 13) % 18)).join(' '),

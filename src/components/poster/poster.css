@@ -34,3 +34,12 @@
     transform: scale(0.96);
   }
 }
+.poster-card > div p {
+  line-height: 1.25;
+}
+.poster-card-count {
+  margin-top: 14px !important;
+  text-align: center;
+  font: 600 16px 'Nunito', sans-serif;
+  color: rgba(43, 42, 51, 0.45);
+}
