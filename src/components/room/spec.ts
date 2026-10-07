@@ -65,21 +65,24 @@ export const ROOM = {
 }
 
 /**
- * The room's light: an evening in, reading notes from your friends. [P] her night photos (room-desk-night.jpg,
- * room-desk-wide.png): amber all over, the yellow lamp the brightest thing, a strand of warm fairy lights up the
- * window's left edge and across its top, the blinds dark blue behind. [E] the strengths, by eye. The lamp's own
- * light is in ./Lamp (its spot and spill); everything else is here (./RoomLights).
+ * The room's light: the end of the day, in, reading notes from your friends. [P] her night photos
+ * (room-desk-night.jpg, room-desk-wide.png, room-desk-window-bed-night.png): amber all over, the yellow lamp the
+ * brightest thing, a strand of warm fairy lights up the window's left edge, across its top and on along the top of
+ * the wall over her bed. [E] David: sunset colours, orange and pink; and the cozy-interior way (golden light through
+ * blinds in slatted stripes, lamps ~2800 K, a soft bounce lifting the dark corners). The strengths by eye. The
+ * lamp's own light is in ./Lamp (its spot and spill); everything else is here (./RoomLights).
  */
 export const LIGHT = {
   dark: '#17131f', // past the room (the diorama's surround)
-  // what fills the shade: dusky plum from above, warm amber bounce from below (the floor and desk in lamplight)
-  shade: { sky: '#6c6384', ground: '#9a7356', k: 0.95 },
+  // what fills the shade: a dusky rose-lilac from above, a warm apricot bounce from below
+  shade: { sky: '#7c6488', ground: '#a87656', k: 1.05 },
   // the room's soft warm light, from above (the lamp and strings bounced off the ceiling): soft shadows for contact
   warm: { color: '#ffcf9f', k: 0.42 },
-  // the night at the window: a cool faint light through the blinds
-  moon: { color: '#7f8fff', k: 0.16 },
-  // outside: deep night blue, a warm city glow low down (dim: the room is the bright thing)
-  sky: { top: '#10121f', mid: '#1b1d33', low: '#3d2c38', k: 0.6 },
+  // the sun going down outside the window: low, warm coral-orange, in through the blinds in slatted stripes (the
+  // north wall shades everything else), across the bed and the floor and up the wall by it
+  sunset: { color: '#ff8f6a', k: 1.25, dir: [0.42, -0.32, 1] as [number, number, number] },
+  // outside: the sky at sunset, violet above, pink, a glowing orange low down (between the slats)
+  sky: { top: '#4a3468', mid: '#ec8b86', low: '#ffb36e', k: 1.05 },
   // the fairy lights (her photo: ~70 mini bulbs on a white wire, ~8 cm apart)
   strings: {
     bulb: { r: 5, len: 11, every: 85 }, // mm
@@ -90,7 +93,9 @@ export const LIGHT = {
     sag: 35, // mm the wire hangs between hooks
     hooks: 420, // mm apart
     wire: 1.3, // mm
-    lights: 3, // real lights along it, warming the wall and blinds round it
+    lights: 4, // real lights along it, warming the walls and blinds round it
+    // [P] past the window it goes on into the corner and along the top of the wall over her bed, then droops
+    bed: { run: 2300, droop: 260 }, // mm along that wall; how far its end hangs down
     k: 85, // each (decay 1, as the lamp's)
     reach: 1500, // mm
   },

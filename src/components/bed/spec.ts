@@ -32,8 +32,8 @@ export const BED = {
     crease: 380, // x of the turned-down fold: just short of where the pillows sit
     cornerRound: 110, // the flat blanket's corners are rounded, like a real hemmed blanket
     // sheen = the fibres' glow at grazing angles: a lighter tint of the same blue (near-white washes it out)
-    outside: { color: '#8a97cf', sheen: '#b9c1e8' }, // smooth micro-fleece, a soft dusty periwinkle
-    inside: { color: '#c9d0f3', sheen: '#e6e9fb' }, // sherpa pile, lighter
+    outside: { color: '#c3ccd6', sheen: '#dde3ea' }, // [P] bed-blanket.webp: a soft dusty grey-blue fleece
+    inside: { color: '#e2e6eb', sheen: '#f1f3f6' }, // sherpa pile, lighter
   },
 }
 
