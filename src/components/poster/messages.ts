@@ -69,10 +69,31 @@ export function notesFrom(rows: string[][]): Note[] {
     .map((r) => ({ id: `${r[0]}|${r[name] ?? ''}`, name: (r[name] ?? '').trim(), text: r[text].trim().replace(/\s+/g, ' ') }))
 }
 
+/** &demo[=n] on any page (the poster's, the room): n stand-in notes instead of the sheet's (50 if no n). Made up,
+ *  only to see how they lay out and behave before the real ones come in; never shown without it */
+const DEMO = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('demo') : null
+const SAYS = [
+  'Rina, you are one of the kindest people I know.',
+  'You always make everyone around you feel welcome, and I am so lucky to be your friend.',
+  'Keep going! You work so hard and it shows in everything you do.',
+  'Thank you for always listening to me.',
+  'I hope you know how proud we all are of you.',
+  'You light up every room you walk into.',
+  'Never forget how strong you are.',
+  'Remember to take breaks and be gentle with yourself, you deserve it.',
+]
+const WHO = ['Mia', 'Hannah', 'Jess', 'Olivia', 'Grace', 'Sam', 'Emily', 'Chloe', 'Ava', 'Sophie', 'Nina', 'Kate']
+const DEMO_NOTES: Note[] = Array.from({ length: DEMO === null ? 0 : Number(DEMO) || 50 }, (_, i) => ({
+  id: `demo${i}`,
+  name: WHO[i % WHO.length],
+  text: [0, 1, 2].slice(0, 1 + ((i * 7) % 3)).map((k) => SAYS[(i * 3 + k * 5) % SAYS.length]).join(' '),
+}))
+
 const KEPT = 'poster.notes'
-/** the notes: the last kept at once, then the sheet's when it comes */
+/** the notes: the last kept at once, then the sheet's when it comes (&demo: the stand-ins) */
 export function useNotes(): Note[] {
   const [notes, setNotes] = useState<Note[]>(() => {
+    if (DEMO !== null) return DEMO_NOTES
     try {
       return JSON.parse(localStorage.getItem(KEPT) ?? '[]') as Note[]
     } catch {
@@ -80,7 +101,7 @@ export function useNotes(): Note[] {
     }
   })
   useEffect(() => {
-    if (!SHEET_CSV) return
+    if (!SHEET_CSV || DEMO !== null) return
     let live = true
     fetch(SHEET_CSV, { cache: 'no-store' })
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))

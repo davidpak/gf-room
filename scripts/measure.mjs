@@ -129,6 +129,13 @@ if (process.env.CLICKSEL) {
     console.log('click', process.env.CLICKSEL, '->', await ev(process.env.CHECK ?? 'true'))
   }
 }
+let preDone = false
+if (process.env.PRE && (process.env.MOVEXY || process.env.CLICKXY)) {
+  // (the camera put where it's wanted first: the pointer's for what's there)
+  console.log('pre', await ev(process.env.PRE))
+  preDone = true
+  await sleep(300)
+}
 if (process.env.MOVEXY) {
   // the pointer moved to x,y (CSS px) and left there, before a SHOT (to point at something)
   const [x, y] = process.env.MOVEXY.split(',').map(Number)
@@ -145,7 +152,7 @@ if (process.env.CLICKXY) {
 }
 if (process.env.SHOT) {
   // a picture of the page as it is (SHOT=path.png; SCALE=0.5 makes it smaller), then done
-  if (process.env.PRE) console.log('pre', await ev(process.env.PRE))
+  if (process.env.PRE && !preDone) console.log('pre', await ev(process.env.PRE))
   await sleep(Number(process.env.WAIT ?? 800))
   const { result } = await send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 2560, height: 1440, scale: Number(process.env.SCALE ?? 0.5) } })
   fs.writeFileSync(process.env.SHOT, Buffer.from(result.data, 'base64'))

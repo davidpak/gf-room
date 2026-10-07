@@ -19,7 +19,7 @@ import { Ambience } from './Ambience'
 import { useCutaway } from './cutaway'
 import { Shell } from './Shell'
 import { ROOM } from './spec'
-import { Poster, PosterCard } from '../poster/Poster'
+import { Poster, PosterHint } from '../poster/Poster'
 import { useNotes } from '../poster/messages'
 import { POSTER_AT } from '../poster/spec'
 
@@ -167,7 +167,7 @@ export function RoomStage() {
         }}
       />
       <Ambience />
-      <PosterCard />
+      <PosterHint />
     </div>
   )
 }

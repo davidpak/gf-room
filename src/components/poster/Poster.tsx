@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import './poster.css'
-import { BufferAttribute, BufferGeometry, CanvasTexture, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace } from 'three'
+import { AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry, Group, InstancedMesh, LatheGeometry, MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type PerspectiveCamera } from 'three'
+import { worldInput } from '../../lib/inputLock'
 import { POSTER } from './spec'
 import { LETTERS } from './letters'
 import type { Note } from './messages'
@@ -20,8 +21,11 @@ import type { Note } from './messages'
  *   paper          each slip is its own bit of paper over the board (./spec slips): glued at its top, its bottom edge
  *                  standing a hair off; now and then a draft along the board stirs them, one after another; the one
  *                  pointed at lifts toward you. Small and slow: alive as the Quad's petals are, nothing laid over it
- *   reading        click a slip (or the sticky): the notes come up as slips, that one first; ← → (or a click on
- *                  either side) to go through them, Esc to put them away
+ *   pinned         each slip held up by a pin of its own through its top (./spec pins): a push pin, a map pin or a
+ *                  thumb tack, in one of her letters' colours
+ *   glow           the board a little brighter than the wall, a soft light on the wall round it (./spec glow)
+ *   reading        click a slip (or the sticky): the camera glides in square to it, as to a photo on the Quad; ← →
+ *                  the next one along; Esc (or a click off it) glides back
  *
  * The sheet curls a little off the wall at its corners. Frame: ./spec (its middle, its face toward +z).
  */
@@ -48,6 +52,7 @@ const who = (n: Note) => n.name.toLowerCase() || n.id
 const handOf = (n: Note) => HANDS[hash(who(n)) % HANDS.length]
 const fontOf = (n: Note, px: number) => handOf(n).font.replace('{}', String(px * handOf(n).k))
 const penOf = (n: Note) => PENS[hash(who(n)) % PENS.length]
+const PIN_TOP = P.pins.top * PX // (each slip's top, clear for its pin)
 const SPEED = 60 // letters a second, typing in
 const WRITE_IN = 3 // new notes typed in at most (the rest of a big lot are just there)
 const NEW_FOR = 4 * 86_400_000 // how long a new note's name stays highlighted
@@ -275,7 +280,7 @@ function layoutAt(g: CanvasRenderingContext2D, notes: Note[], mm: number, fill =
     while (n < notes.length) {
       const note = notes[n]
       const lines = wrap(g, typed(note), space.w - 2 * pad)
-      const h = lines.length * lh + 2 * pad - (lh - F) // (no line gap under the last)
+      const h = lines.length * lh + 2 * pad - (lh - F) + PIN_TOP // (no line gap under the last; room for its pin)
       if (y + h > space.y + space.h || y > space.y + space.h * fill) break
       const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 2 * pad
       const r = rng(hash(note.id))
@@ -327,8 +332,36 @@ function drawShadows(g: CanvasRenderingContext2D, placed: Placed[]) {
     g.restore()
   }
 }
-/** the slips, and their notes typed: `shown` letters of each (for typing them in); `fresh`: names to highlight */
-function drawNotes(g: CanvasRenderingContext2D, placed: Placed[], shown: (i: number) => number, fresh: Set<string>) {
+/** the slips' own sheet: each slip packed onto it, finer than the board (looked at up close, sharp): a row at a time,
+ *  `k` sheet pixels to the board's */
+const SHEET = { w: 4096, max: 4096, pad: 6 }
+type Atlas = { k: number; h: number; at: { x: number; y: number }[] }
+function atlasOf(placed: Placed[]): Atlas {
+  const pack = (k: number) => {
+    const at: { x: number; y: number }[] = []
+    let x = SHEET.pad
+    let y = SHEET.pad
+    let row = 0
+    for (const p of placed) {
+      const w = Math.ceil(p.w * k)
+      const h = Math.ceil(p.h * k)
+      if (x + w + SHEET.pad > SHEET.w) (x = SHEET.pad), (y += row + SHEET.pad), (row = 0)
+      at.push({ x, y })
+      x += w + SHEET.pad
+      row = Math.max(row, h)
+    }
+    return { k, h: y + row + SHEET.pad, at }
+  }
+  // (as fine as fits: up to 3 times the board's)
+  for (let k = 3; k > 1; k -= 0.25) {
+    const a = pack(k)
+    if (a.h <= SHEET.max) return a
+  }
+  return pack(1)
+}
+/** the slips, and their notes typed, each on its place on the slips' sheet: `shown` letters of each (for typing them
+ *  in); `fresh`: names to highlight */
+function drawNotes(g: CanvasRenderingContext2D, placed: Placed[], atlas: Atlas, shown: (i: number) => number, fresh: Set<string>) {
   g.textBaseline = 'top'
   g.textAlign = 'left'
   placed.forEach((p, i) => {
@@ -337,8 +370,7 @@ function drawNotes(g: CanvasRenderingContext2D, placed: Placed[], shown: (i: num
     const pad = TYPE.pad * p.size
     const lh = p.size * TYPE.line
     g.save()
-    g.translate(p.x, p.y)
-    g.rotate(p.tilt)
+    g.setTransform(atlas.k, 0, 0, atlas.k, atlas.at[i].x, atlas.at[i].y)
     // the slip: printer paper
     g.fillStyle = P.colors.slip
     g.fillRect(0, 0, p.w, p.h)
@@ -349,13 +381,13 @@ function drawNotes(g: CanvasRenderingContext2D, placed: Placed[], shown: (i: num
     if (fresh.has(p.note.id) && sig >= 0 && left0 === Infinity) {
       const x = pad + g.measureText(last.slice(0, sig)).width
       g.fillStyle = 'rgba(255,230,60,0.6)'
-      g.fillRect(x - p.size * 0.15, pad + (p.lines.length - 1) * lh - p.size * 0.12, g.measureText(last.slice(sig)).width + p.size * 0.3, p.size * 1.2)
+      g.fillRect(x - p.size * 0.15, PIN_TOP + pad + (p.lines.length - 1) * lh - p.size * 0.12, g.measureText(last.slice(sig)).width + p.size * 0.3, p.size * 1.2)
     }
     g.fillStyle = P.colors.type
     let left = left0
     p.lines.forEach((line, k) => {
       if (left <= 0) return
-      g.fillText(line.slice(0, left), pad, pad + k * lh)
+      g.fillText(line.slice(0, left), pad, PIN_TOP + pad + k * lh)
       left -= line.length + 1
     })
     g.restore()
@@ -464,7 +496,7 @@ const GRID = [3, 6] // a slip's quads across, down
 /** the slips' paper over the board: each slip's grid laid where it's drawn (texture pixels to the poster's mm),
  *  showing its part of the slips' texture; per vertex how far down its slip (0 at its glued top), which slip, how
  *  tall (for its bend's slope) */
-function slipsGeometry(placed: Placed[]) {
+function slipsGeometry(placed: Placed[], atlas: Atlas) {
   const [nx, ny] = GRID
   const per = (nx + 1) * (ny + 1)
   const n = Math.min(placed.length, MAX_SLIPS)
@@ -486,7 +518,7 @@ function slipsGeometry(placed: Placed[]) {
         const x = px / PX - P.w / 2
         const y = P.h / 2 - py / PX
         pos.set([x, y, surface(x, y) + 0.12], k * 3)
-        uv.set([px / W, 1 - py / H], k * 2)
+        uv.set([(atlas.at[i].x + (a / nx) * p.w * atlas.k) / SHEET.w, 1 - (atlas.at[i].y + (b / ny) * p.h * atlas.k) / atlas.h], k * 2)
         down[k] = b / ny
         which[k] = i
         tall[k] = p.h / PX
@@ -517,7 +549,7 @@ function slipsMaterial(map: CanvasTexture) {
     uLift: { value: new Float32Array(MAX_SLIPS) },
     uFront: { value: 1e5 },
   }
-  const m = new MeshStandardMaterial({ map, roughness: 0.95 })
+  const m = new MeshStandardMaterial({ map, roughness: 0.95, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: P.glow.board })
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u)
     shader.vertexShader = shader.vertexShader
@@ -546,12 +578,119 @@ function slipsMaterial(map: CanvasTexture) {
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-        transformed.z += aDown * aDown * slipEdge() + uLift[int(aSlip)] * ${(SL.lifted * 0.2).toFixed(3)};`,
+        transformed.z += aDown * aDown * slipEdge();`,
       )
   }
   m.customProgramCacheKey = () => 'poster-slips'
   return { m, u }
 }
+
+// ---- the pins: each slip's own, through its top
+const PINS = P.pins
+const pinKind = (p: Placed) => hash(p.note.id + '|pin') % 3 // 0 push pin, 1 map pin, 2 thumb tack
+/** the pins, a mesh a kind (each pin its own colour, a little crooked as pushed in by hand) */
+function Pins({ placed }: { placed: Placed[] }) {
+  const parts = useMemo(() => {
+    const lathe = (pts: [number, number][]) => new LatheGeometry(pts.map(([r, z]) => new Vector2(r, z)), 28).rotateX(Math.PI / 2)
+    const M = PINS.map
+    return {
+      push: lathe(PINS.push),
+      tack: lathe(PINS.tack),
+      ball: new SphereGeometry(M.ball, 20, 14).translate(0, 0, M.out),
+      shaft: new CylinderGeometry(M.shaft, M.shaft, M.out, 8).rotateX(Math.PI / 2).translate(0, 0, M.out / 2),
+      plastic: new MeshStandardMaterial({ roughness: 0.45 }),
+      steel: new MeshStandardMaterial({ color: PINS.steel, roughness: 0.35, metalness: 0.5 }),
+    }
+  }, [])
+  const refs = { push: useRef<InstancedMesh>(null), tack: useRef<InstancedMesh>(null), ball: useRef<InstancedMesh>(null), shaft: useRef<InstancedMesh>(null) }
+  const counts = useMemo(() => [0, 1, 2].map((k) => placed.filter((p) => pinKind(p) === k).length), [placed])
+  useEffect(() => {
+    const o = new Object3D()
+    const c = new Color()
+    const n = { push: 0, tack: 0, ball: 0, shaft: 0 }
+    const put = (key: keyof typeof n, color?: string) => {
+      const m = refs[key].current
+      if (!m) return
+      m.setMatrixAt(n[key], o.matrix)
+      if (color) m.setColorAt(n[key], c.set(color))
+      n[key]++
+    }
+    for (const p of placed) {
+      const r = rng(hash(p.note.id + '|pinned'))
+      // its middle: across the slip's top, a little off the middle, PINS.at down (the slip's own frame, turned)
+      const u = p.w * (0.5 + (r() - 0.5) * 0.12)
+      const v = PINS.at * PX
+      const px = p.x + u * Math.cos(p.tilt) - v * Math.sin(p.tilt)
+      const py = p.y + u * Math.sin(p.tilt) + v * Math.cos(p.tilt)
+      const x = px / PX - P.w / 2
+      const y = P.h / 2 - py / PX
+      o.position.set(x, y, surface(x, y) + 0.14)
+      const kind = pinKind(p)
+      // (pushed in by hand: a touch off square; a map pin more so)
+      const lean = kind === 1 ? 0.18 : 0.05
+      o.rotation.set((r() - 0.5) * lean, (r() - 0.5) * lean, r() * Math.PI * 2)
+      o.updateMatrix()
+      const color = PINS.colors[Math.floor(r() * PINS.colors.length)]
+      if (kind === 0) put('push', color)
+      else if (kind === 2) put('tack', color)
+      else put('ball', color), put('shaft')
+    }
+    for (const m of Object.values(refs)) {
+      if (!m.current) continue
+      m.current.instanceMatrix.needsUpdate = true
+      if (m.current.instanceColor) m.current.instanceColor.needsUpdate = true
+      m.current.computeBoundingSphere()
+    }
+  }, [placed]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <group>
+      {counts[0] > 0 && <instancedMesh key={`push${counts[0]}`} ref={refs.push} args={[parts.push, parts.plastic, counts[0]]} castShadow />}
+      {counts[2] > 0 && <instancedMesh key={`tack${counts[2]}`} ref={refs.tack} args={[parts.tack, parts.plastic, counts[2]]} castShadow />}
+      {counts[1] > 0 && <instancedMesh key={`ball${counts[1]}`} ref={refs.ball} args={[parts.ball, parts.plastic, counts[1]]} castShadow />}
+      {counts[1] > 0 && <instancedMesh key={`shaft${counts[1]}`} ref={refs.shaft} args={[parts.shaft, parts.steel, counts[1]]} castShadow />}
+    </group>
+  )
+}
+
+// ---- the glow: a soft light on the wall round the board (the board itself a little brighter: its emissive)
+const GLOW = P.glow
+function glowTexture() {
+  const S = 256
+  const c = document.createElement('canvas')
+  c.width = c.height = S
+  const g = c.getContext('2d')!
+  const ix = (S * GLOW.reach) / (P.w + 2 * GLOW.reach)
+  const iy = (S * GLOW.reach) / (P.h + 2 * GLOW.reach)
+  g.shadowColor = '#fff'
+  g.shadowBlur = Math.min(ix, iy) * 0.8
+  g.fillStyle = '#fff'
+  for (let k = 0; k < 2; k++) g.fillRect(ix, iy, S - 2 * ix, S - 2 * iy)
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  return t
+}
+
+// ---- looking at a note up close: which (its slip's index; -1 today's sticky), or none
+const focus = (() => {
+  let i: number | null = null
+  let count = 0
+  const subs = new Set<() => void>()
+  const set = (v: number | null) => {
+    i = v
+    subs.forEach((f) => f())
+  }
+  return {
+    get: () => i,
+    count: () => count,
+    setCount: (n: number) => (count = n),
+    set,
+    step: (d: number) => i !== null && i >= 0 && count > 1 && set((i + d + count) % count),
+    subscribe: (f: () => void) => (subs.add(f), () => void subs.delete(f)),
+  }
+})()
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
+type Controls = { enabled: boolean; target?: Vector3; getTarget?: (out: Vector3) => Vector3; setLookAt?: (px: number, py: number, pz: number, tx: number, ty: number, tz: number, smooth: boolean) => void }
+const _t = new Vector3()
 
 /** every hand's font, to be in before writing (else the first notes are in the fallback hand) */
 const FONTS = HANDS.map((h) => h.font.replace('{}', '40'))
@@ -567,11 +706,12 @@ export function Poster({ notes }: { notes: Note[] }) {
     t.anisotropy = 8
     return { c, g: c.getContext('2d')!, t }
   }, [])
-  const mat = useMemo(() => new MeshStandardMaterial({ map: tex.t, roughness: 0.95 }), [tex])
+  const mat = useMemo(() => new MeshStandardMaterial({ map: tex.t, roughness: 0.95, emissive: 0xffffff, emissiveMap: tex.t, emissiveIntensity: GLOW.board }), [tex])
+  const glow = useMemo(() => new MeshBasicMaterial({ map: glowTexture(), color: GLOW.color, transparent: true, opacity: GLOW.wall, blending: AdditiveBlending, depthWrite: false, toneMapped: false }), [])
   const paper = useMemo(() => {
     const c = document.createElement('canvas')
-    c.width = W
-    c.height = H
+    c.width = SHEET.w
+    c.height = 16
     const t = new CanvasTexture(c)
     t.colorSpace = SRGBColorSpace
     t.anisotropy = 8
@@ -595,6 +735,7 @@ export function Poster({ notes }: { notes: Note[] }) {
     return () => void (live = false)
   }, [])
   const placed = useMemo(() => (board ? layout(tex.g, notes) : []), [board, notes, tex])
+  const atlas = useMemo(() => atlasOf(placed), [placed])
   // what came since her first look, a few days: its name highlighted
   const fresh = useMemo(() => {
     const m = firstSeen(notes)
@@ -623,7 +764,14 @@ export function Poster({ notes }: { notes: Note[] }) {
     tex.g.drawImage(board, 0, 0)
     drawShadows(tex.g, placed)
     tex.t.needsUpdate = true
-    paper.g.clearRect(0, 0, W, H)
+    if (paper.c.height !== atlas.h) {
+      // (a new size: a new texture on the GPU)
+      paper.c.height = atlas.h
+      paper.t.dispose()
+    }
+    paper.g.setTransform(1, 0, 0, 1, 0, 0)
+    paper.g.fillStyle = P.colors.slip
+    paper.g.fillRect(0, 0, SHEET.w, atlas.h)
     const w = write.current
     let budget = t * SPEED
     const shown = new Map<number, number>()
@@ -632,11 +780,11 @@ export function Poster({ notes }: { notes: Note[] }) {
       shown.set(i, n)
       budget -= length(placed[i])
     }
-    drawNotes(paper.g, placed, (i) => (shown.has(i) ? shown.get(i)! : Infinity), fresh)
+    drawNotes(paper.g, placed, atlas, (i) => (shown.has(i) ? shown.get(i)! : Infinity), fresh)
     paper.t.needsUpdate = true
   }
   // the slips' paper: where they are; the draft along the board now and then; the one pointed at lifting
-  const slipsGeo = useMemo(() => slipsGeometry(placed), [placed])
+  const slipsGeo = useMemo(() => slipsGeometry(placed, atlas), [placed, atlas])
   useEffect(() => () => slipsGeo.dispose(), [slipsGeo])
   const [hover, setHover] = useState(-1)
   useFrame(({ clock }, dt) => {
@@ -685,7 +833,7 @@ export function Poster({ notes }: { notes: Note[] }) {
       pos.setZ(i, surface(px, py) + 0.8 + STICKY.curl * (1 - v) * (1 - v))
     }
     g.computeVertexNormals()
-    return { c, g: c.getContext('2d')!, t, geo: g, mat: new MeshStandardMaterial({ map: t, roughness: 0.9 }) }
+    return { c, g: c.getContext('2d')!, t, geo: g, mat: new MeshStandardMaterial({ map: t, roughness: 0.9, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: GLOW.board }) }
   }, [])
   useEffect(() => {
     if (!board || today < 0) return
@@ -693,10 +841,96 @@ export function Poster({ notes }: { notes: Note[] }) {
     sticky.t.needsUpdate = true
   }, [board, today, notes, sticky])
 
+  // looking at a note: the camera glides in square to it (from wherever it was), and back to there after
+  const groupRef = useRef<Group>(null)
+  const camera = useThree((s) => s.camera) as PerspectiveCamera
+  const controls = useThree((s) => s.controls) as unknown as Controls | null
+  const looking = useSyncExternalStore(focus.subscribe, focus.get)
+  useEffect(() => void focus.setCount(placed.length), [placed])
+  const glide = useRef<{ from: { p: Vector3; t: Vector3 }; to: { p: Vector3; t: Vector3 }; k: number; back: boolean } | null>(null)
+  const saved = useRef<{ p: Vector3; t: Vector3 } | null>(null)
+  useEffect(() => {
+    const g = groupRef.current
+    if (!controls || !g) return
+    const now = { p: camera.position.clone(), t: controls.target ? controls.target.clone() : controls.getTarget!(new Vector3()) }
+    if (looking === null) {
+      if (saved.current) glide.current = { from: now, to: saved.current, k: 0, back: true }
+      saved.current = null
+      return
+    }
+    // the note: its middle and size on the poster (mm), the sticky's or a slip's
+    let r: { x: number; y: number; w: number; h: number } | null = null
+    if (looking < 0) r = { x: STICKY_AT.x, y: STICKY_AT.y, w: STICKY.size, h: STICKY.size }
+    else {
+      const p = placed[looking]
+      if (p) {
+        const cx = p.x + Math.cos(p.tilt) * (p.w / 2) - Math.sin(p.tilt) * (p.h / 2)
+        const cy = p.y + Math.sin(p.tilt) * (p.w / 2) + Math.cos(p.tilt) * (p.h / 2)
+        r = { x: cx / PX - P.w / 2, y: P.h / 2 - cy / PX, w: p.w / PX, h: p.h / PX }
+      }
+    }
+    if (!r) return
+    if (!saved.current) {
+      saved.current = now
+      controls.enabled = false
+      worldInput.locked = true
+    }
+    g.updateWorldMatrix(true, false)
+    const c = new Vector3(r.x, r.y, surface(r.x, r.y)).applyMatrix4(g.matrixWorld)
+    const n = new Vector3(0, 0, 1).transformDirection(g.matrixWorld)
+    const tan = Math.tan((camera.fov * Math.PI) / 360)
+    // (it and a little round it filling the view; never nearer than a hand's length)
+    const w = Math.max(r.w * P.focus.room, 170)
+    const h = Math.max(r.h * P.focus.room, 110)
+    const d = Math.max(h / 2 / tan, w / 2 / (tan * camera.aspect))
+    glide.current = { from: now, to: { p: c.clone().addScaledVector(n, d), t: c }, k: 0, back: false }
+  }, [looking]) // eslint-disable-line react-hooks/exhaustive-deps
+  useFrame((_, dt) => {
+    const w = glide.current
+    if (!w || !controls) return
+    w.k = Math.min(1, w.k + Math.min(dt, 1 / 30) / P.focus.glide)
+    const k = easeInOut(w.k)
+    camera.position.lerpVectors(w.from.p, w.to.p, k)
+    const t = _t.lerpVectors(w.from.t, w.to.t, k)
+    if (controls.target) {
+      controls.target.copy(t)
+      camera.lookAt(t)
+    } else {
+      const p = camera.position
+      controls.setLookAt?.(p.x, p.y, p.z, t.x, t.y, t.z, false)
+    }
+    if (w.k >= 1) {
+      glide.current = null
+      if (w.back) {
+        controls.enabled = true
+        worldInput.locked = false
+      }
+    }
+  })
+  // its keys while looking: ← → the next one along, Esc back
+  useEffect(() => {
+    if (looking === null) return
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') focus.set(null)
+      else if (e.key === 'ArrowRight') focus.step(1)
+      else if (e.key === 'ArrowLeft') focus.step(-1)
+      else return
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    window.addEventListener('keydown', key, true)
+    return () => window.removeEventListener('keydown', key, true)
+  }, [looking])
+  useEffect(() => () => focus.set(null), [])
+
   /** the slip at a pointer on the poster (on the board or a slip: both in the texture's pixels; it's a little crooked) */
+  const _p = useMemo(() => new Vector3(), [])
   const at = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
-    const x = (e.uv?.x ?? 0) * W
-    const y = (1 - (e.uv?.y ?? 0)) * H
+    const g = groupRef.current
+    if (!g) return -1
+    const q = g.worldToLocal(_p.copy(e.point))
+    const x = (q.x + P.w / 2) * PX
+    const y = (P.h / 2 - q.y) * PX
     return placed.findIndex((p) => {
       const dx = x - p.x
       const dy = y - p.y
@@ -714,23 +948,29 @@ export function Poster({ notes }: { notes: Note[] }) {
     setHover(-1)
     document.body.style.cursor = ''
   }
-  // a click: the notes as cards (the one clicked first, or today's)
+  // a click: in to that note (or, looking, off the notes: back)
   const click = (e: ThreeEvent<MouseEvent>) => {
     if (!notes.length) return
     e.stopPropagation()
     const i = at(e)
-    cards.open(notes, i >= 0 ? notes.indexOf(placed[i].note) : Math.max(0, today))
+    if (i >= 0) focus.set(i)
+    else if (looking !== null) focus.set(null)
   }
   const openToday = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
-    cards.open(notes, today)
+    focus.set(-1)
   }
   return (
-    <group>
+    <group ref={groupRef} onPointerMissed={() => looking !== null && focus.set(null)}>
+      {/* the soft light on the wall round it */}
+      <mesh material={glow} position={[0, 0, -0.5]} scale={[P.w + 2 * GLOW.reach, P.h + 2 * GLOW.reach, 1]} renderOrder={-1}>
+        <planeGeometry />
+      </mesh>
       <group onClick={click} onPointerMove={point} onPointerOut={away}>
         <mesh geometry={geo} material={mat} receiveShadow />
         {placed.length > 0 && <mesh geometry={slipsGeo} material={paper.m} receiveShadow />}
       </group>
+      <Pins placed={placed} />
       {today >= 0 && (
         <mesh geometry={sticky.geo} material={sticky.mat} position={[STICKY_AT.x, STICKY_AT.y, 0]} rotation={[0, 0, STICKY_AT.rot]} castShadow receiveShadow onClick={openToday} />
       )}
@@ -738,61 +978,13 @@ export function Poster({ notes }: { notes: Note[] }) {
   )
 }
 
-/** the notes up close: which, and which one's showing */
-const cards = (() => {
-  let state: { notes: Note[]; i: number } | null = null
-  const subs = new Set<() => void>()
-  const set = (s: typeof state) => {
-    state = s
-    subs.forEach((f) => f())
-  }
-  return {
-    get: () => state,
-    open: (notes: Note[], i: number) => set({ notes, i: Math.max(0, i) }),
-    step: (d: number) => state && set({ ...state, i: (state.i + d + state.notes.length) % state.notes.length }),
-    close: () => set(null),
-    subscribe: (f: () => void) => (subs.add(f), () => void subs.delete(f)),
-  }
-})()
-
-/** the notes up close, over the page: the slip off the poster, typed big enough to read, taped up; ← → (or a click on
- *  either side of it) through them, Esc or a click off it to put them away (on the page, outside the canvas) */
-export function PosterCard() {
-  const st = useSyncExternalStore(cards.subscribe, cards.get)
-  useEffect(() => {
-    if (!st) return
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') cards.close()
-      else if (e.key === 'ArrowRight') cards.step(1)
-      else if (e.key === 'ArrowLeft') cards.step(-1)
-      else return
-      e.preventDefault()
-      e.stopPropagation()
-    }
-    window.addEventListener('keydown', key, true)
-    return () => window.removeEventListener('keydown', key, true)
-  }, [st])
-  if (!st) return null
-  const n = st.notes[st.i]
+/** while a note's looked at: what's what, as the Quad's hint by a photo (on the page, outside the canvas) */
+export function PosterHint() {
+  const i = useSyncExternalStore(focus.subscribe, focus.get)
+  if (i === null) return null
   return (
-    <div className="poster-card" onClick={() => cards.close()}>
-      <div
-        key={n.id}
-        style={{ transform: `rotate(${((hash(n.id) % 5) - 2) * 0.5}deg)` }}
-        onClick={(e) => {
-          e.stopPropagation()
-          const r = e.currentTarget.getBoundingClientRect()
-          cards.step(e.clientX < r.left + r.width / 2 ? -1 : 1)
-        }}
-      >
-        <p>{n.text}</p>
-        {n.name && <p className="poster-card-name">—{n.name}</p>}
-        {st.notes.length > 1 && (
-          <p className="poster-card-count">
-            {st.i + 1} of {st.notes.length}
-          </p>
-        )}
-      </div>
+    <div className="poster-hint">
+      {i >= 0 && focus.count() > 1 ? `${i + 1} of ${focus.count()} · ← → the next one · ` : ''}Esc to step back
     </div>
   )
 }

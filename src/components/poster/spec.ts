@@ -46,6 +46,24 @@ export const POSTER = {
     lifted: 3.5, // mm its bottom edge comes up off the board, pointed at (its top: a fifth of that)
     ease: 7, // 1/s: how quickly it lifts and settles
   },
+  /** what holds each slip up: a pin of its own through its top, in one of her letters' colours (toy plastic), one of
+   *  three kinds. Real ones [E]: a push pin's grip about 11 mm across and 9 mm off the board; a map pin's ball 7 mm
+   *  on a pin standing 7 mm out; a thumb tack's flat head 10 mm across, 2 mm proud */
+  pins: {
+    top: 8, // mm clear at a slip's top for its pin (its words start under it)
+    at: 4, // mm down from the slip's top edge, the pin's middle
+    // push pin, its profile from the paper up (r, z): a collar, the body tapering in then out, the grip
+    push: [[0, 0], [4.2, 0], [4.2, 1], [2.2, 1.3], [2.5, 4.2], [3.3, 6.6], [5.5, 6.9], [5.6, 8.3], [5.2, 8.9], [0, 9]] as [number, number][],
+    map: { ball: 3.6, shaft: 0.55, out: 7 },
+    tack: [[0, 0], [5, 0], [5, 0.5], [4.4, 1.3], [2.6, 1.9], [0, 2]] as [number, number][],
+    colors: ['#c7a8dc', '#ee93a6', '#f6bd3c', '#ef7a4a', '#4dbcc0', '#8ccb8a'], // [P] her letters'
+    steel: '#b9bcc4',
+  },
+  /** a soft glow: the board a little brighter than her wall in the dim room, and a soft light on the wall round it [E] */
+  glow: { board: 0.16, reach: 90, wall: 0.28, color: '#fff0d8' },
+  /** a note clicked: the camera glides in square to it (as the Quad's photos), the note and this much more round it
+   *  filling the view; ← → the next one; Esc back [E] */
+  focus: { room: 1.3, glide: 0.9 },
   // the notes: typed in columns round the letters (as hers) [P]
   notes: {
     margin: 9, // mm round the sheet's edge
@@ -71,6 +89,11 @@ export function checkPoster(): Check[] {
   const S = P.slips
   c('the slips stir by a few mm at most (subtle, as the Quad’s petals) [E]', `rest ${S.curl}, sway ${S.sway}, draft ${S.breeze.lift}, pointed at ${S.lifted} mm`, S.curl + S.sway + S.breeze.lift <= 2.5 && S.lifted <= 5)
   c('a draft now and then, not all the time [E]', `every ${S.breeze.every} s, crossing in ${S.breeze.cross} s`, S.breeze.every >= 2 * S.breeze.cross)
+  const pin = P.pins
+  const pushR = Math.max(...pin.push.map(([r]) => r))
+  const pushH = Math.max(...pin.push.map(([, z]) => z))
+  c('a push pin about 11 mm across, 9 mm off the board [E]', `${(pushR * 2).toFixed(1)} × ${pushH.toFixed(1)}`, Math.abs(pushR * 2 - 11) < 1.5 && Math.abs(pushH - 9) < 1.5)
+  c('a pin clear of its slip’s words (its head inside the room left at the top) [E]', `head ${pin.at - pushR}..${pin.at + pushR} mm, words from ${pin.top}`, pin.at + Math.min(pushR, pin.map.ball) <= pin.top + 2)
   // on the wall: over the desk (its top 600 deep from x -1580 to -381), under the bulkhead (2250), clear of the window (x -350)
   const top = POSTER_AT.y + P.h / 2
   const right = POSTER_AT.x + P.w / 2
