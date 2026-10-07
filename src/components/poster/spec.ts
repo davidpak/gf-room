@@ -37,6 +37,15 @@ export const POSTER = {
     n: { stops: ['#e2433b', '#ea5c36', '#f08236', '#f6a43c'], dir: [0.4, 0, 0.6, 1] },
     a: { stops: ['#3eaed0', '#4dbcc0', '#8ccb8a', '#d9d854', '#f6d943'], dir: [0.45, 0.05, 0.3, 0.95] },
   } as Record<'R' | 'i' | 'n' | 'a', { stops: string[]; dir: [number, number, number, number] }>,
+  /** the notes' slips as paper: each glued at its top, its bottom edge free (a slip of printer paper doesn't lie
+   *  dead flat). Small and slow on purpose: alive the way the Quad's petals are, never an effect laid over it [E] */
+  slips: {
+    curl: 0.5, // mm its free bottom edge stands off the board, resting
+    sway: 0.25, // mm it stirs by itself, now and then (each its own pace)
+    breeze: { lift: 1.4, every: 11, cross: 4, width: 160 }, // a draft along the board: mm, s apart, s to cross, mm wide
+    lifted: 3.5, // mm its bottom edge comes up off the board, pointed at (its top: a fifth of that)
+    ease: 7, // 1/s: how quickly it lifts and settles
+  },
   // the notes: typed in columns round the letters (as hers) [P]
   notes: {
     margin: 9, // mm round the sheet's edge
@@ -59,6 +68,9 @@ export function checkPoster(): Check[] {
   c('her name about half its width [E]', `${((L.x1 - L.x0) * 100).toFixed(0)}% × ${((L.y1 - L.y0) * 100).toFixed(0)}%`, Math.abs(L.x1 - L.x0 - 0.5) < 0.06)
   c('room for notes all round it [P]', `${(L.y0 * P.h).toFixed(0)} above, ${((1 - L.y1) * P.h).toFixed(0)} below, ${(L.x0 * P.w).toFixed(0)} left, ${((1 - L.x1) * P.w).toFixed(0)} right`, L.y0 * P.h > 120 && (1 - L.y1) * P.h > 120 && L.x0 * P.w > 70 && (1 - L.x1) * P.w > 120)
   c('her marker about 1.5% of the letters’ height [P]', `${P.marker} mm (${((P.marker / ((L.y1 - L.y0) * P.h)) * 100).toFixed(1)}%)`, Math.abs(P.marker / ((L.y1 - L.y0) * P.h) - 0.015) < 0.004)
+  const S = P.slips
+  c('the slips stir by a few mm at most (subtle, as the Quad’s petals) [E]', `rest ${S.curl}, sway ${S.sway}, draft ${S.breeze.lift}, pointed at ${S.lifted} mm`, S.curl + S.sway + S.breeze.lift <= 2.5 && S.lifted <= 5)
+  c('a draft now and then, not all the time [E]', `every ${S.breeze.every} s, crossing in ${S.breeze.cross} s`, S.breeze.every >= 2 * S.breeze.cross)
   // on the wall: over the desk (its top 600 deep from x -1580 to -381), under the bulkhead (2250), clear of the window (x -350)
   const top = POSTER_AT.y + P.h / 2
   const right = POSTER_AT.x + P.w / 2

@@ -1,27 +1,26 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import './poster.css'
-import { CanvasTexture, Mesh, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace } from 'three'
+import { BufferAttribute, BufferGeometry, CanvasTexture, MeshStandardMaterial, PlaneGeometry, SRGBColorSpace } from 'three'
 import { POSTER } from './spec'
 import { LETTERS } from './letters'
 import type { Note } from './messages'
-import { HANDS, drawSlip, fontOf, hash, lengthOf, penOf, rng, slipOf, wrap, type Slip } from './slips'
 
 /**
  * The "Rina" poster (./spec), painted into its own texture, as hers is made: white poster board, her name across it
  * (./letters: her own letters off the photo, drawn clean) in black marker coloured in with her colours, and all
- * round it her friends' notes (./messages), typed, signed, a slip each, stuck on in columns wherever the letters
- * leave room.
+ * round it her friends' notes (./messages), typed, a slip of printer paper each, signed, glued on in columns
+ * wherever the letters leave room.
  *
- *   the notes      each friend's slip is theirs (./slips): their paper, their tape or pin or sticker in her colours,
- *                  their doodle, their name signed in their hand and pen; the type as big as lets every note on (to
- *                  50 and more); each slip as wide as its words, a little crooked
- *   pointing       a slip under the pointer lifts off the board toward you
+ *   the notes      the type is as big as lets every note on (to 50 and more); each slip as wide as its words
  *   new notes      type themselves in the first time she sees them (this browser keeps which she has); what came
  *                  since her first look has its name highlighted, a few days
  *   today's note   one friend's note a day comes off the poster onto a sticky note over its corner, in a hand, big
  *                  enough to read from her chair: a different friend every day, round them all; a new one goes first
- *   reading        click a slip (or the sticky): the notes come up as their slips, big, that one first; ← → (or a click on
+ *   paper          each slip is its own bit of paper over the board (./spec slips): glued at its top, its bottom edge
+ *                  standing a hair off; now and then a draft along the board stirs them, one after another; the one
+ *                  pointed at lifts toward you. Small and slow: alive as the Quad's petals are, nothing laid over it
+ *   reading        click a slip (or the sticky): the notes come up as slips, that one first; ← → (or a click on
  *                  either side) to go through them, Esc to put them away
  *
  * The sheet curls a little off the wall at its corners. Frame: ./spec (its middle, its face toward +z).
@@ -30,11 +29,36 @@ const P = POSTER
 const W = 2400 // the texture's pixels across
 const H = Math.round((W * P.h) / P.w)
 const PX = W / P.w // a mm, in pixels
-// mm: type sizes tried (biggest first, down to her poster's); between slips (shares of the type: their tape sticks up)
-const TYPE = { max: 9, min: 2.6, step: 0.2, gap: 1.1 }
+// mm: type sizes tried (biggest first, down to her poster's); its lines; a slip's margin; between slips
+const TYPE = { max: 9, min: 2.6, step: 0.2, line: 1.28, pad: 0.55, gap: 0.8 }
+const typeFont = (px: number) => `${px}px Arial, "Helvetica Neue", Helvetica, sans-serif`
+/** the friends' hands, for today's sticky (k: its size against the others', so they read alike) */
+const HANDS = [
+  { font: '600 {}px "Caveat"', k: 1.12 },
+  { font: '700 {}px "Gaegu"', k: 1.05 },
+  { font: '{}px "Indie Flower"', k: 0.9 },
+  { font: '{}px "Patrick Hand"', k: 0.95 },
+  { font: '{}px "Shadows Into Light Two"', k: 0.92 },
+  { font: '{}px "Kalam"', k: 0.85 },
+  { font: '{}px "Nanum Pen Script"', k: 1.3 },
+  { font: '{}px "Gochi Hand"', k: 0.92 },
+]
+const PENS = ['#2b2a33', '#25447a', '#3b2f5e', '#4a4a54', '#5a2f3c', '#1f4f4a']
+const who = (n: Note) => n.name.toLowerCase() || n.id
+const handOf = (n: Note) => HANDS[hash(who(n)) % HANDS.length]
+const fontOf = (n: Note, px: number) => handOf(n).font.replace('{}', String(px * handOf(n).k))
+const penOf = (n: Note) => PENS[hash(who(n)) % PENS.length]
 const SPEED = 60 // letters a second, typing in
 const WRITE_IN = 3 // new notes typed in at most (the rest of a big lot are just there)
 const NEW_FOR = 4 * 86_400_000 // how long a new note's name stays highlighted
+
+const hash = (s: string) => {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return h >>> 0
+}
+/** a little random that's the same every time for the same seed */
+const rng = (seed: number) => () => ((seed = Math.imul(seed ^ (seed >>> 15), 2246822507) ^ Math.imul(seed ^ (seed >>> 13), 3266489909)) >>> 0) / 4294967296
 
 // ---- her letters: where they go on the sheet (texture pixels), and as paths
 const LET = (() => {
@@ -220,23 +244,43 @@ const room = (): Room[] => (ROOM ??= (() => {
   return [...out, ...below, ...(hasLeft ? [{ x: m, y: m, w: left - m, h: H - 2 * m }] : [])]
 })())
 
-type Placed = Slip & { x: number; y: number; tilt: number; room: number }
+type Placed = { note: Note; x: number; y: number; w: number; h: number; lines: string[]; size: number; tilt: number; room: number }
+/** a note's words wrapped to `width`, its signature kept to its last word ("—Name" never splits) */
+function wrap(g: CanvasRenderingContext2D, text: string, width: number) {
+  const out: string[] = []
+  let line = ''
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word
+    if (g.measureText(next).width > width && line) {
+      out.push(line)
+      line = word
+    } else line = next
+  }
+  if (line) out.push(line)
+  return out
+}
+const typed = (n: Note) => (n.name ? `${n.text} —${n.name.replace(/ /g, ' ')}` : n.text)
 /** the notes on slips in the room, in order, at `mm` type, each column filled only to `fill` of it (a slip may start
  *  above that line and run on past it); null if they don't all fit */
 function layoutAt(g: CanvasRenderingContext2D, notes: Note[], mm: number, fill = 1): Placed[] | null {
   const F = mm * PX
+  const lh = F * TYPE.line
+  const pad = TYPE.pad * F
   const gap = TYPE.gap * F
+  g.font = typeFont(F)
   const out: Placed[] = []
   let n = 0
   for (const [ri, space] of room().entries()) {
-    let y = space.y + gap / 2
+    let y = space.y
     while (n < notes.length) {
       const note = notes[n]
-      const slip = slipOf(g, note, F, space.w)
-      if (y + slip.h > space.y + space.h || y > space.y + space.h * fill) break
+      const lines = wrap(g, typed(note), space.w - 2 * pad)
+      const h = lines.length * lh + 2 * pad - (lh - F) // (no line gap under the last)
+      if (y + h > space.y + space.h || y > space.y + space.h * fill) break
+      const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 2 * pad
       const r = rng(hash(note.id))
-      out.push({ ...slip, x: space.x + (r() * (space.w - slip.w)) / 2, y, tilt: (r() - 0.5) * 0.04, room: ri })
-      y += slip.h + gap
+      out.push({ note, x: space.x + (r() * (space.w - w)) / 3, y, w, h, lines, size: F, tilt: (r() - 0.5) * 0.012, room: ri })
+      y += h + gap
       n++
     }
     if (n === notes.length) return out
@@ -272,28 +316,52 @@ function layout(g: CanvasRenderingContext2D, notes: Note[]): Placed[] {
   }
   return []
 }
-/** the slips: `shown` letters of each typed (for typing them in); `fresh`: names to highlight */
-function drawNotes(g: CanvasRenderingContext2D, placed: Placed[], shown: (i: number) => number, fresh: Set<string>) {
-  placed.forEach((p, i) => {
-    const n = shown(i)
-    if (n <= 0) return
+/** where the slips are glued down: a hair of shadow under each, on the board (the slips are over it, ./slips) */
+function drawShadows(g: CanvasRenderingContext2D, placed: Placed[]) {
+  g.fillStyle = 'rgba(80,60,40,0.12)'
+  for (const p of placed) {
     g.save()
     g.translate(p.x, p.y)
     g.rotate(p.tilt)
-    drawSlip(g, p, n, fresh.has(p.note.id))
+    g.fillRect(1.5, 2.5, p.w, p.h)
+    g.restore()
+  }
+}
+/** the slips, and their notes typed: `shown` letters of each (for typing them in); `fresh`: names to highlight */
+function drawNotes(g: CanvasRenderingContext2D, placed: Placed[], shown: (i: number) => number, fresh: Set<string>) {
+  g.textBaseline = 'top'
+  g.textAlign = 'left'
+  placed.forEach((p, i) => {
+    const left0 = shown(i)
+    if (left0 <= 0) return
+    const pad = TYPE.pad * p.size
+    const lh = p.size * TYPE.line
+    g.save()
+    g.translate(p.x, p.y)
+    g.rotate(p.tilt)
+    // the slip: printer paper
+    g.fillStyle = P.colors.slip
+    g.fillRect(0, 0, p.w, p.h)
+    g.font = typeFont(p.size)
+    // her friend's name, highlighted while it's new (under the type, as a highlighter goes)
+    const last = p.lines[p.lines.length - 1]
+    const sig = last.lastIndexOf('—')
+    if (fresh.has(p.note.id) && sig >= 0 && left0 === Infinity) {
+      const x = pad + g.measureText(last.slice(0, sig)).width
+      g.fillStyle = 'rgba(255,230,60,0.6)'
+      g.fillRect(x - p.size * 0.15, pad + (p.lines.length - 1) * lh - p.size * 0.12, g.measureText(last.slice(sig)).width + p.size * 0.3, p.size * 1.2)
+    }
+    g.fillStyle = P.colors.type
+    let left = left0
+    p.lines.forEach((line, k) => {
+      if (left <= 0) return
+      g.fillText(line.slice(0, left), pad, pad + k * lh)
+      left -= line.length + 1
+    })
     g.restore()
   })
 }
-/** the slip under (x, y) on the board (texture pixels) */
-const slipAt = (placed: Placed[], x: number, y: number) =>
-  placed.findIndex((p) => {
-    // (into the slip's own frame: it's a little crooked)
-    const dx = x - p.x
-    const dy = y - p.y
-    const u = dx * Math.cos(p.tilt) + dy * Math.sin(p.tilt)
-    const v = -dx * Math.sin(p.tilt) + dy * Math.cos(p.tilt)
-    return u >= -4 && u <= p.w + 4 && v >= -4 && v <= p.h + 4
-  })
+const length = (p: Placed) => p.lines.reduce((a, l) => a + l.length + 1, 0)
 
 // ---- today's note: one a day, round them all; a new one first
 const FIRST = 'poster.first' // when each was first seen (this browser)
@@ -389,8 +457,101 @@ const seenIds = () => {
   }
 }
 
-/** a lifted slip's picture: its pixels to the board's; room round it for its tape (shares of the type) */
-const LIFT = { scale: 2, margin: 2.2 }
+// ---- the slips as paper: one mesh, a little grid per slip, bent as paper bends (./spec slips)
+const SL = P.slips
+const MAX_SLIPS = 160
+const GRID = [3, 6] // a slip's quads across, down
+/** the slips' paper over the board: each slip's grid laid where it's drawn (texture pixels to the poster's mm),
+ *  showing its part of the slips' texture; per vertex how far down its slip (0 at its glued top), which slip, how
+ *  tall (for its bend's slope) */
+function slipsGeometry(placed: Placed[]) {
+  const [nx, ny] = GRID
+  const per = (nx + 1) * (ny + 1)
+  const n = Math.min(placed.length, MAX_SLIPS)
+  const pos = new Float32Array(n * per * 3)
+  const uv = new Float32Array(n * per * 2)
+  const down = new Float32Array(n * per)
+  const which = new Float32Array(n * per)
+  const tall = new Float32Array(n * per)
+  const index: number[] = []
+  for (let i = 0; i < n; i++) {
+    const p = placed[i]
+    const c = Math.cos(p.tilt)
+    const sn = Math.sin(p.tilt)
+    for (let b = 0; b <= ny; b++)
+      for (let a = 0; a <= nx; a++) {
+        const k = i * per + b * (nx + 1) + a
+        const px = p.x + (a / nx) * p.w * c - (b / ny) * p.h * sn
+        const py = p.y + (a / nx) * p.w * sn + (b / ny) * p.h * c
+        const x = px / PX - P.w / 2
+        const y = P.h / 2 - py / PX
+        pos.set([x, y, surface(x, y) + 0.12], k * 3)
+        uv.set([px / W, 1 - py / H], k * 2)
+        down[k] = b / ny
+        which[k] = i
+        tall[k] = p.h / PX
+      }
+    for (let b = 0; b < ny; b++)
+      for (let a = 0; a < nx; a++) {
+        const k = i * per + b * (nx + 1) + a
+        index.push(k, k + nx + 1, k + 1, k + 1, k + nx + 1, k + nx + 2)
+      }
+  }
+  const g = new BufferGeometry()
+  g.setAttribute('position', new BufferAttribute(pos, 3))
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(n * per * 3).map((_, k) => (k % 3 === 2 ? 1 : 0)), 3))
+  g.setAttribute('uv', new BufferAttribute(uv, 2))
+  g.setAttribute('aDown', new BufferAttribute(down, 1))
+  g.setAttribute('aSlip', new BufferAttribute(which, 1))
+  g.setAttribute('aTall', new BufferAttribute(tall, 1))
+  g.setIndex(index)
+  g.computeBoundingSphere()
+  return g
+}
+/** the slips' paper material: the slips' texture, bent in the vertex shader. Its free bottom edge stands `edge` off
+ *  the board, curving up from the glued top (as v²): resting curl, its own little sway, the draft passing, and
+ *  lifted when pointed at (all of it raised a little then too) */
+function slipsMaterial(map: CanvasTexture) {
+  const u = {
+    uTime: { value: 0 },
+    uLift: { value: new Float32Array(MAX_SLIPS) },
+    uFront: { value: 1e5 },
+  }
+  const m = new MeshStandardMaterial({ map, roughness: 0.95 })
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, u)
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        attribute float aDown;
+        attribute float aSlip;
+        attribute float aTall;
+        uniform float uTime;
+        uniform float uLift[${MAX_SLIPS}];
+        uniform float uFront;
+        float slipEdge() {
+          float k = fract(aSlip * 0.618034);
+          float sway = ${SL.sway.toFixed(3)} * pow(0.5 + 0.5 * sin(uTime * (0.35 + 0.3 * k) + aSlip * 2.4), 3.0);
+          float d = (position.x - uFront) / ${SL.breeze.width.toFixed(1)};
+          float breeze = ${SL.breeze.lift.toFixed(3)} * exp(-d * d);
+          return ${SL.curl.toFixed(3)} + sway + breeze + uLift[int(aSlip)] * ${SL.lifted.toFixed(3)};
+        }`,
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+        objectNormal = normalize(vec3(0.0, 2.0 * aDown * slipEdge() / aTall, 1.0));`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        transformed.z += aDown * aDown * slipEdge() + uLift[int(aSlip)] * ${(SL.lifted * 0.2).toFixed(3)};`,
+      )
+  }
+  m.customProgramCacheKey = () => 'poster-slips'
+  return { m, u }
+}
 
 /** every hand's font, to be in before writing (else the first notes are in the fallback hand) */
 const FONTS = HANDS.map((h) => h.font.replace('{}', '40'))
@@ -407,6 +568,15 @@ export function Poster({ notes }: { notes: Note[] }) {
     return { c, g: c.getContext('2d')!, t }
   }, [])
   const mat = useMemo(() => new MeshStandardMaterial({ map: tex.t, roughness: 0.95 }), [tex])
+  const paper = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = W
+    c.height = H
+    const t = new CanvasTexture(c)
+    t.colorSpace = SRGBColorSpace
+    t.anisotropy = 8
+    return { c, g: c.getContext('2d')!, t, ...slipsMaterial(t) }
+  }, [])
   const geo = useMemo(() => {
     // a card that's lain flat a while: its corners curl off the wall a little
     const g = new PlaneGeometry(P.w, P.h, 24, 18)
@@ -451,23 +621,41 @@ export function Poster({ notes }: { notes: Note[] }) {
   const paint = (t: number) => {
     if (!board) return
     tex.g.drawImage(board, 0, 0)
+    drawShadows(tex.g, placed)
+    tex.t.needsUpdate = true
+    paper.g.clearRect(0, 0, W, H)
     const w = write.current
     let budget = t * SPEED
     const shown = new Map<number, number>()
     for (const i of w.fresh) {
-      const n = Math.min(lengthOf(placed[i]), Math.max(0, budget))
+      const n = Math.min(length(placed[i]), Math.max(0, budget))
       shown.set(i, n)
-      budget -= lengthOf(placed[i])
+      budget -= length(placed[i])
     }
-    drawNotes(tex.g, placed, (i) => (shown.has(i) ? shown.get(i)! : Infinity), fresh)
-    tex.t.needsUpdate = true
+    drawNotes(paper.g, placed, (i) => (shown.has(i) ? shown.get(i)! : Infinity), fresh)
+    paper.t.needsUpdate = true
   }
+  // the slips' paper: where they are; the draft along the board now and then; the one pointed at lifting
+  const slipsGeo = useMemo(() => slipsGeometry(placed), [placed])
+  useEffect(() => () => slipsGeo.dispose(), [slipsGeo])
+  const [hover, setHover] = useState(-1)
+  useFrame(({ clock }, dt) => {
+    const t = clock.elapsedTime
+    const u = paper.u
+    u.uTime.value = t
+    // (the draft: from the left, across the board and off it, then quiet till the next)
+    const k = (t % SL.breeze.every) / SL.breeze.cross
+    u.uFront.value = k < 1 ? -P.w / 2 - 2 * SL.breeze.width + k * (P.w + 4 * SL.breeze.width) : 1e5
+    const a = 1 - Math.exp(-Math.min(dt, 0.05) * SL.ease)
+    const lift = u.uLift.value
+    for (let i = 0; i < Math.min(placed.length, MAX_SLIPS); i++) lift[i] += ((i === hover ? 1 : 0) - lift[i]) * a
+  })
   const last = useRef(0)
   useFrame((_, dt) => {
     const w = write.current
     if (w.done) return
     w.t += Math.min(dt, 0.1)
-    const all = w.fresh.reduce((a, i) => a + lengthOf(placed[i]), 0)
+    const all = w.fresh.reduce((a, i) => a + length(placed[i]), 0)
     if (w.t * SPEED >= all) w.done = true
     if (w.done || w.t - last.current > 0.05) {
       last.current = w.t
@@ -505,63 +693,28 @@ export function Poster({ notes }: { notes: Note[] }) {
     sticky.t.needsUpdate = true
   }, [board, today, notes, sticky])
 
-  // pointing at a slip: it lifts off the board toward you (a copy of it, over it, on its own: it comes up off its
-  // place, a little bigger, its shadow under it)
-  const [hover, setHover] = useState(-1)
-  const lift = useMemo(() => {
-    const c = document.createElement('canvas')
-    const t = new CanvasTexture(c)
-    t.colorSpace = SRGBColorSpace
-    t.anisotropy = 8
-    return { c, t, mat: new MeshStandardMaterial({ map: t, transparent: true, alphaTest: 0.5, roughness: 0.9 }), k: 0 }
-  }, [])
-  const liftRef = useRef<Mesh>(null)
-  useEffect(() => {
-    const p = placed[hover]
-    const m = liftRef.current
-    if (!p || !m) return
-    const M = p.F * LIFT.margin
-    lift.c.width = Math.ceil((p.w + 2 * M) * LIFT.scale)
-    lift.c.height = Math.ceil((p.h + 2 * M) * LIFT.scale)
-    const g = lift.c.getContext('2d')!
-    g.setTransform(LIFT.scale, 0, 0, LIFT.scale, M * LIFT.scale, M * LIFT.scale)
-    drawSlip(g, p, Infinity, fresh.has(p.note.id))
-    lift.t.dispose() // (a new size)
-    lift.t.needsUpdate = true
-    // where it lies on the board: its middle (it's turned about its top left), mm from the board's middle
-    const cx = p.x + Math.cos(p.tilt) * (p.w / 2) - Math.sin(p.tilt) * (p.h / 2)
-    const cy = p.y + Math.sin(p.tilt) * (p.w / 2) + Math.cos(p.tilt) * (p.h / 2)
-    m.position.set(cx / PX - P.w / 2, P.h / 2 - cy / PX, surface(cx / PX - P.w / 2, P.h / 2 - cy / PX))
-    m.rotation.z = -p.tilt
-    m.userData.size = [(p.w + 2 * M) / PX, (p.h + 2 * M) / PX]
-  }, [hover, placed, fresh, lift])
-  useFrame((_, dt) => {
-    const m = liftRef.current
-    if (!m) return
-    const to = hover >= 0 ? 1 : 0
-    if (lift.k === to && !m.userData.moved) return
-    m.userData.moved = false
-    lift.k = Math.abs(to - lift.k) < 0.01 ? to : lift.k + (to - lift.k) * (1 - Math.exp(-Math.min(dt, 0.05) * 14))
-    const [sw, sh] = m.userData.size ?? [1, 1]
-    const s = 1 + lift.k * 0.06
-    m.scale.set(sw * s, sh * s, 1)
-    m.position.z = surface(m.position.x, m.position.y) + 0.4 + lift.k * 9
-    m.visible = lift.k > 0.001
-  })
-  const at = (e: ThreeEvent<PointerEvent | MouseEvent>) => slipAt(placed, (e.uv?.x ?? 0) * W, (1 - (e.uv?.y ?? 0)) * H)
+  /** the slip at a pointer on the poster (on the board or a slip: both in the texture's pixels; it's a little crooked) */
+  const at = (e: ThreeEvent<PointerEvent | MouseEvent>) => {
+    const x = (e.uv?.x ?? 0) * W
+    const y = (1 - (e.uv?.y ?? 0)) * H
+    return placed.findIndex((p) => {
+      const dx = x - p.x
+      const dy = y - p.y
+      const u = dx * Math.cos(p.tilt) + dy * Math.sin(p.tilt)
+      const v = -dx * Math.sin(p.tilt) + dy * Math.cos(p.tilt)
+      return u >= -4 && u <= p.w + 4 && v >= -4 && v <= p.h + 4
+    })
+  }
   const point = (e: ThreeEvent<PointerEvent>) => {
     const i = at(e)
-    if (i !== hover) {
-      setHover(i)
-      if (liftRef.current) liftRef.current.userData.moved = true
-    }
+    if (i !== hover) setHover(i)
     document.body.style.cursor = i >= 0 ? 'pointer' : ''
   }
   const away = () => {
     setHover(-1)
     document.body.style.cursor = ''
   }
-  // a click: the notes as their slips, big (the one clicked first, or today's)
+  // a click: the notes as cards (the one clicked first, or today's)
   const click = (e: ThreeEvent<MouseEvent>) => {
     if (!notes.length) return
     e.stopPropagation()
@@ -574,10 +727,10 @@ export function Poster({ notes }: { notes: Note[] }) {
   }
   return (
     <group>
-      <mesh geometry={geo} material={mat} receiveShadow onClick={click} onPointerMove={point} onPointerOut={away} />
-      <mesh ref={liftRef} material={lift.mat} visible={false} castShadow onClick={click}>
-        <planeGeometry />
-      </mesh>
+      <group onClick={click} onPointerMove={point} onPointerOut={away}>
+        <mesh geometry={geo} material={mat} receiveShadow />
+        {placed.length > 0 && <mesh geometry={slipsGeo} material={paper.m} receiveShadow />}
+      </group>
       {today >= 0 && (
         <mesh geometry={sticky.geo} material={sticky.mat} position={[STICKY_AT.x, STICKY_AT.y, 0]} rotation={[0, 0, STICKY_AT.rot]} castShadow receiveShadow onClick={openToday} />
       )}
@@ -602,9 +755,8 @@ const cards = (() => {
   }
 })()
 
-/** the notes up close, over the page: each its own slip, big (drawn as on the poster: its paper, its tape, its
- *  doodle, its signature), a little crooked; ← → (or a click on either side of it) through them, Esc or a click off
- *  it to put them away (on the page, outside the canvas) */
+/** the notes up close, over the page: the slip off the poster, typed big enough to read, taped up; ← → (or a click on
+ *  either side of it) through them, Esc or a click off it to put them away (on the page, outside the canvas) */
 export function PosterCard() {
   const st = useSyncExternalStore(cards.subscribe, cards.get)
   useEffect(() => {
@@ -620,37 +772,21 @@ export function PosterCard() {
     window.addEventListener('keydown', key, true)
     return () => window.removeEventListener('keydown', key, true)
   }, [st])
-  const n = st?.notes[st.i]
-  const pic = useMemo(() => {
-    if (!n) return null
-    // (type 22 CSS px, the slip at most 560 across, at the screen's pixels)
-    const dpr = Math.min(3, window.devicePixelRatio || 1)
-    const F = 22 * dpr
-    const c = document.createElement('canvas')
-    const g = c.getContext('2d')!
-    const slip = slipOf(g, n, F, Math.min(560, window.innerWidth - 48) * dpr)
-    const M = F * 2.2
-    c.width = Math.ceil(slip.w + 2 * M)
-    c.height = Math.ceil(slip.h + 2 * M)
-    g.translate(M, M)
-    drawSlip(g, slip)
-    return { src: c.toDataURL(), w: c.width / dpr }
-  }, [n])
-  if (!st || !n || !pic) return null
+  if (!st) return null
+  const n = st.notes[st.i]
   return (
     <div className="poster-card" onClick={() => cards.close()}>
-      <div key={n.id}>
-        <img
-          src={pic.src}
-          width={pic.w}
-          alt={`${n.text}${n.name ? ` —${n.name}` : ''}`}
-          style={{ transform: `rotate(${((hash(n.id) % 5) - 2) * 0.6}deg)` }}
-          onClick={(e) => {
-            e.stopPropagation()
-            const r = e.currentTarget.getBoundingClientRect()
-            cards.step(e.clientX < r.left + r.width / 2 ? -1 : 1)
-          }}
-        />
+      <div
+        key={n.id}
+        style={{ transform: `rotate(${((hash(n.id) % 5) - 2) * 0.5}deg)` }}
+        onClick={(e) => {
+          e.stopPropagation()
+          const r = e.currentTarget.getBoundingClientRect()
+          cards.step(e.clientX < r.left + r.width / 2 ? -1 : 1)
+        }}
+      >
+        <p>{n.text}</p>
+        {n.name && <p className="poster-card-name">—{n.name}</p>}
         {st.notes.length > 1 && (
           <p className="poster-card-count">
             {st.i + 1} of {st.notes.length}
