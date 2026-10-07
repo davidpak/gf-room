@@ -266,53 +266,54 @@ function wrap(g: CanvasRenderingContext2D, text: string, width: number) {
   if (line) out.push(line)
   return out
 }
-const typed = (n: Note) => (n.name ? `${n.text} —${n.name.replace(/ /g, ' ')}` : n.text)
-/** the notes on slips in the room, in order, at `mm` type, each column filled only to `fill` of it (a slip may start
- *  above that line and run on past it); null if they don't all fit */
-function layoutAt(g: CanvasRenderingContext2D, notes: Note[], mm: number, fill = 1): Placed[] | null {
+/** a note as typed: its words, then its name (unless they signed it themselves, at its end) */
+const bare = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '')
+/** whether it wants their name put under it */
+const signs = (n: Note) => !!n.name && !bare(n.text).endsWith(bare(n.name))
+const typed = (n: Note) => (n.name && !bare(n.text).endsWith(bare(n.name)) ? `${n.text} —${n.name.replace(/ /g, ' ')}` : n.text)
+/** the notes on slips round the board at `mm` type: each in turn to whichever column it fits in that's left the
+ *  emptiest (so a few long notes or many short ones spread evenly, along the top, down the sides, along the bottom);
+ *  null if they don't all fit */
+function layoutAt(g: CanvasRenderingContext2D, notes: Note[], mm: number): Placed[] | null {
   const F = mm * PX
   const lh = F * TYPE.line
   const pad = TYPE.pad * F
   const gap = TYPE.gap * F
   g.font = typeFont(F)
+  const rooms = room()
+  const used = rooms.map(() => 0)
   const out: Placed[] = []
-  let n = 0
-  for (const [ri, space] of room().entries()) {
-    let y = space.y
-    while (n < notes.length) {
-      const note = notes[n]
-      const lines = wrap(g, typed(note), space.w - 2 * pad)
+  // (a note's lines at a width: the columns come in a few widths, so each note's wrapped a few times, not each time)
+  const wrapped = new Map<string, string[]>()
+  for (const note of notes) {
+    let best = -1
+    let bestFill = Infinity
+    let bestLines: string[] = []
+    let bestH = 0
+    rooms.forEach((space, ri) => {
+      const key = `${note.id}|${Math.round(space.w)}`
+      let lines = wrapped.get(key)
+      if (!lines) wrapped.set(key, (lines = wrap(g, typed(note), space.w - 2 * pad)))
       const h = lines.length * lh + 2 * pad - (lh - F) + PIN_TOP // (no line gap under the last; room for its pin)
-      if (y + h > space.y + space.h || y > space.y + space.h * fill) break
-      const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 2 * pad
-      const r = rng(hash(note.id))
-      out.push({ note, x: space.x + (r() * (space.w - w)) / 3, y, w, h, lines, size: F, tilt: (r() - 0.5) * 0.012, room: ri })
-      y += h + gap
-      n++
-    }
-    if (n === notes.length) return out
+      if (used[ri] + h > space.h) return
+      const fill = (used[ri] + h) / space.h
+      if (fill < bestFill - 1e-6) (best = ri), (bestFill = fill), (bestLines = lines), (bestH = h)
+    })
+    if (best < 0) return null
+    const space = rooms[best]
+    const w = Math.max(...bestLines.map((l) => g.measureText(l).width)) + 2 * pad
+    const r = rng(hash(note.id))
+    out.push({ note, x: space.x + (r() * (space.w - w)) / 3, y: space.y + used[best], w, h: bestH, lines: bestLines, size: F, tilt: (r() - 0.5) * 0.012, room: best })
+    used[best] += bestH + gap
   }
-  return n === notes.length ? out : null
+  return out
 }
-/** the biggest type that lets them reach round the whole board (along the top, down the right, along the bottom,
- *  as hers), every column filled about as far as the others: a few notes don't all crowd the top (the biggest type
- *  that fits at all might only fit them there); what doesn't fit even at the smallest is left off, and said */
+/** the biggest type they all fit at (to TYPE.max); what doesn't fit even at the smallest is left off, and said */
 function layout(g: CanvasRenderingContext2D, notes: Note[]): Placed[] {
-  const want = Math.min(room().length, notes.length) - 1 // columns to reach (one may be skipped)
-  let biggest: Placed[] | null = null
   for (let mm = TYPE.max; mm >= TYPE.min; mm -= TYPE.step) {
-    const all = layoutAt(g, notes, mm)
-    if (!all) continue
-    biggest ??= all
-    for (let fill = 0.05; fill < 1.01; fill += 0.03) {
-      const out = layoutAt(g, notes, mm, fill)
-      if (out) {
-        if (new Set(out.map((p) => p.room)).size >= want) return out
-        break // (the least fill at this size, and it doesn't reach: smaller type)
-      }
-    }
+    const out = layoutAt(g, notes, mm)
+    if (out) return out
   }
-  if (biggest) return biggest
   // (too many: as many as fit at the smallest)
   for (let k = notes.length - 1; k > 0; k--) {
     const out = layoutAt(g, notes.slice(0, k), TYPE.min)
@@ -463,22 +464,42 @@ function drawSticky(g: CanvasRenderingContext2D, note: Note) {
   g.textBaseline = 'top'
   g.textAlign = 'left'
   g.fillText('today’s note ♡', pad, pad * 0.7)
-  for (let size = 13 * SP; size > 4 * SP; size -= 0.5 * SP) {
+  for (let size = 13 * SP; size >= 7 * SP; size -= 0.5 * SP) {
     g.font = fontOf(note, size)
     const lines = wrap(g, note.text, S - 2 * pad)
     const lh = size * 1.12
-    const h = lines.length * lh + (note.name ? lh : 0)
+    const h = lines.length * lh + (signs(note) ? lh : 0)
     if (h > S - 2 * pad - head) continue
     g.fillStyle = penOf(note)
     let y = pad + head + (S - 2 * pad - head - h) / 2
     for (const l of lines) g.fillText(l, pad, y), (y += lh)
-    if (note.name) {
+    if (signs(note)) {
       g.font = fontOf(note, size * 0.9)
       g.textAlign = 'right'
       g.fillText(`—${note.name}`, S - pad, y)
       g.textAlign = 'left'
     }
     return
+  }
+  // (too long for the sticky at a size she can read from her chair: its opening, to "…"; clicked, the whole note)
+  const size = 7 * SP
+  g.font = fontOf(note, size)
+  const lh = size * 1.12
+  const fit = Math.floor((S - 2 * pad - head - lh) / lh)
+  const words = note.text.split(' ')
+  let lines: string[] = []
+  for (let k = words.length - 1; k > 0; k--) {
+    lines = wrap(g, words.slice(0, k).join(' ') + '…', S - 2 * pad)
+    if (lines.length <= fit) break
+  }
+  g.fillStyle = penOf(note)
+  let y = pad + head
+  for (const l of lines) g.fillText(l, pad, y), (y += lh)
+  if (signs(note)) {
+    g.font = fontOf(note, size * 0.9)
+    g.textAlign = 'right'
+    g.fillText(`—${note.name}`, S - pad, S - pad - lh)
+    g.textAlign = 'left'
   }
 }
 
