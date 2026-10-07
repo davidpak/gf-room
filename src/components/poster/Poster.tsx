@@ -72,9 +72,14 @@ function drawBoard(colors: HTMLImageElement | null): HTMLCanvasElement {
   return c
 }
 
-/** her "Rina" (./letters: traced off her poster), fitted to the letters' box: her marker round her shapes first (an
- *  even line, twice, a hair apart, as a hand goes round; the colouring then covers its inner half), then her colours
- *  where she coloured in, a grain of pencil over them */
+/** her "Rina" (./letters: traced off her poster), fitted to the letters' box, drawn as she did it:
+ *
+ *   her marker   round her shapes, as wide as hers, under the colouring (which covers its inner half)
+ *   her pencil   coloured in by hand, not filled: a light first layer of her colours, then thousands of strokes on
+ *                her slant, each in the colour where it lands (her gradient, ./letters' colours), a little lighter or
+ *                darker, a little curved, pressed harder or softer, layered so the colours meet in strokes, not a
+ *                blend; the paper's tooth left showing as specks (pencil skips over its pits)
+ */
 function drawLetters(g: CanvasRenderingContext2D, colors: HTMLImageElement) {
   const L = P.letters
   const bx = L.x0 * W
@@ -88,32 +93,76 @@ function drawLetters(g: CanvasRenderingContext2D, colors: HTMLImageElement) {
   g.translate(bx + (bw - (x1 - x0) * k) / 2 - x0 * k, by + (bh - (y1 - y0) * k) / 2 - y0 * k)
   g.scale(k, k)
   const fill = new Path2D(LETTERS.fill)
+  // her marker
   g.save()
   g.lineJoin = g.lineCap = 'round'
   g.strokeStyle = P.colors.ink
   g.lineWidth = LETTERS.ink * 2
   g.stroke(fill)
-  g.globalAlpha = 0.55
-  g.translate(LETTERS.ink * 0.12, -LETTERS.ink * 0.1)
-  g.lineWidth = LETTERS.ink * 1.8
-  g.stroke(fill)
   g.restore()
+  // her colours, to sample (each stroke takes the colour where it lands)
+  const cw = colors.naturalWidth
+  const ch = colors.naturalHeight
+  const pc = document.createElement('canvas')
+  pc.width = cw
+  pc.height = ch
+  const pg = pc.getContext('2d')!
+  pg.drawImage(colors, 0, 0)
+  const pix = pg.getImageData(0, 0, cw, ch).data
+  const sx = cw / LETTERS.w
+  const sy = ch / LETTERS.h
+  const colourAt = (x: number, y: number) => {
+    const i = (Math.min(ch - 1, Math.max(0, (y * sy) | 0)) * cw + Math.min(cw - 1, Math.max(0, (x * sx) | 0))) * 4
+    return [pix[i], pix[i + 1], pix[i + 2]]
+  }
   g.save()
   g.clip(fill)
+  // (the paper first, over the marker's inner half: the pencil's see-through, and would show it as a dark band)
+  g.fillStyle = P.colors.paper
+  g.fill(fill)
+  // the first light layer: her colours, thin, the paper still showing
+  g.globalAlpha = 0.45
   g.imageSmoothingQuality = 'high'
   g.drawImage(colors, 0, 0, LETTERS.w, LETTERS.h)
-  // pencil: short strokes on the slant, lighter and darker
+  g.globalAlpha = 1
+  // then the pencil, a layer at a time, each firmer than the last, its slant a touch different (a hand shifts)
+  g.lineCap = 'round'
   const r = rng(11)
+  const SLANT = -1.0 // radians: her strokes run up to the right
+  // (a stroke starts inside the letter it colours, so it takes that letter's colour: tested where it lands on the canvas)
+  const m = g.getTransform()
+  const inside = (x: number, y: number) => g.isPointInPath(fill, m.a * x + m.e, m.d * y + m.f)
+  for (const [n, press, turn] of [
+    [14000, 0.26, 0],
+    [14000, 0.34, 0.1],
+    [9000, 0.42, -0.08],
+  ] as const) {
+    for (let i = 0; i < n; i++) {
+      const x = x0 + r() * (x1 - x0)
+      const y = y0 + r() * (y1 - y0)
+      if (!inside(x, y)) continue
+      // her colour here, or now and then a neighbour's (where colours meet they overlap in strokes)
+      const off = r() < 0.2 ? (r() - 0.5) * 70 : 0
+      const c = colourAt(x, inside(x, y + off) ? y + off : y)
+      const shade = 0.88 + r() * 0.2
+      const a = SLANT + turn + (r() - 0.5) * 0.25
+      const len = 26 + r() * 46
+      const dx = Math.cos(a) * len
+      const dy = Math.sin(a) * len
+      const bend = (r() - 0.5) * len * 0.15
+      g.strokeStyle = `rgba(${(c[0] * shade) | 0},${(c[1] * shade) | 0},${(c[2] * shade) | 0},${press * (0.6 + r() * 0.6)})`
+      g.lineWidth = 1.6 + r() * 2.2
+      g.beginPath()
+      g.moveTo(x - dx / 2, y - dy / 2)
+      g.quadraticCurveTo(x - (dy / len) * bend, y + (dx / len) * bend, x + dx / 2, y + dy / 2)
+      g.stroke()
+    }
+  }
+  // the paper's tooth: specks the pencil skipped
+  g.fillStyle = P.colors.paper
   for (let i = 0; i < 9000; i++) {
-    const sx = r() * LETTERS.w
-    const sy = r() * LETTERS.h
-    const len = (12 + r() * 30) / k
-    g.strokeStyle = r() < 0.55 ? `rgba(255,255,255,${0.06 + r() * 0.12})` : `rgba(60,20,40,${0.03 + r() * 0.07})`
-    g.lineWidth = (1 + r() * 1.6) / k
-    g.beginPath()
-    g.moveTo(sx, sy)
-    g.lineTo(sx + len * 0.8, sy - len * 0.6)
-    g.stroke()
+    g.globalAlpha = 0.15 + r() * 0.35
+    g.fillRect(x0 + r() * (x1 - x0), y0 + r() * (y1 - y0), 1 + r() * 1.6, 1 + r() * 1.6)
   }
   g.restore()
   g.restore()

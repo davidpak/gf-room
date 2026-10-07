@@ -121,8 +121,10 @@ const traceMask = (mask, W, H, opts) =>
   console.log('paper', paper.map(Math.round), 'fills', fillLabels.size, 'holes', R.sizes.filter((n, l) => !edge.has(l) && !fillLabels.has(l) && n >= big / 4).length)
   // the coloured-in parts as paths, in the 4x crop's pixels (her marker is drawn round them: an even line, as wide as
   // hers, out from their edge; tracing the marker itself picked up the darker pencil as marker too)
-  const fillPath = await traceMask(fill, W, H)
-  const INK = R2 + 14 // (from a part's edge, which is R2 in from her marker, out to the marker's outer edge)
+  // (each part grown back out the R2 the gap-closing took off: to her marker's inner edge)
+  const grown = morph(fill, R2, true)
+  const fillPath = await traceMask(grown, W, H, { optTolerance: 0.8, alphaMax: 1.15 })
+  const INK = 15 // her marker, out from her colouring's edge (about 3.5 px in the photo)
   // the letters' own bounds (with their marker), to fit them by
   let bx0 = W, by0 = H, bx1 = 0, by1 = 0
   for (let i = 0; i < W * H; i++) if (fill[i]) { const x = i % W, y = (i / W) | 0; bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y) }
