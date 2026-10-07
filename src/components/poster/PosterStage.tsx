@@ -66,7 +66,7 @@ export function PosterCheck() {
         {
           kind: 'text',
           label: 'spec (mm) and its check',
-          text: `poster board  ${POSTER.w.toFixed(0)} × ${POSTER.h.toFixed(0)} (22 × 28 in), corners curl up to ${POSTER.curl}
+          text: `poster board  ${POSTER.w.toFixed(0)} × ${POSTER.h.toFixed(0)} (about 28 × 25 in), corners curl up to ${POSTER.curl}
 letters       ${((POSTER.letters.x1 - POSTER.letters.x0) * 100).toFixed(0)}% of its width, ${((POSTER.letters.y1 - POSTER.letters.y0) * 100).toFixed(0)}% of its height
 notes         ${POSTER.bands.length} places round them, from the Google Form's sheet (&demo: stand-ins)
 

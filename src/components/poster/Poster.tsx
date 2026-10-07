@@ -72,19 +72,32 @@ function drawBoard(colors: HTMLImageElement | null): HTMLCanvasElement {
   return c
 }
 
-/** her "Rina" (./letters: traced off her poster), fitted to the letters' box: her colours where she coloured in, a
- *  grain of pencil over them, her marker over all */
+/** her "Rina" (./letters: traced off her poster), fitted to the letters' box: her marker round her shapes first (an
+ *  even line, twice, a hair apart, as a hand goes round; the colouring then covers its inner half), then her colours
+ *  where she coloured in, a grain of pencil over them */
 function drawLetters(g: CanvasRenderingContext2D, colors: HTMLImageElement) {
   const L = P.letters
   const bx = L.x0 * W
   const by = L.y0 * H
   const bw = (L.x1 - L.x0) * W
   const bh = (L.y1 - L.y0) * H
-  const k = Math.min(bw / LETTERS.w, bh / LETTERS.h)
+  // (her letters' own bounds into the box, as big as they go)
+  const [x0, y0, x1, y1] = LETTERS.box
+  const k = Math.min(bw / (x1 - x0), bh / (y1 - y0))
   g.save()
-  g.translate(bx + (bw - LETTERS.w * k) / 2, by + (bh - LETTERS.h * k) / 2)
+  g.translate(bx + (bw - (x1 - x0) * k) / 2 - x0 * k, by + (bh - (y1 - y0) * k) / 2 - y0 * k)
   g.scale(k, k)
   const fill = new Path2D(LETTERS.fill)
+  g.save()
+  g.lineJoin = g.lineCap = 'round'
+  g.strokeStyle = P.colors.ink
+  g.lineWidth = LETTERS.ink * 2
+  g.stroke(fill)
+  g.globalAlpha = 0.55
+  g.translate(LETTERS.ink * 0.12, -LETTERS.ink * 0.1)
+  g.lineWidth = LETTERS.ink * 1.8
+  g.stroke(fill)
+  g.restore()
   g.save()
   g.clip(fill)
   g.imageSmoothingQuality = 'high'
@@ -103,8 +116,6 @@ function drawLetters(g: CanvasRenderingContext2D, colors: HTMLImageElement) {
     g.stroke()
   }
   g.restore()
-  g.fillStyle = P.colors.ink
-  g.fill(new Path2D(LETTERS.outline), 'evenodd')
   g.restore()
 }
 

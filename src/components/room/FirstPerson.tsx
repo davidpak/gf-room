@@ -130,9 +130,12 @@ export function FirstPerson() {
       e.preventDefault()
       fwd(-e.deltaY * WHEEL)
     }
-    // a drag is not a click: swallow the click at the window before three's handlers see it
+    // a drag is not a click: swallow the click at the window before three's handlers see it. Only a click on the
+    // canvas, measured from where that press began (any press: the page's menu and buttons are never swallowed;
+    // measured only from canvas presses, a click on the menu looked like a long drag and the menu never opened)
+    const press = (e: PointerEvent) => (from = [e.clientX, e.clientY])
     const click = (e: MouseEvent) => {
-      if (Math.hypot(e.clientX - from[0], e.clientY - from[1]) > 5) e.stopPropagation()
+      if (e.target === el && Math.hypot(e.clientX - from[0], e.clientY - from[1]) > 5) e.stopPropagation()
     }
     const map: Record<string, 'f' | 'b' | 'l' | 'r'> = { KeyW: 'f', KeyS: 'b', KeyA: 'l', KeyD: 'r', ArrowUp: 'f', ArrowDown: 'b', ArrowLeft: 'l', ArrowRight: 'r' }
     const key = (e: KeyboardEvent, on: boolean) => {
@@ -155,6 +158,7 @@ export function FirstPerson() {
     window.addEventListener('pointerup', up)
     el.addEventListener('wheel', wheel, { passive: false })
     el.addEventListener('contextmenu', menu)
+    window.addEventListener('pointerdown', press, true)
     window.addEventListener('click', click, true)
     window.addEventListener('keydown', kd)
     window.addEventListener('keyup', ku)
@@ -165,6 +169,7 @@ export function FirstPerson() {
       window.removeEventListener('pointerup', up)
       el.removeEventListener('wheel', wheel)
       el.removeEventListener('contextmenu', menu)
+      window.removeEventListener('pointerdown', press, true)
       window.removeEventListener('click', click, true)
       window.removeEventListener('keydown', kd)
       window.removeEventListener('keyup', ku)

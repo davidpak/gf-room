@@ -108,6 +108,26 @@ async function dumpProfile() {
 console.log('marks:', phase, ` (wall ${Date.now() - t0} ms)`)
 console.log('gpu:', await ev(`(() => { const c = document.createElement('canvas').getContext('webgl2'); const d = c.getExtension('WEBGL_debug_renderer_info'); return c.getParameter(d.UNMASKED_RENDERER_WEBGL) })()`))
 await sleep(1500)
+if (process.env.CLICKSEL) {
+  // real input (as a mouse does it, not a page script's): a drag across the canvas first, then a click on CLICKSEL;
+  // CHECK (an expression) says what came of it
+  const mouse = (type, x, y) => send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1, buttons: type === 'mouseReleased' ? 0 : 1 })
+  await mouse('mousePressed', 900, 600)
+  await mouse('mouseMoved', 1000, 650)
+  await mouse('mouseReleased', 1000, 650)
+  await sleep(200)
+  const r = JSON.parse(await ev(`JSON.stringify(document.querySelector(${JSON.stringify(process.env.CLICKSEL)})?.getBoundingClientRect() ?? null)`))
+  if (!r) console.log('click: no', process.env.CLICKSEL)
+  else {
+    const x = r.x + r.width / 2
+    const y = r.y + r.height / 2
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y })
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1 })
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1, buttons: 0 })
+    await sleep(400)
+    console.log('click', process.env.CLICKSEL, '->', await ev(process.env.CHECK ?? 'true'))
+  }
+}
 if (process.env.SHOT) {
   // a picture of the page as it is (SHOT=path.png; SCALE=0.5 makes it smaller), then done
   if (process.env.PRE) console.log('pre', await ev(process.env.PRE))

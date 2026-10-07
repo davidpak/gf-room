@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 
 /**
- * The hitch recorder (the backquote key ` on any page, ?hitch, or the dev menu): what a frame that came late was doing, measured in the browser
+ * The hitch recorder (H on any page, ?hitch, or the dev menu): what a frame that came late was doing, measured in the browser
  * it happens in, at the screen's own rate. Every frame: when it really came (the browser's frame clock), the
  * time in our scripts and in drawing, its draw calls, the graphics card's time (where the browser lets us time
  * it), whether a shader, a model or a texture was new, whether the garbage collector ran; for a frame that
@@ -162,7 +162,7 @@ export function Hitches({ timeGpu = true }: { timeGpu?: boolean }) {
         .reverse()
         .map((h) => `${(h.at / 1000).toFixed(1)}s ${Math.round(h.gap)}ms  cpu ${(h.script + h.render).toFixed(1)}${h.gpu != null ? ` gpu ${h.gpu.toFixed(1)}` : ''}${h.gc ? ' GC' : ''}${h.added ? ' +' + h.added : ''}`)
       text.textContent =
-        `hitch recorder  ${period ? Math.round(1000 / period) + ' Hz' : ''}  ${s.toFixed(0)} s   (\` hides it)\n` +
+        `hitch recorder  ${period ? Math.round(1000 / period) + ' Hz' : ''}  ${s.toFixed(0)} s   (H hides it)\n` +
         `late frames ${r.hitches.length}  (missed ${r.missed} of ${r.frames})\n` +
         `cpu p50 ${pct(r.cpu, 0.5) ?? '-'}  p99 ${pct(r.cpu, 0.99) ?? '-'} ms` +
         (ext ? `\ngpu p50 ${pct(r.gpu, 0.5) ?? '-'}  p99 ${pct(r.gpu, 0.99) ?? '-'} ms` : '\ngpu: not timeable here') +

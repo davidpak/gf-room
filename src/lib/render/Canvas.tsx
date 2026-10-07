@@ -11,12 +11,12 @@ import { ready, stillWaiting } from '../ready'
  * nothing shows half-made or hitches when it's first looked at.
  *
  *   ?perf   the r3f-perf overlay (FPS, GPU time, draw calls); the dev menu toggles it
- *   `       (the backquote key, on any page) the hitch recorder (./Hitches: what each late frame was doing), on and
- *           off; it stays as left (?hitch turns it on too)
+ *   H       (on any page) the hitch recorder (./Hitches: what each late frame was doing), on and off; it stays as
+ *           left (?hitch turns it on too). (Not `: that's the dev menu's)
  */
 const DEV_PARAM = typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev')
 const SHOW_PERF = typeof location !== 'undefined' && new URLSearchParams(location.search).has('perf')
-/** the hitch recorder, shown or not: ` toggles it, remembered (this browser) */
+/** the hitch recorder, shown or not: H toggles it, remembered (this browser) */
 const hitch = (() => {
   let on = false
   try {
@@ -28,7 +28,7 @@ const hitch = (() => {
   if (typeof window !== 'undefined')
     window.addEventListener('keydown', (e) => {
       const t = e.target as HTMLElement | null
-      if (e.code !== 'Backquote' || e.repeat || t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) return
+      if (e.code !== 'KeyH' || e.repeat || e.ctrlKey || e.metaKey || e.altKey || t?.tagName === 'INPUT' || t?.tagName === 'TEXTAREA' || t?.isContentEditable) return
       on = !on
       try {
         localStorage.setItem('hitch', on ? '1' : '0')

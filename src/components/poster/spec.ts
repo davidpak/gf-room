@@ -7,20 +7,20 @@
  * Sources
  *   [P]  the photos: public/reference/room-desk-poster.jpg (straight on, over the desk, under the calligraphy, left
  *        of the lamp), room-desk-wide.png (where it is on the wall), and David's close photo of it: the letters
- *        fill most of its width and about half its height, a band of notes above them and below, columns of notes
- *        down the right, a column on the left; a "Hello my name is" sticker low on the left
- *   [E]  poster board's usual size, 22 × 28 in, landscape (the photos fit it); where on the wall, by eye
+ *        fill about 85% of its width and 70% of its height, a band of notes above them and below, a column of notes
+ *        down the right; the sheet's nearly square in her photo (470 × 440 px), about 28 × 25 in
+ *   [E]  its size (poster board cut to about that); where on the wall, by eye
  *
  * Its frame: its middle at the origin, its face toward +z, flat in x (across) and y (up).
  */
 const IN = 25.4
 export const POSTER = {
   w: 28 * IN, // [E] 711
-  h: 22 * IN, // [E] 559
+  h: 25 * IN, // [P][E] 635: nearly square, as in her photo
   t: 0.6, // card
   curl: 5, // [P] how far its corners lift off the wall, at most
   // where the letters go, as shares of the sheet (from its left, from its top) [P]
-  letters: { x0: 0.07, x1: 0.88, y0: 0.24, y1: 0.8, outline: 0.012 },
+  letters: { x0: 0.05, x1: 0.9, y0: 0.2, y1: 0.88, outline: 0.012 },
   colors: {
     paper: '#f6f0e2',
     ink: '#1d1a22',
@@ -32,10 +32,9 @@ export const POSTER = {
   },
   // the notes' places round the letters (shares of the sheet: x0, y0, x1, y1), filled in order [P]
   bands: [
-    [0.04, 0.03, 0.96, 0.22], // above the letters, across
-    [0.88, 0.22, 0.98, 0.82], // down the right
-    [0.04, 0.82, 0.96, 0.98], // below
-    [0.01, 0.24, 0.07, 0.8], // a narrow one down the left
+    [0.03, 0.02, 0.97, 0.195], // above the letters, across
+    [0.905, 0.2, 0.99, 0.88], // down the right
+    [0.03, 0.885, 0.97, 0.985], // below
   ] as [number, number, number, number][],
 }
 
@@ -47,9 +46,9 @@ export function checkPoster(): Check[] {
   const out: Check[] = []
   const c = (what: string, value: string, ok: boolean) => out.push({ what, value, ok })
   const P = POSTER
-  c('poster board, 22 × 28 in, landscape [E]', `${P.w.toFixed(0)} × ${P.h.toFixed(0)}`, P.w > P.h && Math.abs(P.w - 711.2) < 1)
+  c('nearly square, as in her photo (470 × 440 px) [P]', `${P.w.toFixed(0)} × ${P.h.toFixed(0)} (${(P.w / P.h).toFixed(2)})`, Math.abs(P.w / P.h - 470 / 440) < 0.08)
   const L = P.letters
-  c('the letters fill most of its width, about half its height [P]', `${((L.x1 - L.x0) * 100).toFixed(0)}% × ${((L.y1 - L.y0) * 100).toFixed(0)}%`, L.x1 - L.x0 > 0.75 && L.y1 - L.y0 > 0.45 && L.y1 - L.y0 < 0.65)
+  c('the letters fill about 85% of its width, 70% of its height [P]', `${((L.x1 - L.x0) * 100).toFixed(0)}% × ${((L.y1 - L.y0) * 100).toFixed(0)}%`, Math.abs(L.x1 - L.x0 - 0.85) < 0.05 && Math.abs(L.y1 - L.y0 - 0.7) < 0.05)
   // the notes' bands clear of the letters and each other
   const overlap = (a: number[], b: number[]) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
   const box = [L.x0, L.y0, L.x1, L.y1]
