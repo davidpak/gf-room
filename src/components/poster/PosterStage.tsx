@@ -5,7 +5,7 @@ import { CheckSheet } from '../check/CheckSheet'
 import { Effects } from '../stage/StageLights'
 import { TOY, ToyLights } from '../stage/ToyLights'
 import { Stylize } from '../../lib/stylize'
-import { Poster, PosterHint } from './Poster'
+import { Poster } from './Poster'
 import { useNotes, type Note } from './messages'
 import { POSTER, checkPoster } from './spec'
 
@@ -41,7 +41,6 @@ export function PosterStage() {
         <Effects aoRadius={8} />
         <ToyControls target={[0, 0, 0]} minDistance={150} maxDistance={4000} enableDamping dampingFactor={0.06} />
       </Canvas>
-      <PosterHint />
     </>
   )
 }

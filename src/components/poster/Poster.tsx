@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import './poster.css'
 import { AdditiveBlending, BufferAttribute, BufferGeometry, CanvasTexture, Color, CylinderGeometry, Group, InstancedMesh, LatheGeometry, MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, SphereGeometry, SRGBColorSpace, Vector2, Vector3, type PerspectiveCamera } from 'three'
 import { worldInput } from '../../lib/inputLock'
 import { POSTER } from './spec'
@@ -1002,13 +1001,3 @@ export function Poster({ notes }: { notes: Note[] }) {
   )
 }
 
-/** while a note's looked at: what's what, as the Quad's hint by a photo (on the page, outside the canvas) */
-export function PosterHint() {
-  const i = useSyncExternalStore(focus.subscribe, focus.get)
-  if (i === null) return null
-  return (
-    <div className="poster-hint">
-      {i >= 0 && focus.count() > 1 ? `${i + 1} of ${focus.count()} · ← → the next one · ` : ''}Esc to step back
-    </div>
-  )
-}

@@ -5,12 +5,6 @@ body {
   background: #1a1530;
   color: #f3e6d8;
 }
-.overlay {
-  position: fixed; left: 24px; bottom: 20px;
-  pointer-events: none; user-select: none;
-  font-size: 14px; line-height: 1.5; opacity: 0.75;
-}
-.overlay h1 { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
 .note {
   background: #fff8ef; color: #4a3728;
   padding: 10px 14px; border-radius: 12px;
@@ -113,12 +107,3 @@ body {
   .fix-in .fix-float { animation: none; }
 }
 
-/* hidden while the laptop's in use (the classes set display, so [hidden] has to say so) */
-.overlay[hidden] {
-  display: none;
-}
-
-/* going through the records (../components/records/browse): the page's title and hint step aside */
-body.browsing .overlay {
-  display: none;
-}

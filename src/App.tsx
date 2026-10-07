@@ -3,7 +3,7 @@ import { useOsMode } from './components/rinaos/mode'
 import { PARTS, type Part, type PartKey } from './components/shell/parts'
 import { Loader } from './components/shell/Loader'
 import { DevMenu } from './components/shell/DevMenu'
-import { ready, useReady } from './lib/ready'
+import { ready } from './lib/ready'
 
 // ?part=… (./components/shell/parts), add &check for the verification sheet, &perf for the performance overlay.
 // The dev menu (`) shows in development, or with &dev.
@@ -21,8 +21,7 @@ function Mounted() {
 
 export default function App() {
   const p: Part = PARTS[part]
-  const usingLaptop = useOsMode() // (the laptop's screen fills the view: the page's labels step aside)
-  const shown = useReady().phase === 'ready'
+  const usingLaptop = useOsMode() // (the laptop's screen fills the view: the dev menu steps aside)
   const Stage = check && p.check ? p.check : p.stage
   return (
     <>
@@ -30,12 +29,7 @@ export default function App() {
         <Stage />
         <Mounted />
       </Suspense>
-      {shown && !check && (
-        <div className="overlay" hidden={usingLaptop}>
-          <h1>{p.title}</h1>
-          <div>{p.hint}</div>
-        </div>
-      )}
+      {/* (no title or how-to written over the page: David, 2026-10-07, 'we don't need tutorials') */}
       {DEV && !usingLaptop && <DevMenu part={part} />}
       <Loader part={part} title={check ? `${p.title} · check` : p.title} />
     </>

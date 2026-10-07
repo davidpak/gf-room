@@ -6,13 +6,13 @@ import { CLOSET } from '../closet/spec'
 import { ROOM } from './spec'
 
 /**
- * Standing in Rina's room, first person: on the floor at eye height, inside the walls (you never see out).
+ * Standing in Rina's room, first person: at eye height to start, inside the walls (you never see out).
  *
  *   middle drag     look round
  *   right drag      step along the floor (sideways, forward and back)
  *   wheel           a step forward / back
  *   W A S D, arrows walk
- *   shift           faster
+ *   shift / ctrl    up / down (from near the floor to just under the ceiling, the bulkhead's lower over the desk)
  *   F               back to where you came in
  *
  * The left button is the hand's (carry, click). Moves and turns ease toward where they're going, so it's
@@ -23,7 +23,10 @@ import { ROOM } from './spec'
 export const EYE = 1500 // mm: her eyes, standing
 export const START = { position: [-750, EYE, 1350] as const, target: [-700, 950, -1500] as const, fov: 62 }
 const SPEED = 1300 // mm a second, walking
-const FAST = 2.2
+const RISE = 750 // mm a second, up or down
+const LOW = 350 // mm: as low as the eye goes (crouched by the bed)
+const HIGH = ROOM.h - 220 // as high: just under the ceiling
+const UNDER_SOFFIT = ROOM.h - ROOM.soffit.drop - 160 // (under the bulkhead along the west wall, over the desk)
 const TURN = 0.0042 // radians a pixel
 const STEP = 0.45 // mm of floor a pixel, dragging
 const WHEEL = 0.9 // mm a wheel unit
@@ -34,7 +37,7 @@ const { w, d } = ROOM
 const CLOSET_X0 = w / 2 - CLOSET.opening.w - CLOSET.wall
 const CLOSET_Z0 = d / 2 - CLOSET.depth
 
-/** where you may stand: inside the walls, out of the closet */
+/** where you may be: inside the walls, out of the closet, between the floor and the ceiling */
 function inRoom(p: Vector3) {
   p.x = Math.min(w / 2 - KEEP, Math.max(-w / 2 + KEEP, p.x))
   p.z = Math.min(d / 2 - KEEP, Math.max(-d / 2 + KEEP, p.z))
@@ -44,7 +47,8 @@ function inRoom(p: Vector3) {
     if (p.x - x0 < p.z - z0) p.x = x0
     else p.z = z0
   }
-  p.y = EYE
+  const top = p.x < -w / 2 + ROOM.soffit.w + KEEP ? UNDER_SOFFIT : HIGH
+  p.y = Math.min(top, Math.max(LOW, p.y))
   return p
 }
 
@@ -62,7 +66,7 @@ export function FirstPerson() {
   const st = useMemo(() => {
     const p = new Vector3(...START.position)
     const l = lookOf(p, new Vector3(...START.target))
-    return { goal: { p: p.clone(), yaw: l.yaw, pitch: l.pitch }, now: { p: p.clone(), yaw: l.yaw, pitch: l.pitch }, keys: { f: 0, b: 0, l: 0, r: 0, fast: false } }
+    return { goal: { p: p.clone(), yaw: l.yaw, pitch: l.pitch }, now: { p: p.clone(), yaw: l.yaw, pitch: l.pitch }, keys: { f: 0, b: 0, l: 0, r: 0, up: 0, down: 0 } }
   }, [])
 
   const controls = useMemo(
@@ -141,7 +145,8 @@ export function FirstPerson() {
     const key = (e: KeyboardEvent, on: boolean) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.isContentEditable) return
       const k = st.keys
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') k.fast = on
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') k.up = on ? 1 : 0
+      else if (e.code === 'ControlLeft' || e.code === 'ControlRight') k.down = on ? 1 : 0
       else if (e.code === 'KeyF' && on && controls.enabled && !worldInput.locked) {
         st.goal.p.set(...START.position)
         Object.assign(st.goal, lookOf(st.goal.p, new Vector3(...START.target)))
@@ -151,7 +156,7 @@ export function FirstPerson() {
     }
     const kd = (e: KeyboardEvent) => key(e, true)
     const ku = (e: KeyboardEvent) => key(e, false)
-    const blur = () => Object.assign(st.keys, { f: 0, b: 0, l: 0, r: 0, fast: false })
+    const blur = () => Object.assign(st.keys, { f: 0, b: 0, l: 0, r: 0, up: 0, down: 0 })
     const menu = (e: MouseEvent) => e.preventDefault()
     el.addEventListener('pointerdown', down)
     window.addEventListener('pointermove', move)
@@ -181,7 +186,8 @@ export function FirstPerson() {
     if (!controls.enabled || worldInput.locked) return // (the hand or the laptop has it)
     const t = Math.min(dt, 0.05)
     const { goal: g, now: n, keys: k } = st
-    const step = t * SPEED * (k.fast ? FAST : 1)
+    const step = t * SPEED
+    g.p.y += (k.up - k.down) * RISE * t
     const f = k.f - k.b
     const r = k.r - k.l
     if (f || r) {
