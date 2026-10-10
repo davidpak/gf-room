@@ -68,13 +68,13 @@ export function Bed({ mirrored = false }: { mirrored?: boolean }) {
       <group scale={[1, 1, mirrored ? -1 : 1]}>
         <DrawerUnit />
       </group>
-      <Suspense fallback={<Waiting />}>
+      <Suspense fallback={<Waiting name="bedsheet" />}>
         <BedSheet />
       </Suspense>
       <BedColliders />
       <Pillows />
       {/* the blue fleece blanket: modelled, lying over the foot end with the head end turned down */}
-      <Suspense fallback={<Waiting />}>
+      <Suspense fallback={<Waiting name="blanket" />}>
         <Blanket />
       </Suspense>
     </group>

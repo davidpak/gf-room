@@ -18,7 +18,7 @@ function Scene() {
   return (
     <>
       <StageLights extent={180} />
-      <Suspense fallback={<Waiting />}>
+      <Suspense fallback={<Waiting name="keypad-stage" />}>
         <KeypadAlone />
       </Suspense>
     </>

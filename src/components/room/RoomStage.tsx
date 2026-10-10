@@ -110,7 +110,7 @@ function Furniture() {
       <group position={[bedX, 0, bedZ]} rotation={[0, Math.PI / 2, 0]}>
         <Bed mirrored />
       </group>
-      <Suspense fallback={<Waiting />}>
+      <Suspense fallback={<Waiting name="desk-setup" />}>
         {/* (the keys stay the camera's) */}
         <DeskSetup at={[deskX, deskZ]} wall={deskToWall} keys={false} />
       </Suspense>

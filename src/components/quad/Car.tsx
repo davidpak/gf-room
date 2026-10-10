@@ -356,7 +356,7 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
   return (
     <group ref={body}>
       <group ref={chassis}>
-        <Suspense fallback={<Waiting />}>
+        <Suspense fallback={<Waiting name="car" />}>
           <group scale={K}>
             <CivicModel onWheels={onWheels} />
           </group>

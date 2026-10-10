@@ -24,7 +24,7 @@ function Scene() {
         <meshStandardMaterial color={TOY.floor} roughness={1} />
       </mesh>
       <World timeStep={1 / 120}>
-        <Suspense fallback={<Waiting />}>
+        <Suspense fallback={<Waiting name="desk-stage" />}>
           <DeskSetup />
         </Suspense>
       </World>

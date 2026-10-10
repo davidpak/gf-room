@@ -105,7 +105,7 @@ export function Desk({ motor, children }: { motor: Motor; children?: ReactNode }
         <Hook side={1} />
         <group position={[0, DESK.topUnder + DESK.top.t, 0]}>{children}</group>
         <group position={[DESK.keypad.x, DESK.topUnder, DESK.top.d / 2 + 20]}>
-          <Suspense fallback={<Waiting />}>
+          <Suspense fallback={<Waiting name="keypad" />}>
             <Keypad motor={motor} slab={false} />
           </Suspense>
         </group>

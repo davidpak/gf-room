@@ -69,11 +69,16 @@ export const useReady = () => useSyncExternalStore((f) => (subs.add(f), () => vo
  *  waits for them too. Use as such a Suspense's fallback: <Suspense fallback={<Waiting />}> */
 let waiting = 0
 export const stillWaiting = () => waiting
-function WaitingMark() {
+/** (each named, for the profiler: a 'waited:<name>:<ms>' mark when it arrives) */
+function WaitingMark({ name }: { name?: string }) {
   useLayoutEffect(() => {
     waiting++
-    return () => void waiting--
-  }, [])
+    const t = performance.now()
+    return () => {
+      waiting--
+      performance.mark(`waited:${name ?? '?'}:${Math.round(performance.now() - t)}`)
+    }
+  }, [name])
   return null
 }
-export const Waiting = () => createElement(WaitingMark)
+export const Waiting = ({ name }: { name?: string } = {}) => createElement(WaitingMark, { name })
