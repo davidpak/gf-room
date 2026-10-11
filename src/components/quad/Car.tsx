@@ -1,4 +1,6 @@
 import { Waiting } from '../../lib/ready'
+import { Optional } from '../../lib/Optional'
+import { RoundedBox } from '@react-three/drei'
 import { Suspense, useCallback, useEffect, useRef } from 'react'
 import { typing } from '../../lib/inputLock'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -358,10 +360,34 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
       <group ref={chassis}>
         <Suspense fallback={<Waiting name="car" />}>
           <group scale={K}>
-            <CivicModel onWheels={onWheels} />
+            <Optional fallback={<StandInCar />}>
+              <CivicModel onWheels={onWheels} />
+            </Optional>
           </group>
         </Suspense>
       </group>
+    </group>
+  )
+}
+
+/** the car when its model isn't there (it's kept local, never shipped): a toy car of the Civic's size and stance, in
+ *  the car's real-mm frame (its length along z, the front at +z) */
+function StandInCar() {
+  const paint = '#1d1f24'
+  return (
+    <group>
+      <RoundedBox args={[1800, 640, 4560]} radius={160} smoothness={4} position={[0, 640, 0]} castShadow receiveShadow>
+        <meshStandardMaterial color={paint} roughness={0.35} metalness={0.3} />
+      </RoundedBox>
+      <RoundedBox args={[1420, 520, 2500]} radius={180} smoothness={4} position={[0, 1180, -300]} castShadow>
+        <meshStandardMaterial color="#2c3440" roughness={0.15} metalness={0.4} />
+      </RoundedBox>
+      {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => (
+        <mesh key={`${sx}${sz}`} position={[sx * 800, TYRE_R, sz * 1350]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[TYRE_R, TYRE_R, 230, 24]} />
+          <meshStandardMaterial color="#141414" roughness={0.8} />
+        </mesh>
+      )))}
     </group>
   )
 }

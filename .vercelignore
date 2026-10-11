@@ -1,0 +1,14 @@
+# What never goes to Vercel (the site is public): her photos, the Civic model (licence unchecked), Nintendo's Melee
+# art, the reference photos (her room, product shots: the gallery pages' side-by-sides, dev only); and what Vercel
+# rebuilds or doesn't need
+node_modules
+dist
+photos
+public/photos
+public/models/civic.glb
+public/reference
+public/textures/melee
+blender
+docs
+scripts
+.claude
