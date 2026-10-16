@@ -70,6 +70,12 @@ await send('Page.enable')
 await send('Emulation.setDeviceMetricsOverride', { width: 2560, height: 1440, deviceScaleFactor: 1.5, mobile: false })
 if (process.env.PROF && !process.env.FRAMES) { await send('Profiler.enable'); await send('Profiler.setSamplingInterval', { interval: 500 }); await send('Profiler.start') }
 if (process.env.INJECT) await send('Page.addScriptToEvaluateOnNewDocument', { source: process.env.INJECT })
+// LATENCY=ms [MBPS=n]: every request that much slower (and the line that fast): a deployed site's round trips
+if (process.env.LATENCY) {
+  await send('Network.enable')
+  const bps = Number(process.env.MBPS ?? 0) * 125000
+  await send('Network.emulateNetworkConditions', { offline: false, latency: Number(process.env.LATENCY), downloadThroughput: bps || -1, uploadThroughput: bps || -1 })
+}
 const t0 = Date.now()
 await send('Page.navigate', { url })
 let phase = ''
