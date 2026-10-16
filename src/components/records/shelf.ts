@@ -1,14 +1,14 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { loggedIn, onAuth } from '../../lib/spotify/auth'
-import { DEMO, askSaved, dig, digArtist, isFresh, keptSaved, pressFor, type CrateId } from './library'
+import { askSaved, dig, digArtist, isFresh, keptSaved, pressFor, type CrateId } from './library'
 import type { Pressing } from './vinyl'
 
 /**
  * What's in the crate (./library): her saved albums, or, after she digs for something, what she found (`showing`
- * says which; `showSaved` puts hers back). Made-up records till she's logged in.
+ * says which; `showSaved` puts hers back). Empty till she's logged in (the Quad's crate asks her to, ../quad/QuadMusic), then her records come in.
  */
 type Shelf = { crates: Record<CrateId, Pressing[]>; showing: CrateId; loading: Partial<Record<CrateId, boolean>>; failed: Partial<Record<CrateId, string>>; loaded: Partial<Record<CrateId, boolean>>; dug: string; pressing: string; pressFailed: string }
-let s: Shelf = { crates: { saved: DEMO, dig: [] }, showing: 'saved', loading: {}, failed: {}, loaded: {}, dug: '', pressing: '', pressFailed: '' }
+let s: Shelf = { crates: { saved: [], dig: [] }, showing: 'saved', loading: {}, failed: {}, loaded: {}, dug: '', pressing: '', pressFailed: '' }
 const subs = new Set<() => void>()
 const set = (o: Partial<Shelf>) => {
   s = { ...s, ...o }
@@ -32,7 +32,7 @@ let loadedFor = false
 async function loadSaved() {
   if (!loggedIn()) {
     loadedFor = false
-    return set({ crates: { saved: DEMO, dig: [] }, showing: 'saved', loading: {}, failed: {} })
+    return set({ crates: { saved: [], dig: [] }, showing: 'saved', loading: {}, failed: {} })
   }
   if (loadedFor) return
   loadedFor = true

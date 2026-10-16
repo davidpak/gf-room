@@ -174,7 +174,7 @@ function LookOverlays() {
   return (
     <>
       <PaintBox on={key === 'easel'} bottom={124} />
-      <RecordsOverlay bottom={150} status={key === 'turntable'} />
+      <RecordsOverlay bottom={150} status={key === 'turntable' || key === 'music'} />
     </>
   )
 }

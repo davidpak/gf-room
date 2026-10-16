@@ -116,7 +116,8 @@ export function Succulent() {
     <group>
       <mesh geometry={SUC.pot} material={TERRACOTTA} position={[0, 37, 0]} castShadow />
       <mesh geometry={SUC.rim} material={TERRACOTTA} position={[0, 74, 0]} />
-      <mesh geometry={SUC.soil} material={SOIL} position={[0, 78, 0]} />
+      {/* (its top 2 above the rim's: level with it, the two fought over every pixel and it flickered) */}
+      <mesh geometry={SUC.soil} material={SOIL} position={[0, 80, 0]} />
       {leaves.map((l, i) => (
         <group key={i} position={[0, 82, 0]} rotation={[0, l.a, 0]}>
           <mesh geometry={SUC.leaf} material={SUCCULENT} position={[0, 16, 22 * l.ring]} rotation={[l.tilt, 0, 0]} scale={[16, 34, 9]} />

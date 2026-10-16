@@ -65,7 +65,7 @@ function Status({ bottom }: { bottom: number }) {
   if (!isIn)
     return (
       <button onClick={login} style={{ ...PILL, ...box }}>
-        ♪ fill the crates with her own records (log in with Spotify)
+        ♪ bring your records in (log in with Spotify)
       </button>
     )
   if (missingScopes())

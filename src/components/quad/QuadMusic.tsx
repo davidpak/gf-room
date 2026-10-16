@@ -1,5 +1,9 @@
-import { useEffect, useMemo } from 'react'
-import { type ThreeEvent } from '@react-three/fiber'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
+import { useFrame, type ThreeEvent } from '@react-three/fiber'
+import { BoxGeometry, CanvasTexture, SRGBColorSpace, type Group, type Material } from 'three'
+import { loggedIn, login, onAuth } from '../../lib/spotify/auth'
+import { useReady } from '../../lib/ready'
+import { bruno } from './bruno'
 import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier'
 import { Quaternion, Vector3 } from 'three'
 import { Static } from '../../lib/render/Static'
@@ -104,6 +108,127 @@ function Lying() {
     </>
   )
 }
+/**
+ * Till she's logged in, the crate's empty but for an index card propped up in it, written on by hand: a tap on it (once
+ * the stand's in view) and she's off to Spotify's log-in; back here, the camera goes straight to the stand, and her
+ * records come down into the crate one after another (../records/Crate). Leans a little toward her under the pointer.
+ */
+const BACK_KEY = 'rr.records.back'
+const CARD = { w: CRATE.in.w - 40, h: 250, t: 4 }
+function cardFace() {
+  const W = 768
+  const H = Math.round((W * CARD.h) / CARD.w)
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const t = new CanvasTexture(c)
+  t.colorSpace = SRGBColorSpace
+  t.anisotropy = 8
+  const draw = () => {
+    const g = c.getContext('2d')!
+    g.fillStyle = '#fbf6ec'
+    g.fillRect(0, 0, W, H)
+    // an index card's rules, its red line at the top
+    g.fillStyle = '#cfe0f2'
+    for (let y = 150; y < H; y += 64) g.fillRect(0, y, W, 3)
+    g.fillStyle = '#f0a3a3'
+    g.fillRect(0, 108, W, 4)
+    g.textAlign = 'center'
+    g.textBaseline = 'alphabetic'
+    g.fillStyle = '#2b2538'
+    g.font = "700 76px 'Gaegu', 'Nunito', cursive"
+    g.fillText('empty for now…', W / 2, 88, W * 0.9)
+    g.font = "700 60px 'Gaegu', 'Nunito', cursive"
+    g.fillStyle = '#c2410c'
+    g.fillText('bring your records in ♡', W / 2, 200, W * 0.92)
+    g.fillStyle = '#5b5368'
+    g.font = "700 46px 'Gaegu', 'Nunito', cursive"
+    g.fillText('tap here to log in with Spotify', W / 2, 330, W * 0.92)
+    // a little record, doodled in the corner
+    g.strokeStyle = '#2b2538'
+    g.lineWidth = 5
+    g.beginPath()
+    g.arc(W - 70, H - 64, 38, 0, Math.PI * 2)
+    g.stroke()
+    g.beginPath()
+    g.arc(W - 70, H - 64, 10, 0, Math.PI * 2)
+    g.stroke()
+    t.needsUpdate = true
+  }
+  draw()
+  // (drawn again once her lettering's font is in: the first time it may not be yet)
+  void document.fonts?.load("700 60px 'Gaegu'").then(draw, () => {})
+  return t
+}
+function LoginCard({ gate }: { gate: () => boolean }) {
+  const isIn = useSyncExternalStore(onAuth, loggedIn)
+  const face = useMemo(() => {
+    const t = cardFace()
+    const paper = bruno({ color: '#fbf6ec', shade: '#9a8fb0' })
+    return [paper, paper, paper, paper, bruno({ map: t, emissiveMap: t, emissive: '#ffffff', emissiveIntensity: 0.15, shade: '#9a8fb0' }), paper] as Material[]
+  }, [])
+  const geo = useMemo(() => new BoxGeometry(CARD.w, CARD.h, CARD.t).translate(0, CARD.h / 2, 0), [])
+  const tilt = useRef<Group>(null)
+  const over = useRef(false)
+  useFrame((_, dt) => {
+    const g = tilt.current
+    if (!g) return
+    const want = over.current ? -0.12 : -0.3
+    g.rotation.x += (want - g.rotation.x) * Math.min(1, dt * 8)
+  })
+  if (isIn) return null
+  return (
+    <group position={[0, CRATE.floor, -40]}>
+      <group ref={tilt} rotation={[-0.3, 0, 0]}>
+        <mesh
+          geometry={geo}
+          material={face}
+          castShadow
+          receiveShadow
+          onPointerOver={(e) => {
+            e.stopPropagation()
+            over.current = true
+            document.body.style.cursor = 'pointer'
+          }}
+          onPointerOut={() => {
+            over.current = false
+            document.body.style.cursor = ''
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (gate()) return
+            document.body.style.cursor = ''
+            try {
+              sessionStorage.setItem(BACK_KEY, '1')
+            } catch {
+              /* (no storage: she'll find the stand herself) */
+            }
+            void login()
+          }}
+        />
+      </group>
+    </group>
+  )
+}
+/** back from Spotify's log-in (by the card): once the page is up, the camera goes to the stand, to see them come in */
+function BackFromSpotify({ stand }: { stand: Spot }) {
+  const phase = useReady().phase
+  useEffect(() => {
+    if (phase !== 'ready') return
+    let back = false
+    try {
+      back = sessionStorage.getItem(BACK_KEY) === '1'
+      sessionStorage.removeItem(BACK_KEY)
+    } catch {
+      /* (no storage) */
+    }
+    if (!back || !loggedIn()) return
+    const t = window.setTimeout(() => clickSpot(stand), 500)
+    return () => window.clearTimeout(t)
+  }, [phase, stand])
+  return null
+}
+
 /** the crate: her saved albums, or what she dug for */
 function TheCrate({ onPlay, gate }: { onPlay: (p: Pressing, disc: number) => void; gate: () => boolean }) {
   const sh = useShelf()
@@ -214,6 +339,7 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
           {/* the crate beside the player, the Dig box past it */}
           <group position={[STAND.crate, STAND.h, 0]}>
             <TheCrate onPlay={play} gate={first} />
+            <LoginCard gate={first} />
           </group>
           <group position={[STAND.digBox.x, STAND.h, STAND.digBox.z]} rotation={[0, -0.12, 0]}>
             <Static>
@@ -335,6 +461,7 @@ export function QuadMusic({ car }: { car: { current: CarState } }) {
         <CuboidCollider args={[S(SIGN.w), S(SIGN.len * Math.cos(SIGN.lean)), (SIGN.len * Math.sin(SIGN.lean) * K) / 2]} position={[0, S(SIGN.len * Math.cos(SIGN.lean)), 0]} mass={0.8} friction={0.8} />
       </LiveProp>
       <Prompts items={[prompt]} far={9000} />
+      <BackFromSpotify stand={standSpot} />
       <VinylWarm />
     </>
   )

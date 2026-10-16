@@ -137,7 +137,7 @@ function frontArt(label: string, empty: string) {
 }
 
 /** a record's place in the crate, and how it's leaned (its bottom middle; r: its turn about x) */
-type Pose = { x: number; y: number; z: number; r: number }
+type Pose = { x: number; y: number; z: number; r: number; /** s still to wait, up out of sight, before it comes in */ wait?: number }
 const MAX = 50 // (records the crate holds: a 4.5 mm jacket every 5 mm)
 
 /**
@@ -355,7 +355,15 @@ export function Crate({ id, label, note = '', onPlay, gate }: { id: CrateId; lab
   const over = useRef<number | null>(null)
   const hero = useRef({ i: -1, ready: false, g: null as Group | null })
   const dirty = useRef(true)
-  useEffect(() => void (dirty.current = true), [records])
+  // (filled from empty, her records just in from Spotify: they come down into it one after another, the back ones
+  // first, each lowered in from above as a hand would, not just there)
+  const was = useRef(0)
+  const arriving = useRef(false)
+  useEffect(() => {
+    dirty.current = true
+    if (was.current === 0 && records.length) arriving.current = true
+    was.current = records.length
+  }, [records])
   const heroI = mine ? b.i : -1
   useEffect(() => {
     hero.current.i = heroI
@@ -385,7 +393,16 @@ export function Crate({ id, label, note = '', onPlay, gate }: { id: CrateId; lab
     for (let i = 0; i < n; i++) {
       want(i, records[i], w)
       let c = poses.current.get(records[i].uri)
-      if (!c) poses.current.set(records[i].uri, (c = { ...w }))
+      if (!c) {
+        c = { ...w }
+        if (arriving.current) Object.assign(c, { y: w.y + C.h + 520, r: w.r - 0.35, wait: 0.35 + (n - 1 - i) * 0.05 })
+        poses.current.set(records[i].uri, c)
+      }
+      if (c.wait) {
+        c.wait = Math.max(0, c.wait - Math.min(dtRaw, 0.05))
+        moved = true
+        if (c.wait) continue
+      }
       const d = Math.abs(w.x - c.x) + Math.abs(w.y - c.y) + Math.abs(w.z - c.z) + Math.abs(w.r - c.r) * 300
       if (d < 0.02) continue
       moved = true
@@ -394,6 +411,7 @@ export function Crate({ id, label, note = '', onPlay, gate }: { id: CrateId; lab
       c.z += (w.z - c.z) * k
       c.r += (w.r - c.r) * k
     }
+    arriving.current = false
     const h = hero.current
     const hp = records[h.i] && poses.current.get(records[h.i].uri)
     if (h.g && hp) {
@@ -405,7 +423,7 @@ export function Crate({ id, label, note = '', onPlay, gate }: { id: CrateId; lab
       const c = poses.current.get(records[i].uri)!
       const sc = sizeOf(records[i]).sleeve / LP.sleeve
       // (a 7" single: its own smaller, thinner jacket; the one up, once its sharp cover's on it, not drawn here)
-      _s.set(sc, sc, sc < 1 ? 3 / LP.sleeveT : 1).multiplyScalar(h.i === i && h.ready ? 0 : 1)
+      _s.set(sc, sc, sc < 1 ? 3 / LP.sleeveT : 1).multiplyScalar((h.i === i && h.ready) || c.wait ? 0 : 1)
       _m.compose(_p.set(c.x, c.y, c.z), _q.setFromEuler(_e.set(c.r, 0, 0)), _s)
       im.setMatrixAt(i, _m)
     }
