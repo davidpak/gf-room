@@ -1,3 +1,4 @@
+import './quiet' // (first: the published site's console says nothing)
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'

@@ -24,3 +24,7 @@ public/models/civic.glb
 public/textures/melee/
 # the GameCube's references (dimensions.com's drawing, Wikimedia Commons photos, David's): looked at locally
 public/reference/gamecube/
+
+# the Vercel project link (ids, and pulled env files): local only
+.vercel
+.env*
