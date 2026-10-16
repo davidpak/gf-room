@@ -85,9 +85,19 @@ export default async function middleware(request: Request) {
 
   if (url.pathname === LOGIN) {
     if (request.method !== 'POST') return form(safeNext(url.searchParams.get('next')), false, 200)
-    // (a form posted from another site is refused)
+    // (a form posted from another site is refused: the browser's own word on where it came from, and the Origin
+    // checked against the host it asked for (not request.url's, which on Vercel can be the deployment's own URL))
+    const fetchSite = request.headers.get('sec-fetch-site')
     const origin = request.headers.get('origin')
-    if (origin && origin !== url.origin) return new Response('Forbidden', { status: 403, headers: NO_STORE })
+    const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
+    let originHost = ''
+    try {
+      originHost = origin ? new URL(origin).host : ''
+    } catch {
+      originHost = 'invalid'
+    }
+    const crossSite = (fetchSite !== null && fetchSite !== 'same-origin' && fetchSite !== 'none') || (origin !== null && origin !== 'null' && originHost !== host)
+    if (crossSite) return new Response('Forbidden', { status: 403, headers: NO_STORE })
     const body = await request.formData().catch(() => null)
     const given = String(body?.get('password') ?? '')
     const to = safeNext(body?.get('next'))
