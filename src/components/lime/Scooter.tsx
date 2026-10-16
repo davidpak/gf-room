@@ -1,10 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, type ReactNode, type Ref } from 'react'
+import { use, useLayoutEffect, useMemo, useRef, type ReactNode, type Ref } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { LimeRig } from './Glider'
 import { DoubleSide, Quaternion, Vector3, type BufferGeometry, type Group, type Material } from 'three'
 import { bruno } from '../quad/bruno'
 import { paint, rng } from '../picnic/paint'
-import { bar, box, capsule, carve, coarse, cylinder, mesh, slab, smax, sphere, union, type Sdf } from '../../lib/sdf/sdf'
+import { bar, box, capsule, carve, coarse, cylinder, mesh, slab, smax, sphere, union, whenSimplifier, type Sdf } from '../../lib/sdf/sdf'
 import { ARMS, AX, BARS, BATTERY, BEAM, DECK, HEAD, HOOD, LOOK, STEER_TOP, STEM, WHEELS } from './scooterSpec'
 
 /**
@@ -379,7 +379,8 @@ function Steered({ angle, turn, live, children }: { angle: number; turn?: Ref<Gr
 }
 
 export function Scooter({ steer = 0, spin = 0, battery = 0.8, detail = 1, rig, live }: { steer?: number; spin?: number; battery?: number; /** 2: half as fine (seen small, in the Quad) */ detail?: number; /** ridden (../quad/QuadLime): its bars turned, its wheels rolled each frame (its kickstand stays folded) */ rig?: LimeRig; /** its moving parts left unmerged by a <Static> round it */ live?: boolean }) {
-  const g = useMemo(() => (made[detail] ??= coarse(detail, build)), [detail])
+  if (detail > 1) use(whenSimplifier) // (seen small: simplified too, 1 mm at most off its shape, well under a pixel there)
+  const g = useMemo(() => (made[detail] ??= coarse(detail, build, detail > 1 ? 1 : 0)), [detail])
   const turn = useRef<Group>(null)
   const rear = useRef<Group>(null)
   const front = useRef<Group>(null)

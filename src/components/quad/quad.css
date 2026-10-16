@@ -129,3 +129,20 @@
   }
 }
 
+/* back to her room (come from her laptop's Photos) */
+.quad-back {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 6;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(60, 35, 55, 0.62);
+  color: #fff;
+  font: 600 14px/1 -apple-system, 'Segoe UI', sans-serif;
+  text-decoration: none;
+  backdrop-filter: blur(8px);
+}
+.quad-back:hover {
+  background: rgba(60, 35, 55, 0.8);
+}

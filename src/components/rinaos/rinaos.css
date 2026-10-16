@@ -1274,3 +1274,260 @@
     transform: translateY(14px) scale(0.965);
   }
 }
+
+/* ================= Photos: Places (./places/Places.tsx) ================= */
+.ros-ph {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  position: relative;
+  background: #fff;
+}
+.ros-ph-side {
+  flex: none;
+  width: 176px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 10px;
+  background: #f4f1f6;
+  border-right: 1px solid #e4dfe8;
+  color: #6e6873;
+}
+.ros-ph-side b {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9a93a0;
+  padding: 0 8px 6px;
+}
+.ros-ph-side span {
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+.ros-ph-side span.on {
+  background: #e2d9ea;
+  color: #1d1d1f;
+  font-weight: 600;
+}
+.ros-ph-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ros-ph-bar {
+  flex: none;
+  height: 44px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 18px 0;
+  border-bottom: 1px solid #ece8ef;
+}
+.ros-ph-bar b {
+  font-size: 17px;
+}
+.ros-ph-bar span {
+  color: #9a93a0;
+  font-size: 12px;
+}
+.ros-ph-view {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  background: #f2efe8;
+}
+.ros-ph-view:active {
+  cursor: grabbing;
+}
+.ros-ph-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.ros-ph-map {
+  display: block;
+}
+.ros-ph-pin {
+  position: absolute;
+  transform-origin: 50% 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer !important;
+}
+.ros-root .ros-ph-pin {
+  cursor: pointer;
+}
+.ros-ph-pin i {
+  position: relative;
+  display: block;
+  width: 62px;
+  height: 62px;
+  border: 3px solid #fff;
+  border-radius: 12px;
+  background: #d9d2de center / cover no-repeat;
+  box-shadow: 0 6px 16px rgba(50, 20, 60, 0.28);
+  transition: transform 0.18s ease;
+}
+.ros-ph-pin i::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  margin-left: -7px;
+  border: 7px solid transparent;
+  border-top-color: #fff;
+  border-bottom: 0;
+}
+.ros-ph-pin span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+.ros-ph-pin.open i {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px #f48fb1, 0 8px 20px rgba(200, 60, 120, 0.35);
+}
+.ros-ph-pin.open:hover i,
+.ros-ph-pin.picked i {
+  transform: translateY(-4px) scale(1.06);
+}
+.ros-ph-pin.open span {
+  color: #b0306a;
+}
+.ros-ph-pin.locked i {
+  filter: blur(6px) saturate(0.55) brightness(1.3);
+  opacity: 0.85;
+}
+.ros-ph-pin.locked em {
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 62px;
+  height: 62px;
+  margin-left: -31px;
+  display: grid;
+  place-items: center;
+  font: 800 28px/1 var(--ui);
+  font-style: normal;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(60, 30, 80, 0.5);
+  pointer-events: none;
+}
+.ros-ph-pin.locked span {
+  color: #8f8796;
+  letter-spacing: 1px;
+}
+.ros-ph-pin.shake {
+  animation: ros-ph-shake 0.45s ease;
+}
+@keyframes ros-ph-shake {
+  20% {
+    margin-left: -6px;
+  }
+  40% {
+    margin-left: 6px;
+  }
+  60% {
+    margin-left: -4px;
+  }
+  80% {
+    margin-left: 3px;
+  }
+}
+.ros-ph-card {
+  position: absolute;
+  transform-origin: 50% 0;
+  z-index: 2;
+  width: 230px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 10px 12px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 40px rgba(50, 20, 60, 0.3), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  cursor: default;
+  animation: ros-ph-card 0.2s ease-out;
+}
+@keyframes ros-ph-card {
+  from {
+    opacity: 0;
+  }
+}
+.ros-ph-card-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.ros-ph-card-strip i {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: #eee center / cover no-repeat;
+}
+.ros-ph-card b {
+  font-size: 15px;
+  padding: 0 2px;
+}
+.ros-ph-card span {
+  color: #8f8796;
+  font-size: 12px;
+  padding: 0 2px 8px;
+}
+.ros-root .ros-ph-card button {
+  border: 0;
+  border-radius: 9px;
+  padding: 8px;
+  background: #f06292;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ros-ph-card button:hover {
+  background: #e44f82;
+}
+.ros-ph-zoom {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 9px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+}
+.ros-ph-zoom button {
+  width: 32px;
+  height: 30px;
+  border: 0;
+  background: none;
+  font-size: 18px;
+  line-height: 1;
+}
+.ros-ph-zoom button + button {
+  border-top: 1px solid #eee;
+}
+.ros-ph-going {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: ros-ph-going 0.38s ease-in both;
+}
+@keyframes ros-ph-going {
+  from {
+    opacity: 0;
+  }
+}

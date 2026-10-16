@@ -43,7 +43,7 @@ function StepClock({ timeStep }: { timeStep: number }) {
     clock.steps++
   })
   useFrame((_, dt) => {
-    clock.total += Math.min(dt, 0.5) // (as the library counts it)
+    clock.total += Math.min(dt, clock.ts * 3) // (as the library counts it: at most 3 steps a frame, ../../../vite.config)
     // keep in step with the library's own count, should they ever drift apart
     const lead = clock.total - clock.steps * clock.ts
     if (lead < 0) clock.total = clock.steps * clock.ts

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as RPointerEvent, type R
 import { createPortal } from 'react-dom'
 import { AppIcon, Glyph } from './icons'
 import { OneNote } from './onenote/OneNote'
+import { Places } from './places/Places'
 import { useOsMode } from './mode'
 import { Boot, Hello, Saver } from './Boot'
 import './rinaos.css'
@@ -9,7 +10,7 @@ import './rinaos.css'
 /**
  * RinaOS: her laptop's desktop, 1280 × 800 (the 13-inch's "looks like" size). A menu bar (the
  * apple's menu, the open app's name and menus, the clock), the wallpaper, windows (dragged by their
- * title bars; close, minimise, zoom), the dock. Apps: OneNote; Photos and Music to come. It starts
+ * title bars; close, minimise, zoom), the dock. Apps: OneNote, Photos (its Places: ./places); Music to come. It starts
  * up with a boot and a hello (./Boot), wakes from its screensaver after, and goes back to it when left.
  *
  * `embedded`: it's on the laptop's screen in the room. Then it keeps the keys and the pointer to
@@ -27,7 +28,7 @@ const IDLE = 120_000 // (ms untouched before the screensaver comes on)
 type Win = { open: boolean; min: boolean; max: boolean; x: number; y: number; w: number; h: number; z: number }
 const APPS: { id: AppId; name: string; ready: boolean; menus: string[] }[] = [
   { id: 'onenote', name: 'OneNote', ready: true, menus: ['File', 'Edit', 'View', 'Insert', 'Format', 'Notebooks', 'Window', 'Help'] },
-  { id: 'photos', name: 'Photos', ready: false, menus: [] },
+  { id: 'photos', name: 'Photos', ready: true, menus: ['File', 'Edit', 'Image', 'View', 'Window', 'Help'] },
   { id: 'music', name: 'Music', ready: false, menus: [] },
 ]
 
@@ -35,6 +36,7 @@ export function RinaOS({ embedded, hold }: { embedded?: { onExit: () => void }; 
   const root = useRef<HTMLDivElement>(null)
   const [wins, setWins] = useState<Record<string, Win>>({
     onenote: { open: true, min: false, max: false, x: 34, y: MENU_H + 12, w: 1212, h: 668, z: 1 },
+    photos: { open: false, min: false, max: false, x: 70, y: MENU_H + 22, w: 1140, h: 650, z: 0 },
   })
   const [front, setFront] = useState<AppId>('onenote')
   const [soon, setSoon] = useState<AppId | null>(null)
@@ -186,6 +188,21 @@ export function RinaOS({ embedded, hold }: { embedded?: { onExit: () => void }; 
           onMax={() => patch('onenote', { max: !wins.onenote.max })}
         >
           <OneNote />
+        </Window>
+      )}
+      {wins.photos.open && !wins.photos.min && (
+        <Window
+          title="Photos"
+          win={wins.photos}
+          focused={front === 'photos'}
+          bar="#4b4453"
+          onFocus={() => raise('photos')}
+          onMove={(x, y) => patch('photos', { x, y })}
+          onClose={() => patch('photos', { open: false })}
+          onMin={() => patch('photos', { min: true })}
+          onMax={() => patch('photos', { max: !wins.photos.max })}
+        >
+          <Places />
         </Window>
       )}
       {about && (

@@ -30,8 +30,26 @@ function bakeUpload(): Plugin {
   }
 }
 
+/**
+ * The physics library catches up on a slow frame with as many steps as it fell behind, up to half a second's worth:
+ * at 120 steps a second that's up to 60 in one frame, which makes that frame slower still, and the next needs more
+ * (a slower computer spirals down to a few frames a second). Capped at 3 steps a frame: on a machine that can't keep
+ * up, the toys move a touch slower instead. (Patched where it clamps; ../src/lib/physics/World's clock counts the same.)
+ */
+const RAPIER_CLAMP = 'const clampedDelta = MathUtils.clamp(dt, 0, 0.5);'
+function physicsCatchUp(): Plugin {
+  return {
+    name: 'physics-catch-up',
+    transform(code, id) {
+      if (!id.includes('react-three-rapier') || !code.includes(RAPIER_CLAMP)) return null
+      return code.replace(RAPIER_CLAMP, "const clampedDelta = MathUtils.clamp(dt, 0, typeof timeStep === 'number' ? Math.min(0.5, timeStep * 3) : 0.5);")
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), bakeUpload()],
+  plugins: [react(), bakeUpload(), physicsCatchUp()],
+  optimizeDeps: { rolldownOptions: { plugins: [physicsCatchUp()] } },
   // (127.0.0.1, not localhost: Spotify's login only sends her back to that address while we're developing)
   // (Document-Policy: the page may sample its own JavaScript (new Profiler(), the JS Self-Profiling API), to find
   // what a hitch is spending its time on from the console)

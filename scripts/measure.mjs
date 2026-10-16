@@ -2,7 +2,7 @@
 // unthrottled (the app's browser pane is throttled when hidden: useless for timing). Over CDP, no packages.
 //   node scripts/measure.mjs "<url>" [seconds of frames] [expression to print at the end]
 //   the loader's marks (page-*, ready:*: where load time goes), rAF frame times, draw numbers, a CPU+GPU frame cost.
-// env: PROF=1 profile the load (ALL=1: library code too) · FRAMES=1 with PROF: profile 4 s of frames instead
+// env: CPU=4 a CPU that much slower · PROF=1 profile the load (ALL=1: library code too) · FRAMES=1 with PROF: profile 4 s of frames instead
 //      PRE="<expr>" run before the frames (toggle things, time parts) · INJECT="<js>" run before the page's own code
 //      SHOT=out.png [SCALE=0.5] [WAIT=ms]: a screenshot after load instead (PRE runs first: move the camera)
 //      CLICKXY=x,y a real click (CSS px) before the SHOT · MOVEXY=x,y the pointer left there
@@ -71,6 +71,7 @@ await send('Emulation.setDeviceMetricsOverride', { width: 2560, height: 1440, de
 if (process.env.PROF && !process.env.FRAMES) { await send('Profiler.enable'); await send('Profiler.setSamplingInterval', { interval: 500 }); await send('Profiler.start') }
 if (process.env.INJECT) await send('Page.addScriptToEvaluateOnNewDocument', { source: process.env.INJECT })
 // LATENCY=ms [MBPS=n]: every request that much slower (and the line that fast): a deployed site's round trips
+if (process.env.CPU) await send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.CPU) }) // (CPU=4: a laptop's slower cores, roughly)
 if (process.env.LATENCY) {
   await send('Network.enable')
   const bps = Number(process.env.MBPS ?? 0) * 125000

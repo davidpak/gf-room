@@ -16,12 +16,12 @@ import { QuadGuitar } from './QuadGuitar'
 import { QuadPicnic } from './QuadPicnic'
 import { QuadLime, RideHint } from './QuadLime'
 import { QuadArt } from './QuadArt'
-import { QuadGame } from './QuadGame'
 import { QuadMusic } from './QuadMusic'
 const NO_MUSIC = typeof location !== 'undefined' && new URLSearchParams(location.search).has('nomusic')
+/** come from her laptop's Photos (./rinaos/photos): a way back */
+const FROM_ROOM = typeof location !== 'undefined' && new URLSearchParams(location.search).get('from') === 'room'
 import { RecordsOverlay } from '../records/Overlay'
 import { PaintBox } from '../art/PaintBox'
-import { DolphinButton } from '../gamecube/DolphinButton'
 import '../art/art.css'
 import { getLook, lookBack, useLook, useLookKey } from './look'
 import { grabRules } from '../../lib/physics/Hand'
@@ -131,7 +131,6 @@ const Scene = memo(function Scene({ car }: { car: { current: CarState } }) {
         <QuadPicnic car={car} />
         <QuadLime car={car} obstacles={obstacles} />
         <QuadArt car={car} />
-        <QuadGame car={car} />
         {/* (&nomusic: the Quad without the record stand, to measure what it costs) */}
         {!NO_MUSIC && <QuadMusic car={car} />}
       </World>
@@ -152,12 +151,17 @@ export function QuadStage() {
   if (import.meta.env.DEV) Object.assign(window, { __quadCar: car }) // (for trying it from the console)
   return (
     <>
-      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 2]} camera={CAMERA} onPointerMissed={lookBack}>
+      <Canvas flat shadows={{ type: PCFSoftShadowMap }} dpr={[1, 1.5]} camera={CAMERA} onPointerMissed={lookBack}>
         <Scene car={car} />
         <DetailCull />
       </Canvas>
       <LookControls />
       <RideHint />
+      {FROM_ROOM && (
+        <a className="quad-back" href="?part=room">
+          ‹ Back to her room
+        </a>
+      )}
       <LookOverlays />
     </>
   )
@@ -170,7 +174,6 @@ function LookOverlays() {
   return (
     <>
       <PaintBox on={key === 'easel'} bottom={124} />
-      <DolphinButton show={key === 'gametv'} bottom={124} />
       <RecordsOverlay bottom={150} status={key === 'turntable'} />
     </>
   )

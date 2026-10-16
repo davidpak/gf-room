@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry, Vector3 } from 'three'
+import { MeshoptSimplifier } from 'meshoptimizer'
 
 /**
  * Sculpting with distance fields: a shape is a function giving, for any point, how far it is from the shape's
@@ -199,15 +200,22 @@ export function normal(f: Sdf, x: number, y: number, z: number, out: Vector3, e 
  * coordinates from its position and normal (for painting markings on).
  */
 let DETAIL = 1
+let TOLERANCE = 0
+let simplifierReady = false
+/** (the simplifier's wasm, compiled once: `coarse` with a tolerance waits for it) */
+export const whenSimplifier = MeshoptSimplifier.ready.then(() => void (simplifierReady = true))
 /** meshes made inside fn come out k times coarser (a thing seen small: fewer triangles, quicker to make); fine
- *  parts (cells of 2.5 mm or less) keep theirs, so thin things don't break up */
-export function coarse<T>(k: number, fn: () => T): T {
-  const was = DETAIL
+ *  parts (cells of 2.5 mm or less) keep theirs, so thin things don't break up. `tolerance` (mm): each then
+ *  simplified as far as it can go without its surface moving more than that (flat and gently curved stretches
+ *  lose most of their triangles, edges and fillets keep theirs) */
+export function coarse<T>(k: number, fn: () => T, tolerance = 0): T {
+  const was = [DETAIL, TOLERANCE]
   DETAIL = k
+  TOLERANCE = tolerance
   try {
     return fn()
   } finally {
-    DETAIL = was
+    ;[DETAIL, TOLERANCE] = was
   }
 }
 export function mesh(f: Sdf, min: V3, max: V3, cell: number, uv?: (p: Vector3, n: Vector3) => [number, number]) {
@@ -317,6 +325,14 @@ export function mesh(f: Sdf, min: V3, max: V3, cell: number, uv?: (p: Vector3, n
   g.setAttribute('position', new BufferAttribute(new Float32Array(pos), 3))
   g.setAttribute('normal', new BufferAttribute(new Float32Array(nor), 3))
   if (uv) g.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2))
+  if (TOLERANCE > 0 && simplifierReady && idx.length > 600) {
+    // (the vertices stay as they are, normals and all: only which of them the triangles join changes)
+    const [less] = MeshoptSimplifier.simplify(Uint32Array.from(idx), new Float32Array(pos), 3, 0, TOLERANCE, ['ErrorAbsolute'])
+    if (less.length >= 3 && less.length < idx.length) {
+      g.setIndex(new BufferAttribute(less, 1))
+      return g
+    }
+  }
   g.setIndex(idx)
   return g
 }

@@ -1,7 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Canvas as FiberCanvas, useThree, type CanvasProps } from '@react-three/fiber'
 import type { Camera, Light, LightShadow, Mesh, Object3D, Scene, WebGLRenderer } from 'three'
-import { useProgress } from '@react-three/drei'
+import { PerformanceMonitor, useProgress } from '@react-three/drei'
 import { ready, stillWaiting } from '../ready'
 
 /**
@@ -148,6 +148,24 @@ function Ready({ done }: { done: () => void }) {
   return null
 }
 
+/**
+ * Slower machines (a laptop's own graphics): once the page is up, if it can't keep 50 frames a second it draws at a
+ * lower resolution, a step at a time (each a fifth fewer pixels a side), down to three quarters of a CSS pixel at
+ * most; never back up once it's had to (no flip-flopping between the two). ?fixeddpr: off (to compare).
+ */
+const FIXED_DPR = typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixeddpr')
+function Adaptive() {
+  const setDpr = useThree((s) => s.setDpr)
+  const dpr = useThree((s) => s.viewport.dpr)
+  const now = useRef(dpr)
+  now.current = dpr
+  const lower = () => {
+    const next = Math.max(0.75, Math.round(now.current * 0.8 * 100) / 100)
+    if (next < now.current) setDpr(next)
+  }
+  return <PerformanceMonitor bounds={() => [50, 1000]} flipflops={Infinity} onDecline={lower} />
+}
+
 export function Canvas({ children, ...props }: CanvasProps & { children?: ReactNode }) {
   const handle = useRef<ReturnType<typeof ready.join> | null>(null)
   useEffect(() => {
@@ -157,7 +175,11 @@ export function Canvas({ children, ...props }: CanvasProps & { children?: ReactN
       handle.current = null
     }
   }, [])
-  const done = useCallback(() => handle.current?.done(), [])
+  const [up, setUp] = useState(false)
+  const done = useCallback(() => {
+    handle.current?.done()
+    setUp(true)
+  }, [])
   const showHitch = useSyncExternalStore(hitch.subscribe, hitch.get)
   return (
     <FiberCanvas {...props}>
@@ -166,6 +188,7 @@ export function Canvas({ children, ...props }: CanvasProps & { children?: ReactN
         {children}
         <Ready done={done} />
       </Suspense>
+      {up && !FIXED_DPR && <Adaptive />}
       {SHOW_PERF && (
         <Suspense fallback={null}>
           <Perf position="top-left" />
