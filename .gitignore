@@ -28,3 +28,6 @@ public/reference/gamecube/
 # the Vercel project link (ids, and pulled env files): local only
 .vercel
 .env*
+
+.vercel
+.env*

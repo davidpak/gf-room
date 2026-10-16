@@ -10,3 +10,5 @@ scripts
 .claude
 .vercel
 .env*
+# (the Civic's original download: the site uses its web copy, public/models/civic.glb)
+public/reference/2016-honda-civic.zip
