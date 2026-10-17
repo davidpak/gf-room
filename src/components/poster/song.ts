@@ -1,13 +1,13 @@
-import { play } from '../../lib/spotify/api'
+import { play, sp } from '../../lib/spotify/api'
 import { loggedIn } from '../../lib/spotify/auth'
 import { deviceReady, sdk, startPlayer } from '../../lib/spotify/player'
 
 /**
  * A song while she reads her friends' notes (./Poster): opening the board starts it through her Spotify (once she's
- * logged in, at the Quad's record stand; Premium plays in the page), coming in softly; leaving the board, it fades
- * and stops. Not logged in, or no Premium: the board's just quiet.
+ * logged in, at the Quad's record stand; Premium plays in the page), coming in softly, over and over while she
+ * reads; leaving the board, it fades and stops. Not logged in, or no Premium: the board's just quiet.
  */
-export const SONG = '' // a track's Spotify URI ("spotify:track:…") or its link (open.spotify.com/track/…)
+export const SONG = 'https://open.spotify.com/track/7N05mAG1X23Sd2PNOyoJSF' // (David's pick; a track's link or its spotify:track: URI)
 const VOLUME = 0.55
 const FADE_IN = 2.5 // s
 const FADE_OUT = 1.2 // s
@@ -17,6 +17,9 @@ const uri = (s: string) => {
   return id ? `spotify:track:${id}` : null
 }
 let on = false
+let device = ''
+/** the song over again at its end (or not: the turntable's records play on through their sides) */
+const repeat = (state: 'track' | 'off') => device && sp<void>(`/me/player/repeat?state=${state}&device_id=${device}`, { method: 'PUT' }).catch(() => {})
 let fade = 0
 /** the volume eased from where it is to `to` over `secs` (then `done`) */
 function ease(to: number, secs: number, done?: () => void) {
@@ -42,10 +45,11 @@ export async function startSong() {
   on = true
   try {
     await startPlayer(0.0001)
-    const device = await deviceReady()
+    device = await deviceReady()
     if (!on) return
     await sdk()?.setVolume(0.0001)
     await play(device, track)
+    void repeat('track')
     if (on) ease(VOLUME, FADE_IN)
   } catch (e) {
     on = false
@@ -58,6 +62,8 @@ export function stopSong() {
   if (!on) return
   on = false
   ease(0.0001, FADE_OUT, () => {
-    if (!on) void sdk()?.pause()
+    if (on) return
+    void sdk()?.pause()
+    void repeat('off')
   })
 }
