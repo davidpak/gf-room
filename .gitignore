@@ -12,22 +12,13 @@ blender/bake/in/
 # local tool settings
 .claude/
 
-# her photos: the originals stay local (photos/), and so do the web copies for now (public/photos/)
-photos/
-public/photos/
+# her photos: the 200 MB originals stay local (/photos); their web copies (public/photos) are in the repo, which is
+# private (Vercel builds production from it: what isn't in it isn't on the site)
+/photos/
 
-# the Civic model (Sketchfab, licence to check before it ships): the download and the web copy stay local
+# the Civic's original download stays local (the site uses its web copy, public/models/civic.glb, in the repo)
 public/reference/2016-honda-civic.zip
-public/models/civic.glb
-
-# the Melee disc and box art (Nintendo's): kept local, as the Civic is; without them the disc and case draw their own
-public/textures/melee/
-# the GameCube's references (dimensions.com's drawing, Wikimedia Commons photos, David's): looked at locally
-public/reference/gamecube/
 
 # the Vercel project link (ids, and pulled env files): local only
-.vercel
-.env*
-
 .vercel
 .env*
