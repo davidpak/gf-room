@@ -6,6 +6,7 @@ import { POSTER } from './spec'
 import { LETTERS } from './letters'
 import type { Note } from './messages'
 import { Motes } from './Motes'
+import { startSong, stopSong } from './song'
 
 /**
  * The "Rina" poster (./spec), painted into its own texture, as hers is made: white poster board, her name across it
@@ -698,6 +699,9 @@ const focus = (() => {
   let count = 0
   const subs = new Set<() => void>()
   const set = (v: number | null) => {
+    // (the board opened: its song; left: it fades (./song))
+    if (i === null && v !== null) void startSong()
+    else if (i !== null && v === null) stopSong()
     i = v
     subs.forEach((f) => f())
   }
