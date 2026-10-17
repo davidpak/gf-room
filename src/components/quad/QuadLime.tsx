@@ -60,7 +60,7 @@ const _q = new Quaternion()
 const _e = new Euler(0, 0, 0, 'YZX')
 const _f = new Vector3()
 
-export function QuadLime({ car, obstacles }: { car: { current: CarState }; obstacles: Obstacle[] }) {
+export function QuadLime({ car, obstacles, gliders = true }: { car: { current: CarState }; obstacles: Obstacle[]; /** false: the scooters only */ gliders?: boolean }) {
   // getting off: E or Esc; R (everything back) too
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
@@ -77,7 +77,7 @@ export function QuadLime({ car, obstacles }: { car: { current: CarState }; obsta
   }, [])
   return (
     <>
-      {SET.lime.gliders.map((g, i) => (
+      {gliders && SET.lime.gliders.map((g, i) => (
         <Lime key={`g${i}`} kind="glider" id={`glider${i}`} at={g} car={car} obstacles={obstacles} />
       ))}
       {SET.lime.scooters.map((g, i) => (
