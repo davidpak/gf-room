@@ -154,17 +154,12 @@ function Ready({ done }: { done: () => void }) {
  * most; never back up once it's had to (no flip-flopping between the two). ?fixeddpr: off (to compare).
  */
 const FIXED_DPR = typeof location !== 'undefined' && new URLSearchParams(location.search).has('fixeddpr')
-/** how many times the page has had to step down (0: keeping up); what else can be eased off reads it (the Quad's
- *  sun: a smaller shadow map, redrawn less often while the car drives). ?lowpower: as if it had, to try it */
-let lowPower = typeof location !== 'undefined' && new URLSearchParams(location.search).has('lowpower') ? 1 : 0
-export const getLowPower = () => lowPower
 function Adaptive() {
   const setDpr = useThree((s) => s.setDpr)
   const dpr = useThree((s) => s.viewport.dpr)
   const now = useRef(dpr)
   now.current = dpr
   const lower = () => {
-    lowPower++
     const next = Math.max(0.75, Math.round(now.current * 0.8 * 100) / 100)
     if (next < now.current) setDpr(next)
   }
