@@ -12,6 +12,7 @@ import { hardReset, onReset } from './reset'
 import { LOOK, shared } from './bruno'
 import { getRide } from './ride'
 import { CivicModel, TYRE_R, WELL, openings, shutDoors } from '../civic/Civic'
+import { getLowPower } from '../../lib/render/Canvas'
 import { TOY } from '../civic/spec'
 
 /**
@@ -155,6 +156,7 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
   const sunRef = useRef<DirectionalLight | null>(null)
   const sunWas = useRef(new Vector3())
   const shadowTick = useRef(0)
+  const lowTick = useRef(0)
   // looking at a photo (./look): where the camera frames it, and how far it has glided there (0..1)
   const look = useRef({ pos: new Vector3(), at: new Vector3(), has: false, view: 0 })
   const first = useRef(true)
@@ -340,7 +342,18 @@ export function Car({ state, obstacles, movers, paused }: { state: { current: Ca
     if (lk.has && e > 0.5) shared.car.value.copy(lk.at) // (looking at a photo: the blossom opens in front of it)
     else if (riding) shared.car.value.set(riding.x, 150, riding.z)
     else shared.car.value.set(s.x, 150, s.z)
-    if (sun) {
+    // (a slower computer, one that's had to step down (../../lib/render/Canvas): the sun's map 2048, not 4096, and
+    // while the car drives, it and its shadows moved and redrawn every other frame, not every one: the map's redraw,
+    // every caster round the car, was what the frames went late on)
+    const low = getLowPower() > 0
+    if (sun && low && sun.shadow.mapSize.x > 2048) {
+      sun.shadow.mapSize.set(2048, 2048)
+      sun.shadow.map?.dispose()
+      sun.shadow.map = null
+      sun.shadow.needsUpdate = true
+    }
+    const skip = low && Math.abs(s.v) > 1 && !isHolding() && (++lowTick.current & 1) === 1 // (this frame: the sun and its map left as they were)
+    if (sun && !skip) {
       snapToTexels(_target.set(camAt.current.x, 0, camAt.current.z), sun)
       sun.position.copy(LOOK.sun).multiplyScalar(4000).add(_target)
       sun.target.position.copy(_target)

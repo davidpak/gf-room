@@ -14,7 +14,6 @@ import { LookControls, Photos } from './Photos'
 import { CookieStand } from './CookieStand'
 import { QuadGuitar } from './QuadGuitar'
 import { QuadPicnic } from './QuadPicnic'
-import { QuadLime, RideHint } from './QuadLime'
 import { QuadArt } from './QuadArt'
 import { QuadMusic } from './QuadMusic'
 const NO_MUSIC = typeof location !== 'undefined' && new URLSearchParams(location.search).has('nomusic')
@@ -129,7 +128,7 @@ const Scene = memo(function Scene({ car }: { car: { current: CarState } }) {
         <CookieStand car={car} />
         <QuadGuitar car={car} />
         <QuadPicnic car={car} />
-        <QuadLime car={car} obstacles={obstacles} />
+        {/* (the Limes, ./QuadLime, out for now: a slower computer's frames) */}
         <QuadArt car={car} />
         {/* (&nomusic: the Quad without the record stand, to measure what it costs) */}
         {!NO_MUSIC && <QuadMusic car={car} />}
@@ -156,7 +155,6 @@ export function QuadStage() {
         <DetailCull />
       </Canvas>
       <LookControls />
-      <RideHint />
       {FROM_ROOM && (
         <a className="quad-back" href="?part=room">
           ‹ Back to her room
