@@ -8,6 +8,7 @@ import { ROOM } from './spec'
 /**
  * Standing in Rina's room, first person: at eye height to start, inside the walls (you never see out).
  *
+ *   left drag       look round (on nothing the hand takes: a thing pressed on is carried instead)
  *   middle drag     look round
  *   right drag      step along the floor (sideways, forward and back)
  *   wheel           a step forward / back
@@ -15,7 +16,7 @@ import { ROOM } from './spec'
  *   shift / C       up / down (from near the floor to just under the ceiling, the bulkhead's lower over the desk)
  *   F               back to where you came in
  *
- * The left button is the hand's (carry, click). Moves and turns ease toward where they're going, so it's
+ * The left button is the hand's first (carry, click); dragged anywhere else, it looks round. Moves and turns ease toward where they're going, so it's
  * smooth at any frame rate. It sits in the R3F store as the page's `controls` (`enabled`: the hand turns it
  * off while carrying; the laptop glides the camera with getTarget / setLookAt and then gives it back).
  * A click that ends a drag never counts as a click.
@@ -95,7 +96,7 @@ export function FirstPerson() {
 
   useEffect(() => {
     const el = gl.domElement
-    let drag: { button: number; x: number; y: number } | null = null
+    let drag: { button: number; x: number; y: number; go: boolean } | null = null
     let from = [0, 0]
     const fwd = (k: number) => {
       const g = st.goal
@@ -109,18 +110,26 @@ export function FirstPerson() {
     }
     const down = (e: PointerEvent) => {
       from = [e.clientX, e.clientY]
-      if (e.button === 1 || e.button === 2) drag = { button: e.button, x: e.clientX, y: e.clientY }
+      // (the left button only looks once it's moved a few pixels: a click on something stays a click, the view still)
+      if (e.button <= 2) drag = { button: e.button, x: e.clientX, y: e.clientY, go: e.button !== 0 }
       if (e.button === 1) e.preventDefault()
     }
     const move = (e: PointerEvent) => {
       if (!drag) return
+      if (!drag.go) {
+        if (Math.hypot(e.clientX - from[0], e.clientY - from[1]) < 5) return
+        drag.go = true
+        drag.x = e.clientX
+        drag.y = e.clientY
+        return
+      }
       const dx = e.clientX - drag.x
       const dy = e.clientY - drag.y
       drag.x = e.clientX
       drag.y = e.clientY
       if (!controls.enabled || worldInput.locked) return
       const g = st.goal
-      if (drag.button === 1) {
+      if (drag.button === 0 || drag.button === 1) {
         g.yaw -= dx * TURN
         g.pitch = Math.max(-PITCH, Math.min(PITCH, g.pitch - dy * TURN))
       } else {
