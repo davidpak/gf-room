@@ -444,9 +444,10 @@ const STICKY = { size: 102, pad: 8, curl: 4 } // mm: a 4" square note, its margi
 /** where it's stuck: over the poster's lower right corner, a little crooked */
 const STICKY_AT = { x: P.w / 2 - 50, y: -P.h / 2 + 58, rot: -0.07 }
 const STICKY_COLORS = ['#fff19a', '#ffc6d9', '#bfe6ff', '#c9f2b8', '#ffd3a1']
-const SP = 6 // its texture's pixels a mm
-/** today's note on its sticky: as big as it fits */
-function drawSticky(g: CanvasRenderingContext2D, note: Note) {
+const SP = 12 // its texture's pixels a mm (sharp enough for the whole of a long note, small, close up)
+/** today's note on its sticky: as big as it fits. `full`: looked at close up, the whole of it, however small that
+ *  takes (from her chair: big enough to read, its opening to "…" if it's long) */
+function drawSticky(g: CanvasRenderingContext2D, note: Note, full = false) {
   const S = STICKY.size * SP
   g.setTransform(1, 0, 0, 1, 0, 0)
   g.fillStyle = STICKY_COLORS[hash(note.id) % STICKY_COLORS.length]
@@ -466,7 +467,7 @@ function drawSticky(g: CanvasRenderingContext2D, note: Note) {
   g.textBaseline = 'top'
   g.textAlign = 'left'
   g.fillText('today’s note ♡', pad, pad * 0.7)
-  for (let size = 13 * SP; size >= 7 * SP; size -= 0.5 * SP) {
+  for (let size = 13 * SP; size >= (full ? 1.8 : 7) * SP; size -= (full ? 0.2 : 0.5) * SP) {
     g.font = fontOf(note, size)
     const lines = wrap(g, note.text, S - 2 * pad)
     const lh = size * 1.12
@@ -483,7 +484,7 @@ function drawSticky(g: CanvasRenderingContext2D, note: Note) {
     }
     return
   }
-  // (too long for the sticky at a size she can read from her chair: its opening, to "…"; clicked, the whole note)
+  // (too long for the sticky at a size she can read from her chair: its opening, to "…"; clicked, the whole note (`full`))
   const size = 7 * SP
   g.font = fontOf(note, size)
   const lh = size * 1.12
@@ -863,11 +864,12 @@ export function Poster({ notes }: { notes: Note[] }) {
     g.computeVertexNormals()
     return { c, g: c.getContext('2d')!, t, geo: g, mat: new MeshStandardMaterial({ map: t, roughness: 0.9, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: GLOW.board }) }
   }, [])
+  const close = useSyncExternalStore(focus.subscribe, () => focus.get() === -1) // (the sticky looked at, close up)
   useEffect(() => {
     if (!board || today < 0) return
-    drawSticky(sticky.g, notes[today])
+    drawSticky(sticky.g, notes[today], close)
     sticky.t.needsUpdate = true
-  }, [board, today, notes, sticky])
+  }, [board, today, notes, sticky, close])
 
   // looking at a note: the camera glides in square to it (from wherever it was), and back to there after
   const groupRef = useRef<Group>(null)
