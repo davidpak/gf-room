@@ -421,6 +421,8 @@ function firstSeen(notes: Note[]) {
  *  in turn, a day each */
 export function todays(notes: Note[]): number {
   if (!notes.length) return -1
+  // (David's own, once he's written it: always on the sticky, his latest; David, 2026-10-17)
+  for (let i = notes.length - 1; i >= 0; i--) if (/^david\s+pak$/i.test(notes[i].name)) return i
   const m = firstSeen(notes)
   const times = notes.map((n) => m[n.id])
   const newest = Math.max(...times)
